@@ -76,9 +76,9 @@
 
 ### 객체지향
 
-- [ ] 클래스(Class)와 객체(Object)
+- [x] 클래스(Class)와 객체(Object) → [정리](concepts/class-and-instance.md) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
 - [ ] 인스턴스 메서드 vs 클래스 메서드
-- [ ] 상속(Inheritance)
+- [x] 상속(Inheritance) → [정리](concepts/inheritance-and-override.md) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
 - [ ] 모듈(Module)과 믹스인(Mixin)
 - [ ] `attr_accessor`, `attr_reader`, `attr_writer`
 
@@ -104,7 +104,7 @@
 ### ActiveRecord (Model)
 
 - [ ] 모델(Model)이란? 테이블과의 관계
-- [ ] 마이그레이션(Migration)이란?
+- [x] 마이그레이션(Migration)이란? → [정리](concepts/migration.md) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
 - [ ] 연관관계 (`belongs_to`, `has_many`, `has_one`, `has_many :through`)
 - [ ] 유효성 검사 (`validates`)
 - [ ] 스코프(Scope)란?
