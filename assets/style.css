@@ -1,0 +1,161 @@
+/* backend-log lessons — shared stylesheet */
+:root {
+  --text: #1a1a1a;
+  --bg: #fffff8;
+  --accent: #b00;
+  --muted: #666;
+  --border: #ddd;
+  --code-bg: #f4f4f0;
+  --correct: #2a7a2a;
+  --wrong: #b00;
+  --font-body: Georgia, 'Times New Roman', serif;
+  --font-mono: 'SFMono-Regular', Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 1.05rem;
+  line-height: 1.75;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 6rem;
+}
+
+h1 { font-size: 1.8rem; line-height: 1.2; margin-bottom: 0.3rem; }
+h2 { font-size: 1.2rem; margin-top: 2.5rem; margin-bottom: 0.6rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+h3 { font-size: 1rem; font-family: var(--font-sans); margin-top: 1.5rem; margin-bottom: 0.4rem; color: var(--accent); }
+
+p { margin-top: 0.8rem; }
+
+.lesson-meta {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 2rem;
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.mission-link {
+  background: #fff8e1;
+  border-left: 3px solid #f0a500;
+  padding: 0.6rem 1rem;
+  margin: 1.5rem 0;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  border-radius: 0 4px 4px 0;
+}
+
+.analogy {
+  background: #e8f4fd;
+  border-left: 3px solid #2196f3;
+  padding: 0.7rem 1rem;
+  margin: 1.2rem 0;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.95rem;
+}
+.analogy::before { content: "💡 프론트로 치면"; display: block; font-family: var(--font-sans); font-weight: 600; font-size: 0.75rem; color: #1565c0; margin-bottom: 0.3rem; }
+
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1rem 1.2rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+code { font-family: var(--font-mono); font-size: 0.88em; background: var(--code-bg); padding: 0.1em 0.3em; border-radius: 3px; }
+pre code { background: none; padding: 0; font-size: 1em; }
+
+.flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 1.5rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+.flow-step {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 0;
+}
+.flow-arrow {
+  text-align: center;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.2;
+  margin: 0.1rem 0;
+}
+
+/* ── Quiz ── */
+.quiz {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.2rem 1.4rem;
+  margin: 2rem 0;
+  background: #fff;
+}
+.quiz h3 { margin-top: 0; color: var(--text); font-family: var(--font-body); font-size: 1rem; }
+.quiz-q { margin-bottom: 0.8rem; font-weight: 600; }
+.options { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
+.options li button {
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fafafa;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.options li button:hover { background: #f0f0f0; }
+.options li button.correct { background: #d4edda; border-color: var(--correct); color: var(--correct); font-weight: 600; }
+.options li button.wrong { background: #f8d7da; border-color: var(--wrong); color: var(--wrong); }
+.quiz-result { margin-top: 0.8rem; font-family: var(--font-sans); font-size: 0.9rem; min-height: 1.4rem; }
+
+.nav-links {
+  margin-top: 3rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: var(--muted);
+}
+.nav-links a { color: var(--accent); }
+
+.ask-teacher {
+  margin-top: 2rem;
+  background: #f9f0ff;
+  border-left: 3px solid #7b1fa2;
+  padding: 0.7rem 1rem;
+  border-radius: 0 4px 4px 0;
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  color: #4a148c;
+}
+
+.source {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 0.3rem;
+}
+.source a { color: var(--muted); }
