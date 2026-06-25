@@ -33,6 +33,16 @@
 **render()가 어디서 오는지 혼란스러웠다.**
 → 내가 호출하는 게 아니라 프레임워크(React/Rails)가 적절한 타이밍에 호출한다. 내가 하는 건 내용을 "정의"하는 것뿐.
 
+## 테스트 작성 (spec/api/v1/workspaces_spec.rb)
+
+기존 `use_privacy_comment` 패턴을 그대로 따라 3가지 케이스 추가:
+
+1. **GET 응답 키 검증** — `match_array`에 `"use_required_template"` 추가
+2. **PUT hr_admin 성공 케이스** — `use_required_template: true` 전송 → 200 OK + DB 값 확인
+3. **PUT 일반유저 실패 케이스** — 같은 요청 → 403 Forbidden
+
+→ 97개 전부 통과
+
 ## 다음에 더 공부하고 싶은 것
 
 - `declared(params, include_missing: false)` 가 정확히 뭘 하는지
