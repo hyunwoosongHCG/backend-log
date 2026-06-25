@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 2 — Entity라는 단어가 두 가지 의미로 쓰인다</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>Entity라는 단어가 두 가지 의미로 쓰인다</h1>
+  <div class="lesson-meta">
+    <span>레슨 002</span>
+    <span>Grape::Entity · Model · 직렬화</span>
+    <span>~10분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 미션 연결: 코드를 보고 각 레이어가 무슨 역할인지 구분할 수 있다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>혼란의 출발점</h2>
+  <p>
+    백엔드를 공부하다 보면 "Entity"라는 단어를 두 곳에서 만나게 된다.
+    같은 단어인데 전혀 다른 것을 가리킨다. 구분하지 못하면 코드를 읽을 때마다 헷갈린다.
+  </p>
+
+  <h2>의미 1 — Java/Spring에서 말하는 Entity</h2>
+  <p>
+    MVC나 3레이어 아키텍처를 Java 기준으로 배우면 이런 코드가 나온다:
+  </p>
+
+<pre><code>@Entity          // ← "이 클래스는 DB 테이블과 연결됐다"는 선언
+@Table(name = "users")
+public class User {
+    @Id
+    private Long id;
+    private String name;
+}</code></pre>
+
+  <p>
+    여기서 Entity는 <strong>DB 테이블과 1:1로 매핑되는 클래스</strong>다.
+    <code>users</code> 테이블이 있으면 <code>User</code> Entity가 있다.
+    DB에 값을 저장하고 꺼내는 주체다.
+  </p>
+
+  <h2>의미 2 — 이 프로젝트의 Grape::Entity</h2>
+  <p>
+    이 프로젝트에서 Entity라고 부르는 건 완전히 다르다:
+  </p>
+
+<pre><code>class Entities::Workspaces::OneOnOneSettingEntity < Grape::Entity
+  expose :use_required_template
+  expose :use_privacy_comment
+  expose :use_inactive_alert
+end</code></pre>
+
+  <p>
+    DB와 무관하다. <strong>모델 객체를 받아서 응답 JSON에 어떤 필드를 내보낼지 선별</strong>하는 도구다.
+    <code>expose</code>에 적힌 필드만 JSON 응답에 포함되고, 나머지는 숨겨진다.
+  </p>
+
+  <div class="analogy">
+    TypeScript로 치면 API 응답 타입을 정의하고 필요한 필드만 골라 리턴하는 함수와 같다:
+    <pre style="margin-top: 0.5rem; background: #ddeeff; border: none;"><code>function toResponse(record: OneOnOneSetting) {
+  return {
+    use_required_template: record.use_required_template,
+    use_privacy_comment: record.use_privacy_comment,
+    // 내부 전용 필드는 여기 안 적으면 노출 안 됨
+  }
+}</code></pre>
+    <code>expose</code> 한 줄 = 응답에 포함할 필드 한 개.
+  </div>
+
+  <h2>Rails에서는 역할이 어떻게 나뉘나</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size: 0.88rem; margin-top: 0.5rem;">
+    <thead>
+      <tr style="border-bottom: 2px solid var(--border);">
+        <th style="text-align:left; padding: 0.5rem;">Java/Spring 용어</th>
+        <th style="text-align:left; padding: 0.5rem;">Rails + Grape</th>
+        <th style="text-align:left; padding: 0.5rem;">하는 일</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom: 1px solid var(--border);">
+        <td style="padding: 0.5rem;">Entity (<code>@Entity</code>)</td>
+        <td style="padding: 0.5rem;"><strong>Model</strong> (ActiveRecord)</td>
+        <td style="padding: 0.5rem;">DB 테이블 매핑, 데이터 저장/조회</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border);">
+        <td style="padding: 0.5rem;">DTO / ResponseBody</td>
+        <td style="padding: 0.5rem;"><strong>Entity</strong> (Grape::Entity)</td>
+        <td style="padding: 0.5rem;">응답 JSON 직렬화, 노출 필드 선별</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p style="margin-top: 1rem;">
+    Rails에서 DB와 연결된 것은 <strong>Model</strong>이다.
+    Grape의 Entity는 이름이 같을 뿐, DB를 전혀 모른다.
+  </p>
+
+  <h2>왜 Entity라는 이름을 썼을까</h2>
+  <p>
+    Grape 라이브러리가 자신의 직렬화 도구에 "Entity"라는 이름을 붙였기 때문이다.
+    "표현 가능한 단위"라는 의미로 썼지만, Java 생태계에서 Entity가 다른 뜻으로 굳어져 있어서
+    혼란이 생긴다. 프레임워크마다 같은 단어를 다르게 쓰는 일은 백엔드에서 자주 있다.
+  </p>
+
+  <h2>이 프로젝트 구조 다시 보기</h2>
+
+  <div class="flow">
+    <div class="flow-step">Grape Endpoint (Controller) — 요청 받기, 인증, present 호출</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">ActiveRecord Model — DB에서 데이터 꺼내기 <em>(Java의 Entity 역할)</em></div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">Grape::Entity — 응답 JSON으로 변환 <em>(Java의 DTO 역할)</em></div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">{ "data": { "use_required_template": false, … } }</div>
+  </div>
+
+  <!-- Quiz -->
+  <div class="quiz">
+    <h3>퀴즈 1 — 어떤 Entity?</h3>
+    <p class="quiz-q">
+      <code>expose :use_required_template</code>가 적힌 파일은 어떤 역할인가?
+    </p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">DB 테이블 구조를 정의한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">마이그레이션 실행 순서를 결정한다</button></li>
+      <li><button onclick="answer(this,'q1',true)">응답 JSON에 포함할 필드를 선별한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">API 요청 파라미터를 검증한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — Rails에서 DB와 연결된 것</h3>
+    <p class="quiz-q">
+      Rails에서 DB 테이블과 직접 매핑되는 레이어는?
+    </p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">Grape::Entity</button></li>
+      <li><button onclick="answer(this,'q2',false)">Grape Endpoint</button></li>
+      <li><button onclick="answer(this,'q2',true)">ActiveRecord Model</button></li>
+      <li><button onclick="answer(this,'q2',false)">Service Object</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 3 — expose를 안 하면</h3>
+    <p class="quiz-q">
+      DB 컬럼은 있는데 Entity에 <code>expose</code>를 안 했다면?
+    </p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">DB에서 조회가 되지 않는다</button></li>
+      <li><button onclick="answer(this,'q3',true)">값은 있지만 응답 JSON에 포함되지 않는다</button></li>
+      <li><button onclick="answer(this,'q3',false)">마이그레이션 에러가 발생한다</button></li>
+      <li><button onclick="answer(this,'q3',false)">컬럼이 자동으로 숨겨져 보안이 강화된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <div class="ask-teacher">
+    💬 궁금한 점이 있으면 바로 물어보세요. Grape::Entity 말고 Rails 기본 직렬화 방식(Serializer)과 어떻게 다른지, expose에 옵션을 붙이는 법 등 어떤 것도 OK입니다.
+  </div>
+
+  <div class="nav-links">
+    <a href="0001-grape-api-request-flow.html">← 레슨 1: GET 요청이 JSON이 되기까지</a>
+    <a href="0003-activerecord-model.html">다음: ActiveRecord — 모델과 DB 테이블의 관계 →</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. Grape::Entity의 expose는 DB와 무관하게 '이 필드를 응답 JSON에 내보낸다'는 선언입니다. DB 구조는 Model과 마이그레이션이 담당합니다.",
+        wrong: "아니에요. expose가 있는 파일은 Grape::Entity — 응답 JSON을 만드는 직렬화 도구입니다. DB 정의는 마이그레이션과 Model이 합니다."
+      },
+      q2: {
+        correct: "맞아요. ActiveRecord Model이 DB 테이블과 매핑됩니다. Java의 @Entity 역할을 Rails에서는 Model이 합니다.",
+        wrong: "아니에요. Rails에서 DB 테이블과 직접 연결된 것은 ActiveRecord Model입니다. Grape::Entity는 응답 직렬화 도구예요."
+      },
+      q3: {
+        correct: "맞아요. DB에는 값이 있고 조회도 되지만, Entity에 expose가 없으면 JSON 응답에 포함되지 않습니다. 오늘 작업에서 expose :use_required_template를 추가한 이유가 바로 이것입니다.",
+        wrong: "아니에요. expose 여부는 DB 조회나 마이그레이션과 무관합니다. 단지 '응답 JSON에 포함할지 여부'만 결정합니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+      const result = document.getElementById(quizId + '-result');
+      result.textContent = (isCorrect ? '✓ ' : '✗ ') + explanations[quizId][isCorrect ? 'correct' : 'wrong'];
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>
