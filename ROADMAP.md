@@ -26,6 +26,7 @@
 
 - [ ] MVC 패턴 (Model, View, Controller)
 - [ ] 서비스 레이어(Service Layer)란?
+- [x] 도메인(Domain)이란? 3레이어 Entity와의 차이 → [레슨](lessons/0003-domain-vs-entity.html) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
 - [ ] 미들웨어(Middleware)란?
 - [ ] 모놀리식 vs 마이크로서비스
 

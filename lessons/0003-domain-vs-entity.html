@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 3 — 도메인과 엔티티, 뭐가 다른가</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>도메인과 엔티티, 뭐가 다른가</h1>
+  <div class="lesson-meta">
+    <span>레슨 003</span>
+    <span>DDD · 도메인 모델 · 책임 분리</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 미션 연결: 코드에서 비즈니스 로직이 어디에 있어야 하는지 판단할 수 있다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>질문의 출발점</h2>
+  <p>
+    선배 개발자가 이런 코드를 보여줬다.
+    Service 메서드가 딱 세 줄인데, 삭제 로직은 어디 있을까?
+  </p>
+
+<pre><code>// HrAppointmentWorkDeleteCommandService.java
+
+public void execute(AppointmentWorkDeleteCommand command) {
+    HrAppointmentWork appointmentWork = repository.findById(command.getAppointmentWorkId())
+        .orElseThrow(() -> new NotFound("조회된 발령 작업이 없습니다."));
+
+    appointmentWork.delete(hrEmpManager.getLoginId(), hrEmpManager.getClientId());
+
+    hrWorkLogManager.saveWorkLogs(command.getAppointmentWorkId(), WorkType.APPOINTMENT, WorkLogType.DELETED);
+}</code></pre>
+
+  <p>
+    <code>appointmentWork.delete(...)</code>가 한 줄인데 실제 삭제 로직은 도메인 객체 안에 있다.
+    Service는 "누구한테 시킬지"만 알고, 세부 사항은 모른다. 이것이 <strong>도메인(Domain)</strong>의 핵심이다.
+  </p>
+
+  <h2>3레이어 아키텍처에서 Entity는 빈 그릇</h2>
+
+  <p>전통적인 3레이어(Controller → Service → Repository) 방식에서 Entity는 이렇게 생겼다:</p>
+
+<pre><code>@Entity
+public class AppointmentWork {
+    private Long id;
+    private String status;
+    private LocalDateTime deletedAt;
+
+    // getter, setter만 있음 — 비즈니스 로직 없음
+    public Long getId() { return id; }
+    public void setStatus(String status) { this.status = status; }
+}</code></pre>
+
+  <div class="analogy">
+    React로 치면 <code>type AppointmentWork = { id: number; status: string; deletedAt: Date | null }</code>
+    — 데이터 타입 정의만 있고 동작은 없는 것과 같다. 컴포넌트가 아니라 props 타입이다.
+  </div>
+
+  <p>
+    이 경우 "삭제 가능한지 검증"과 "자식 데이터 삭제" 로직은 전부 Service에 들어간다.
+    Service가 비대해지고, 비슷한 검증 로직이 여러 Service에 흩어지기 쉽다.
+  </p>
+
+  <h2>DDD에서 Entity는 자기 책임을 가진 도메인 객체</h2>
+
+  <p>위 코드에서 실제 <code>delete</code> 메서드를 보면:</p>
+
+<pre><code>// HrAppointmentWork.java (Domain Entity)
+
+public void delete(String modUserId, String clientId) {
+    HrAppointmentWorkDeletionPolicy.validate(this); // ① 삭제 가능한지 스스로 검증
+
+    ZonedDateTime now = ZonedDateTime.now();
+
+    this.appointmentWorkDetails.forEach(          // ② 자식 데이터도 스스로 정리
+        detail -> detail.deleteByParent(modUserId, clientId, now));
+    this.appointmentWorkTargets.forEach(
+        target -> target.deleteByParent(modUserId, clientId, now));
+    this.appointmentWorkTypes.forEach(
+        type -> type.deleteByParent(modUserId, clientId, now));
+
+    this.modUserId = modUserId;                   // ③ 자신의 필드를 직접 변경
+    this.clientId = clientId;
+    this.deletedAt = now;                         // soft delete
+}</code></pre>
+
+  <p>
+    Entity 자신이 검증하고, 자식 데이터를 정리하고, 자신의 상태를 바꾼다.
+    ORM(JPA)이 이 변경을 감지해서 자동으로 DB 쿼리를 날린다.
+    Service는 이 세부 과정을 전혀 모른다.
+  </p>
+
+  <div class="analogy">
+    React 컴포넌트가 자기 state와 이벤트 핸들러를 직접 가지는 것과 같다.
+    부모 컴포넌트는 <code>&lt;AppointmentWork onDelete={...} /&gt;</code>만 호출하면 되고,
+    내부가 어떻게 동작하는지 알 필요 없다.
+  </div>
+
+  <h2>비교표</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size: 0.88rem; margin-top: 0.5rem;">
+    <thead>
+      <tr style="border-bottom: 2px solid var(--border);">
+        <th style="text-align:left; padding: 0.5rem;"></th>
+        <th style="text-align:left; padding: 0.5rem;">3레이어 Entity</th>
+        <th style="text-align:left; padding: 0.5rem;">DDD 도메인 Entity</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom: 1px solid var(--border);">
+        <td style="padding: 0.5rem;">데이터 보유</td>
+        <td style="padding: 0.5rem;">O</td>
+        <td style="padding: 0.5rem;">O</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border);">
+        <td style="padding: 0.5rem;">비즈니스 로직</td>
+        <td style="padding: 0.5rem;">X (Service에 있음)</td>
+        <td style="padding: 0.5rem;">O (스스로 가짐)</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border);">
+        <td style="padding: 0.5rem;">Service 역할</td>
+        <td style="padding: 0.5rem;">두껍다 — 로직 집중</td>
+        <td style="padding: 0.5rem;">얇다 — 조율만</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border);">
+        <td style="padding: 0.5rem;">비유</td>
+        <td style="padding: 0.5rem;">데이터 타입 정의</td>
+        <td style="padding: 0.5rem;">스스로 동작하는 객체</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>왜 DDD 방식이 더 나을 수 있나</h2>
+
+  <p>선배 개발자가 한 말: <em>"한 곳에 책임을 몰빵하면 안 좋다. 거기 문제 생기면 어디가 문제인지 다 확인해야 한다."</em></p>
+
+  <p>
+    삭제 검증 로직이 Service에만 있으면, 다른 Service에서 같은 Entity를 삭제할 때
+    검증을 빠뜨릴 수 있다. 도메인 객체가 스스로 검증하면 어디서 호출하든 규칙이 지켜진다.
+  </p>
+
+  <h2>Rails에서는?</h2>
+
+  <p>Rails의 ActiveRecord Model은 이미 DDD 도메인 엔티티에 가깝다:</p>
+
+<pre><code># Rails Model — 자기 검증과 콜백을 직접 가짐
+class OneOnOneSetting < ApplicationRecord
+  validates :workspace_id, presence: true     # 스스로 검증
+
+  before_destroy :check_can_delete            # 삭제 전 규칙을 직접 처리
+
+  def deactivate!
+    update!(active: false)                    # 상태 변경 로직을 직접 가짐
+  end
+
+  private
+
+  def check_can_delete
+    throw :abort if meetings.exists?          # 자식 데이터 있으면 삭제 거부
+  end
+end</code></pre>
+
+  <p>
+    Java 3레이어에서 Service가 하던 일을 Rails에서는 Model이 직접 한다.
+    이것이 Rails의 "Fat Model, Skinny Controller" 철학이다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">3레이어: Controller → <strong>두꺼운 Service</strong> (비즈니스 로직 집중) → 빈 Entity</div>
+    <div class="flow-arrow">vs</div>
+    <div class="flow-step">DDD / Rails: Controller → <strong>얇은 Service</strong> → <strong>로직 가진 Domain Entity</strong></div>
+  </div>
+
+  <!-- Quiz -->
+  <div class="quiz">
+    <h3>퀴즈 1 — 책임의 위치</h3>
+    <p class="quiz-q">
+      DDD 방식에서 "삭제 가능한지 검증하는 로직"은 어디에 있어야 하는가?
+    </p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">Controller</button></li>
+      <li><button onclick="answer(this,'q1',false)">Service</button></li>
+      <li><button onclick="answer(this,'q1',true)">Domain Entity (도메인 객체) 내부</button></li>
+      <li><button onclick="answer(this,'q1',false)">Repository</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — 얇은 Service의 의미</h3>
+    <p class="quiz-q">
+      DDD에서 Service가 "얇다"는 것은 무슨 뜻인가?
+    </p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">Service 파일의 코드 줄 수가 적다</button></li>
+      <li><button onclick="answer(this,'q2',true)">Service는 도메인 객체들을 조율하고, 세부 로직은 도메인 객체에 위임한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">Service가 DB에 직접 쿼리를 날리지 않는다</button></li>
+      <li><button onclick="answer(this,'q2',false)">Service가 Controller를 상속받는다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 3 — Rails와의 비교</h3>
+    <p class="quiz-q">
+      Rails Model에서 <code>before_destroy</code> 콜백에 삭제 검증 로직을 넣는 것은
+      어떤 개념에 해당하는가?
+    </p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">3레이어 아키텍처의 Service에 로직을 집중하는 것</button></li>
+      <li><button onclick="answer(this,'q3',false)">마이그레이션으로 DB 스키마를 관리하는 것</button></li>
+      <li><button onclick="answer(this,'q3',true)">도메인 객체가 자기 책임을 직접 가지는 DDD 방식</button></li>
+      <li><button onclick="answer(this,'q3',false)">Grape::Entity로 응답 JSON을 직렬화하는 것</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <div class="ask-teacher">
+    💬 궁금한 점이 있으면 바로 물어보세요. ORM의 영속성 추적이 실제로 어떻게 동작하는지,
+    DDD에서 Repository 패턴이 뭔지, Rails의 "Fat Model" 철학이 언제 문제가 되는지 — 어떤 것도 OK입니다.
+  </div>
+
+  <div class="nav-links">
+    <a href="0002-entity-two-meanings.html">← 레슨 2: Entity라는 단어가 두 가지 의미로 쓰인다</a>
+    <span>다음 레슨 준비 중 →</span>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. DDD에서는 '이 객체를 삭제할 수 있는지'는 객체 자신이 가장 잘 알고, 그래서 도메인 객체 안에 검증 로직이 있습니다. 어디서 호출하든 규칙이 지켜집니다.",
+        wrong: "아니에요. DDD에서는 비즈니스 규칙을 도메인 객체가 직접 가집니다. Service에 넣으면 다른 Service에서 호출할 때 검증이 빠질 위험이 있습니다."
+      },
+      q2: {
+        correct: "맞아요. Service는 '누구한테 무엇을 시킬지'만 알고, 실제 처리는 도메인 객체에 위임합니다. 코드 줄 수가 적은 건 결과일 뿐 핵심이 아니에요.",
+        wrong: "아니에요. '얇다'는 것은 Service가 직접 비즈니스 로직을 처리하지 않고 도메인 객체에 위임한다는 의미입니다."
+      },
+      q3: {
+        correct: "맞아요. Model이 자기 삭제 조건을 콜백으로 직접 관리하는 것은 DDD의 '도메인 객체가 자기 책임을 가진다'는 개념과 같습니다. Rails는 기본적으로 이 방향을 권장합니다.",
+        wrong: "아니에요. before_destroy 콜백은 도메인 객체(Model)가 자신의 삭제 규칙을 스스로 가지는 것입니다. 이것이 DDD 방식입니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+      const result = document.getElementById(quizId + '-result');
+      result.textContent = (isCorrect ? '✓ ' : '✗ ') + explanations[quizId][isCorrect ? 'correct' : 'wrong'];
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>
