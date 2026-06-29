@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 8 — ActiveRecord 연관관계: belongs_to / has_one / has_many</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>ActiveRecord 연관관계</h1>
+  <div class="lesson-meta">
+    <span>레슨 008</span>
+    <span>ActiveRecord · belongs_to · has_one · has_many · joins · preload · N+1</span>
+    <span>~30분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 미션 연결: 버그 수정에서 <code>has_one :appraisal_result_formal_objection</code>이 있어야
+    <code>joins(:appraisal_result_formal_objection)</code>가 가능했다. 왜 그런지 이해한다.
+    — <a href="../work-log/2026-06-29-sentry-appraisees-query-bug.md">워크로그</a>
+  </div>
+
+  <h2>연관관계 선언이 하는 일</h2>
+
+  <p>
+    Rails 모델에서 연관관계를 선언하면 두 가지를 얻는다:
+  </p>
+  <ul style="margin:0.8rem 0 0.8rem 1.5rem; line-height:2;">
+    <li><strong>편의 메서드</strong>: <code>appraisee.appraisal_result_formal_objection</code> 같은 메서드</li>
+    <li><strong>JOIN 단서</strong>: ActiveRecord가 JOIN할 때 어떤 컬럼을 연결할지 알게 됨</li>
+  </ul>
+
+  <p>선언하지 않으면 <code>joins(:appraisal_result_formal_objection)</code>을 써도 Rails가 어떤 FK로 연결할지 몰라 에러가 난다.</p>
+
+  <h2>belongs_to — FK가 내 테이블에 있다</h2>
+
+<pre><code>appraisal_result_formal_objections 테이블
+┌────┬──────────────────────┬────────┐
+│ id │ appraisal_appraisee_id│ status │  ← appraisal_appraisee_id가 FK
+└────┴──────────────────────┴────────┘</code></pre>
+
+<pre><code># app/models/appraisal_result_formal_objection.rb
+class AppraisalResultFormalObjection < ApplicationRecord
+  belongs_to :appraisal_appraisee  # FK(appraisal_appraisee_id)가 이 테이블에 있음
+end</code></pre>
+
+  <p>
+    <code>belongs_to</code>는 <strong>"나한테 FK가 있다"</strong>는 선언이다.
+    "내가 상대방에게 속한다"는 의미다.
+  </p>
+
+  <div class="analogy">
+    React에서 자식 컴포넌트가 <code>parentId</code> prop을 받는 것처럼,
+    <code>belongs_to</code> 모델은 상대방의 ID를 자기 테이블에 저장한다.
+  </div>
+
+  <h2>has_one — FK가 상대 테이블에 있다 (1:1)</h2>
+
+<pre><code># app/models/appraisal_appraisee.rb
+class AppraisalAppraisee < ApplicationRecord
+  has_one :appraisal_result_formal_objection  # FK가 상대 테이블에 있음
+end</code></pre>
+
+  <p>
+    <code>has_one</code>은 <strong>"상대방 테이블에 내 ID를 참조하는 FK가 있다"</strong>는 선언이다.
+    1:1 관계이므로 한 appraisee에 이의신청이 최대 하나다.
+  </p>
+
+<pre><code>appraisee = AppraisalAppraisee.find(1)
+appraisee.appraisal_result_formal_objection
+# SELECT * FROM appraisal_result_formal_objections
+# WHERE appraisal_appraisee_id = 1
+# LIMIT 1</code></pre>
+
+  <h2>has_many — FK가 상대 테이블에 있다 (1:N)</h2>
+
+<pre><code>members 테이블
+┌────┬─────────┬──────────────┐
+│ id │ user_id │ workspace_id │  ← user_id가 FK
+└────┴─────────┴──────────────┘</code></pre>
+
+<pre><code># app/models/user.rb
+class User < ApplicationRecord
+  has_many :members  # 한 유저가 여러 워크스페이스에 멤버로 속할 수 있음
+end
+
+user.members  # SELECT * FROM members WHERE user_id = ?</code></pre>
+
+  <p>
+    <code>has_many</code>는 <code>has_one</code>과 구조가 같다 — FK가 상대 테이블에 있다.
+    차이는 결과가 <strong>배열</strong>이라는 것이다.
+  </p>
+
+  <h2>세 가지 한눈에 보기</h2>
+
+  <table style="width:100%;border-collapse:collapse;font-family:var(--font-sans);font-size:0.9rem;margin-top:1rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="padding:0.4rem 0.8rem; text-align:left;">선언</th>
+        <th style="padding:0.4rem 0.8rem; text-align:left;">FK 위치</th>
+        <th style="padding:0.4rem 0.8rem; text-align:left;">결과</th>
+        <th style="padding:0.4rem 0.8rem; text-align:left;">예시</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.8rem;"><code>belongs_to</code></td>
+        <td style="padding:0.4rem 0.8rem;">내 테이블</td>
+        <td style="padding:0.4rem 0.8rem;">단일 객체</td>
+        <td style="padding:0.4rem 0.8rem;">이의신청 → 평가대상자</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.8rem;"><code>has_one</code></td>
+        <td style="padding:0.4rem 0.8rem;">상대 테이블</td>
+        <td style="padding:0.4rem 0.8rem;">단일 객체</td>
+        <td style="padding:0.4rem 0.8rem;">평가대상자 → 이의신청</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.8rem;"><code>has_many</code></td>
+        <td style="padding:0.4rem 0.8rem;">상대 테이블</td>
+        <td style="padding:0.4rem 0.8rem;">배열</td>
+        <td style="padding:0.4rem 0.8rem;">유저 → 멤버십들</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>joins vs preload — 목적이 다르다</h2>
+
+  <p>
+    둘 다 연관 데이터를 가져오는 방법이지만 <strong>쓰임새가 완전히 다르다.</strong>
+  </p>
+
+  <h3>joins — 필터링·정렬용</h3>
+  <p>SQL JOIN을 추가한다. <strong>WHERE 조건이나 ORDER BY에 상대 테이블 컬럼을 쓸 때</strong> 사용한다.</p>
+
+<pre><code>AppraisalAppraisee
+  .joins(:appraisal_result_formal_objection)
+  .where(appraisal_result_formal_objection: { status: :review })
+
+-- 생성되는 SQL
+SELECT appraisal_appraisees.*
+FROM appraisal_appraisees
+INNER JOIN appraisal_result_formal_objections
+  ON appraisal_result_formal_objections.appraisal_appraisee_id = appraisal_appraisees.id
+WHERE appraisal_result_formal_objections.status = 1</code></pre>
+
+  <p>
+    주의: <code>joins</code>로 가져온 appraisee에서 <code>appraisee.appraisal_result_formal_objection</code>을
+    Ruby에서 접근하면 <strong>추가 쿼리가 발생한다.</strong>
+    joins는 JOIN을 SQL에 추가할 뿐, 연관 데이터를 Ruby 메모리에 올리지 않는다.
+  </p>
+
+  <h3>preload — N+1 방지용</h3>
+  <p>별도 쿼리를 한 번 더 날려서 연관 데이터를 Ruby 메모리에 미리 올린다.
+  <strong>연관 데이터를 Ruby에서 접근할 때</strong> 사용한다.</p>
+
+<pre><code>appraisees = AppraisalAppraisee
+  .preload(:appraisal_result_formal_objection)
+
+-- 생성되는 SQL (두 번)
+SELECT * FROM appraisal_appraisees ...
+SELECT * FROM appraisal_result_formal_objections
+  WHERE appraisal_appraisee_id IN (1, 2, 3, ...)</code></pre>
+
+  <p>이후 <code>appraisee.appraisal_result_formal_objection</code>을 아무리 호출해도 추가 쿼리 없음.
+  이미 메모리에 있기 때문이다.</p>
+
+  <div class="analogy">
+    <strong>비유:</strong><br>
+    <code>joins</code> = 도서관에서 책을 찾는 인덱스 (위치만 알려줌)<br>
+    <code>preload</code> = 책을 미리 내 책상 위에 꺼내놓기 (바로 펼쳐볼 수 있음)
+  </div>
+
+  <h2>ppback 컨트롤러에서 두 가지를 같이 쓰는 이유</h2>
+
+<pre><code>appraisees = AppraisalAppraisee
+  .where(id: appraisees.select(:id))
+  .joins(appraisal_group: %i[appraisal appraisal_group_setting])  # 정렬용
+  .order(...)
+  .preload(:appraisal_result_formal_objection, ...)               # 렌더링용
+  .page(params[:page])</code></pre>
+
+  <ul style="margin:0.8rem 0 0.8rem 1.5rem; line-height:2;">
+    <li><code>joins</code>: ORDER BY에 appraisal 컬럼을 쓰기 위해 JOIN 필요</li>
+    <li><code>preload</code>: 결과를 JSON으로 렌더링할 때 각 appraisee의 이의신청 데이터가 필요 → N+1 방지</li>
+  </ul>
+
+  <!-- Quiz -->
+  <div class="quiz">
+    <h3>퀴즈 1</h3>
+    <p class="quiz-q">
+      <code>belongs_to :appraisal_appraisee</code>가 선언된 모델의 테이블에는 어떤 컬럼이 있어야 하는가?
+    </p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer('q1', this, false)">상대방 테이블에 id 컬럼이 있어야 한다</button></li>
+      <li><button onclick="answer('q1', this, true)">내 테이블에 appraisal_appraisee_id FK 컬럼이 있어야 한다</button></li>
+      <li><button onclick="answer('q1', this, false)">두 테이블 모두에 공통 컬럼이 필요하다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2</h3>
+    <p class="quiz-q">
+      WHERE 조건에 <code>appraisal_result_formal_objections.status</code>를 쓰려면 어떤 메서드가 필요한가?
+    </p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer('q2', this, false)">preload — 미리 데이터를 올려놓으면 사용 가능하다</button></li>
+      <li><button onclick="answer('q2', this, true)">joins — SQL에 JOIN이 추가돼야 WHERE 조건에서 참조 가능하다</button></li>
+      <li><button onclick="answer('q2', this, false)">includes — 내부적으로 JOIN을 추가해준다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 3</h3>
+    <p class="quiz-q">
+      100개의 appraisee를 불러온 뒤 Ruby 루프에서 각각의 이의신청 status를 출력하려 한다.
+      N+1을 방지하려면 어떤 메서드를 써야 하는가?
+    </p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer('q3', this, false)">joins — JOIN으로 한 쿼리에 다 가져온다</button></li>
+      <li><button onclick="answer('q3', this, true)">preload — 연관 데이터를 별도 쿼리로 미리 메모리에 올린다</button></li>
+      <li><button onclick="answer('q3', this, false)">select — 필요한 컬럼만 고른다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <div class="ask-teacher">
+    궁금한 점이 있으면 Claude Code에서 질문하세요.
+    다음 레슨: <a href="0009-n-plus-1.html">N+1 문제 — 쿼리가 폭발하는 이유</a>
+  </div>
+
+  <div class="nav-links">
+    <a href="0007-subquery.html">← 레슨 7: 서브쿼리</a>
+    <a href="0009-n-plus-1.html">레슨 9: N+1 문제 →</a>
+  </div>
+
+  <script>
+    function answer(qId, btn, correct) {
+      const container = document.getElementById(qId);
+      container.querySelectorAll('button').forEach(b => b.disabled = true);
+      const result = document.getElementById(qId + '-result');
+      if (correct) {
+        btn.classList.add('correct');
+        result.style.color = 'var(--correct)';
+        result.textContent = '정답입니다.';
+      } else {
+        btn.classList.add('wrong');
+        result.style.color = 'var(--wrong)';
+        result.textContent = '다시 생각해보세요.';
+        container.querySelectorAll('button').forEach(b => b.disabled = false);
+        btn.disabled = true;
+      }
+    }
+  </script>
+
+</body>
+</html>

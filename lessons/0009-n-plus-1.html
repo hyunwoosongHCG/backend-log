@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 9 — N+1 문제: 쿼리가 폭발하는 이유</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>N+1 문제</h1>
+  <div class="lesson-meta">
+    <span>레슨 009</span>
+    <span>N+1 · preload · includes · eager_load · 성능</span>
+    <span>~20분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 미션 연결: ppback 컨트롤러가 <code>preload(:appraisal_result_formal_objection)</code>를 쓰는 이유.
+    — <a href="../work-log/2026-06-29-sentry-appraisees-query-bug.md">워크로그</a>
+  </div>
+
+  <h2>N+1이 뭔가?</h2>
+
+  <p>
+    목록 1번 쿼리 + 각 항목마다 연관 데이터 조회 N번 = 총 <strong>N+1번</strong> 쿼리가 나가는 문제다.
+    N이 100이면 쿼리 101번, N이 1000이면 1001번이 된다.
+  </p>
+
+<pre><code># N+1 발생 패턴
+appraisees = AppraisalAppraisee.where(...)  # 쿼리 1번 — appraisees 100개 로드
+
+appraisees.each do |appraisee|
+  puts appraisee.appraisal_result_formal_objection&.status
+  # ↑ 매 반복마다 쿼리 1번씩 추가 발생
+  # SELECT * FROM appraisal_result_formal_objections WHERE appraisal_appraisee_id = 1
+  # SELECT * FROM appraisal_result_formal_objections WHERE appraisal_appraisee_id = 2
+  # SELECT * FROM appraisal_result_formal_objections WHERE appraisal_appraisee_id = 3
+  # ... 100번
+end
+
+# 총 101번 쿼리</code></pre>
+
+  <div class="analogy">
+    JS에서 API를 반복문으로 100번 호출하는 것과 같다:<br><br>
+    <code>const users = await fetchUsers()  // 1번</code><br>
+    <code>for (const user of users) {</code><br>
+    <code>&nbsp;&nbsp;const detail = await fetchDetail(user.id)  // N번</code><br>
+    <code>}</code><br><br>
+    한 번에 묶어서 보내면 되는데 반복문 안에서 개별 요청을 날리는 비효율이다.
+  </div>
+
+  <h2>해결 — preload</h2>
+
+  <p>
+    <code>preload</code>는 쿼리 2번으로 처리한다:
+    ① appraisees 전체 로드 → ② 해당 ID들의 이의신청 전체 로드.
+    이후 Ruby에서 매칭해 메모리에서 연결한다.
+  </p>
+
+<pre><code>appraisees = AppraisalAppraisee
+  .where(...)
+  .preload(:appraisal_result_formal_objection)
+
+-- 실행되는 SQL (딱 2번)
+SELECT * FROM appraisal_appraisees WHERE ...
+SELECT * FROM appraisal_result_formal_objections
+  WHERE appraisal_appraisee_id IN (1, 2, 3, ..., 100)</code></pre>
+
+<pre><code>appraisees.each do |appraisee|
+  puts appraisee.appraisal_result_formal_objection&.status
+  # 추가 쿼리 없음 — 이미 메모리에 있음
+end</code></pre>
+
+  <h2>preload / includes / eager_load 차이</h2>
+
+  <p>세 가지 모두 N+1을 방지하지만 내부 동작이 다르다:</p>
+
+  <table style="width:100%;border-collapse:collapse;font-family:var(--font-sans);font-size:0.9rem;margin-top:1rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="padding:0.4rem 0.8rem; text-align:left;">메서드</th>
+        <th style="padding:0.4rem 0.8rem; text-align:left;">SQL 방식</th>
+        <th style="padding:0.4rem 0.8rem; text-align:left;">WHERE에 연관 컬럼 사용</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.8rem;"><code>preload</code></td>
+        <td style="padding:0.4rem 0.8rem;">별도 SELECT 쿼리 2번</td>
+        <td style="padding:0.4rem 0.8rem;">불가</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.8rem;"><code>includes</code></td>
+        <td style="padding:0.4rem 0.8rem;">상황에 따라 preload 또는 eager_load 자동 선택</td>
+        <td style="padding:0.4rem 0.8rem;">가능 (eager_load로 전환)</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.8rem;"><code>eager_load</code></td>
+        <td style="padding:0.4rem 0.8rem;">LEFT OUTER JOIN 한 방에</td>
+        <td style="padding:0.4rem 0.8rem;">가능</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p style="margin-top:1rem;">
+    ppback이 <code>preload</code>를 명시적으로 쓰는 이유:
+    WHERE 조건은 <code>joins</code>로 이미 처리했고, 렌더링용 데이터 로딩만 필요하기 때문이다.
+    <code>includes</code>를 쓰면 Rails가 내부적으로 어떤 방식을 선택할지 예측하기 어려워진다.
+  </p>
+
+  <h2>joins와 preload를 같이 쓰는 패턴</h2>
+
+<pre><code># 이 패턴이 왜 맞는가
+AppraisalAppraisee
+  .joins(:appraisal_result_formal_objection)    # WHERE status = ? 를 위한 SQL JOIN
+  .where(appraisal_result_formal_objection: { status: :review })
+  .preload(:appraisal_result_formal_objection)  # 결과 렌더링을 위한 메모리 로딩</code></pre>
+
+  <p>
+    같은 연관관계를 <code>joins</code>와 <code>preload</code> 양쪽에 쓰는 것이 어색해 보일 수 있지만,
+    <strong>목적이 다르다:</strong>
+  </p>
+  <ul style="margin:0.8rem 0 0.8rem 1.5rem; line-height:2;">
+    <li><code>joins</code> = SQL 필터링 조건 추가</li>
+    <li><code>preload</code> = Ruby에서 데이터 접근할 때 추가 쿼리 방지</li>
+  </ul>
+
+  <!-- Quiz -->
+  <div class="quiz">
+    <h3>퀴즈 1</h3>
+    <p class="quiz-q">
+      appraisees 50개를 불러온 뒤 각각의 이의신청 status를 루프에서 출력했다.
+      N+1이 발생했다면 총 몇 번의 쿼리가 실행됐는가?
+    </p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer('q1', this, false)">1번 — 한 번의 JOIN 쿼리로 다 가져온다</button></li>
+      <li><button onclick="answer('q1', this, false)">50번 — 각 appraisee마다 1번씩</button></li>
+      <li><button onclick="answer('q1', this, true)">51번 — 목록 1번 + 이의신청 조회 50번</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2</h3>
+    <p class="quiz-q">
+      <code>preload</code>는 몇 번의 쿼리를 실행하는가?
+    </p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer('q2', this, false)">1번 — LEFT OUTER JOIN으로 한 번에</button></li>
+      <li><button onclick="answer('q2', this, true)">2번 — 주 쿼리 1번 + 연관 데이터 IN 쿼리 1번</button></li>
+      <li><button onclick="answer('q2', this, false)">N+1번 — 개별적으로 조회한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 3</h3>
+    <p class="quiz-q">
+      <code>preload</code>로 로딩한 연관 데이터를 WHERE 조건으로 쓸 수 있는가?
+    </p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer('q3', this, false)">가능하다 — preload가 SQL JOIN도 추가한다</button></li>
+      <li><button onclick="answer('q3', this, true)">불가능하다 — preload는 별도 SELECT이므로 SQL WHERE에서 참조할 수 없다</button></li>
+      <li><button onclick="answer('q3', this, false)">Rails 버전에 따라 다르다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <div class="ask-teacher">
+    궁금한 점이 있으면 Claude Code에서 질문하세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="0008-active-record-associations.html">← 레슨 8: ActiveRecord 연관관계</a>
+  </div>
+
+  <script>
+    function answer(qId, btn, correct) {
+      const container = document.getElementById(qId);
+      container.querySelectorAll('button').forEach(b => b.disabled = true);
+      const result = document.getElementById(qId + '-result');
+      if (correct) {
+        btn.classList.add('correct');
+        result.style.color = 'var(--correct)';
+        result.textContent = '정답입니다.';
+      } else {
+        btn.classList.add('wrong');
+        result.style.color = 'var(--wrong)';
+        result.textContent = '다시 생각해보세요.';
+        container.querySelectorAll('button').forEach(b => b.disabled = false);
+        btn.disabled = true;
+      }
+    }
+  </script>
+
+</body>
+</html>

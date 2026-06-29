@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 7 — 서브쿼리: 쿼리 안의 쿼리</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>서브쿼리: 쿼리 안의 쿼리</h1>
+  <div class="lesson-meta">
+    <span>레슨 007</span>
+    <span>SQL · 서브쿼리 · WHERE IN · ActiveRecord · select</span>
+    <span>~20분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 미션 연결: Sentry 에러를 수정하면서 컨트롤러가 왜 <code>where(id: appraisees.select(:id))</code>
+    를 쓰는지 이해하지 못한 채 넘겼다. 이 레슨에서 그 이유를 파헤친다.
+    — <a href="../work-log/2026-06-29-sentry-appraisees-query-bug.md">워크로그</a>
+  </div>
+
+  <h2>서브쿼리란?</h2>
+
+  <p>
+    <strong>쿼리 안에 또 다른 쿼리를 넣는 것</strong>이다.
+    바깥 쿼리가 안쪽 쿼리의 결과를 입력으로 받는 구조다.
+  </p>
+
+<pre><code>-- 기본 구조
+SELECT * FROM 바깥테이블
+WHERE id IN (
+  SELECT id FROM 안쪽테이블 WHERE 조건  ← 서브쿼리
+)</code></pre>
+
+  <div class="analogy">
+    JavaScript에서 배열 필터를 중첩하는 것과 비슷하다:<br><br>
+    <code>const ids = users.filter(u => u.active).map(u => u.id)</code><br>
+    <code>const result = orders.filter(o => ids.includes(o.userId))</code><br><br>
+    서브쿼리는 이걸 SQL 한 문장으로 쓰는 것이다.
+  </div>
+
+  <h2>ppback 컨트롤러에서 서브쿼리가 생기는 위치</h2>
+
+  <p>버그를 수정했던 컨트롤러를 다시 보자:</p>
+
+<pre><code># app/controllers/v2/admins/appraisal_open_results.rb
+
+# Step 1: 기본 필터
+appraisees = AppraisalAppraisee
+  .joins(appraisal_group: %i[appraisal appraisal_group_setting])
+  .where(appraisal: { workspace_id: workspace.id })
+  ...
+
+# Step 2: AppraiseesQuery로 파라미터 기반 추가 필터
+appraisees = AppraiseesQuery.new(relation: appraisees).filtered(params)
+# 이 시점에서 appraisees는 joins + where가 복잡하게 쌓인 상태
+
+# Step 3: ← 서브쿼리 생성
+appraisees = AppraisalAppraisee
+  .where(id: appraisees.select(:id))   # ← 여기서 서브쿼리 발생
+  .joins(appraisal_group: ...)
+  .order(...)
+  .page(params[:page])</code></pre>
+
+  <p><code>appraisees.select(:id)</code>가 만들어내는 SQL:</p>
+
+<pre><code>SELECT * FROM appraisal_appraisees
+WHERE id IN (
+  SELECT id FROM appraisal_appraisees    ← Step 2의 쿼리 전체가 서브쿼리로 들어감
+  INNER JOIN appraisal_groups ON ...
+  INNER JOIN appraisals ON ...
+  WHERE appraisal_result_formal_objection.status = 'review'  ← 버그 지점
+)</code></pre>
+
+  <h2>왜 서브쿼리로 감싸나?</h2>
+
+  <p>Step 2에서 AppraiseesQuery가 여러 JOIN과 조건을 쌓은 상태로 정렬·페이지네이션을 추가하면
+  JOIN이 중복되거나 ORDER BY가 잘못된 컨텍스트에서 적용되는 문제가 생긴다.
+  서브쿼리로 감싸면 <strong>ID 목록만 뽑아내고, 바깥 쿼리에서 깔끔하게 새로 시작</strong>할 수 있다.</p>
+
+<pre><code># 서브쿼리 없이 하려면?
+appraisees
+  .joins(...)        # Step 2에서 이미 joins가 쌓여 있음
+  .joins(...)        # 여기서 같은 joins를 또 추가 → 중복 JOIN → 예기치 않은 결과
+  .order(...)
+  .page(...)
+
+# 서브쿼리로 감싸면?
+AppraisalAppraisee
+  .where(id: appraisees.select(:id))  # Step 2 결과는 "ID 목록"으로만 쓰임
+  .joins(...)        # 바깥에서 정렬/페이지용 JOIN을 깔끔하게 다시 선언
+  .order(...)
+  .page(...)</code></pre>
+
+  <h2>select(:id)는 언제 실행되나?</h2>
+
+  <p>
+    <strong>즉시 실행되지 않는다.</strong>
+    ActiveRecord는 쿼리를 <em>lazy</em>하게 빌드한다 — 실제로 결과가 필요한 순간에만 SQL을 DB에 보낸다.
+  </p>
+
+<pre><code>appraisees.select(:id)
+# Ruby 객체 상태: "SELECT id FROM appraisal_appraisees WHERE ..." 라는 계획만 있음
+# DB에 아직 아무것도 보내지 않음
+
+AppraisalAppraisee.where(id: appraisees.select(:id))
+# 이 시점에서도 아직 실행 안 됨
+
+.page(params[:page]).per(params[:size])
+# 실제로 결과가 필요한 순간 → 서브쿼리 포함한 전체 SQL이 한 번에 DB로 날아감</code></pre>
+
+  <div class="analogy">
+    JavaScript의 Promise chain과 비슷하다 — <code>.then()</code>을 아무리 연결해도
+    실제 실행은 런타임이 결정한다.
+    ActiveRecord는 <code>.each</code>, <code>.to_a</code>, <code>.count</code> 등
+    "결과가 필요한 메서드"를 만날 때 쿼리를 실행한다.
+  </div>
+
+  <h2>정리</h2>
+
+  <table style="width:100%;border-collapse:collapse;font-family:var(--font-sans);font-size:0.9rem;margin-top:1rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left;padding:0.4rem 0.8rem;">개념</th>
+        <th style="text-align:left;padding:0.4rem 0.8rem;">설명</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.8rem;"><code>WHERE id IN (...)</code></td>
+        <td style="padding:0.4rem 0.8rem;">안쪽 쿼리 결과 ID 목록에 속하는 행만 선택</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.8rem;"><code>relation.select(:id)</code></td>
+        <td style="padding:0.4rem 0.8rem;">SQL 서브쿼리 조각을 만드는 것 (즉시 실행 아님)</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.8rem;">서브쿼리로 감싸는 이유</td>
+        <td style="padding:0.4rem 0.8rem;">복잡한 중간 쿼리를 ID 목록으로 격리하고 바깥에서 깔끔하게 재시작</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Quiz -->
+  <div class="quiz">
+    <h3>퀴즈 1</h3>
+    <p class="quiz-q">
+      <code>appraisees.select(:id)</code>를 호출하면 즉시 DB에 쿼리가 실행되는가?
+    </p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer('q1', this, false)">그렇다 — 호출 즉시 SELECT id 쿼리가 실행된다</button></li>
+      <li><button onclick="answer('q1', this, true)">아니다 — SQL 조각을 만들 뿐, 결과가 필요할 때 실행된다</button></li>
+      <li><button onclick="answer('q1', this, false)">모델에 따라 다르다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2</h3>
+    <p class="quiz-q">
+      컨트롤러에서 서브쿼리로 감싸는 주된 이유는?
+    </p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer('q2', this, false)">성능을 높이기 위해 캐시를 활용한다</button></li>
+      <li><button onclick="answer('q2', this, false)">AppraiseesQuery의 결과를 즉시 실행하기 위해</button></li>
+      <li><button onclick="answer('q2', this, true)">복잡한 중간 쿼리를 ID 목록으로 격리해 바깥에서 정렬·페이지네이션을 깔끔하게 적용하기 위해</button></li>
+      <li><button onclick="answer('q2', this, false)">Rails의 필수 규칙이라서</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 3</h3>
+    <p class="quiz-q">
+      서브쿼리 안에서 JOIN 없이 다른 테이블 컬럼을 참조하면?
+    </p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer('q3', this, false)">NULL을 반환한다</button></li>
+      <li><button onclick="answer('q3', this, true)">MySQL 에러 — Unknown column '...' in 'IN/ALL/ANY subquery'</button></li>
+      <li><button onclick="answer('q3', this, false)">Rails가 자동으로 JOIN을 추가한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <div class="ask-teacher">
+    궁금한 점이 있으면 Claude Code에서 질문하세요.
+    다음 레슨: <a href="0008-active-record-associations.html">ActiveRecord 연관관계 — belongs_to / has_one / has_many</a>
+  </div>
+
+  <div class="nav-links">
+    <a href="0005-sql-joins.html">← 레슨 5: SQL JOIN</a>
+    <a href="0008-active-record-associations.html">레슨 8: ActiveRecord 연관관계 →</a>
+  </div>
+
+  <script>
+    function answer(qId, btn, correct) {
+      const container = document.getElementById(qId);
+      container.querySelectorAll('button').forEach(b => b.disabled = true);
+      const result = document.getElementById(qId + '-result');
+      if (correct) {
+        btn.classList.add('correct');
+        result.style.color = 'var(--correct)';
+        result.textContent = '정답입니다.';
+      } else {
+        btn.classList.add('wrong');
+        result.style.color = 'var(--wrong)';
+        result.textContent = '다시 생각해보세요.';
+        container.querySelectorAll('button').forEach(b => b.disabled = false);
+        btn.disabled = true;
+      }
+    }
+  </script>
+
+</body>
+</html>

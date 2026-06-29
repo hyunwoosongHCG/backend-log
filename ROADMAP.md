@@ -106,12 +106,12 @@
 
 - [ ] 모델(Model)이란? 테이블과의 관계
 - [x] 마이그레이션(Migration)이란? → [정리](concepts/migration.md) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
-- [ ] 연관관계 (`belongs_to`, `has_many`, `has_one`, `has_many :through`)
+- [x] 연관관계 (`belongs_to`, `has_many`, `has_one`, `has_many :through`) → [레슨](lessons/0008-active-record-associations.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [ ] 유효성 검사 (`validates`)
 - [ ] 스코프(Scope)란?
 - [ ] 콜백 (`before_save`, `after_create` 등)
 - [ ] 쿼리 메서드 (`where`, `find`, `find_by`, `includes`, `joins`)
-- [ ] N+1 문제란? `includes`로 해결하기
+- [x] N+1 문제란? `includes`로 해결하기 → [레슨](lessons/0009-n-plus-1.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 
 ### Controller
 
