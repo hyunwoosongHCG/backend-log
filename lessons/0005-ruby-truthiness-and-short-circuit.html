@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 5 — Ruby의 ? ! &amp;. : 이름이 동작을 말한다</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<h1>레슨 5 — Ruby의 <code>?</code> <code>!</code> <code>&amp;.</code></h1>
+<div class="lesson-meta">
+  <span>2026-06-29</span>
+  <span>실무 출처: ppback PR #5479 디버깅</span>
+  <span>이전: <a href="0004-sql-joins.html">레슨 4 — SQL JOIN</a></span>
+</div>
+
+<div class="mission-link">
+  오늘 실제로 겪었다. <code>setting.user?</code>를 <code>setting.user?</code>에서
+  <code>setting&amp;.user?</code>로, 다시 원점으로 돌아온 과정이 이 세 가지 개념으로 설명된다.
+</div>
+
+<h2>1. <code>?</code> — "이게 맞아?" 라고 묻는 메서드</h2>
+
+<p>
+  Ruby에서 메서드 이름이 <code>?</code>로 끝나면 <strong>boolean을 반환한다는 약속</strong>이다.
+  <code>true</code> 또는 <code>false</code> (또는 truthy/falsy)를 돌려준다는 신호다.
+</p>
+
+<div class="analogy">
+  TypeScript에서 <code>isAdmin()</code>, <code>hasPermission()</code>처럼 <code>is</code>/<code>has</code>
+  prefix를 붙이는 관습과 같다. Ruby는 그냥 끝에 <code>?</code>를 붙인다.
+</div>
+
+<pre><code># 표준 라이브러리
+"".empty?          # => true
+[1,2].include?(3)  # => false
+
+# 이 레포에서 실제로 쓴 것들
+comment.completed?           # 코멘트 완료 상태?
+setting.user?                # comment_template_config == 'user'?
+workspace.user?(user)        # 이 워크스페이스의 멤버?
+
+# 오늘 우리가 만든 것
+privacy_blocked?(setting)    # 비공개 차단 조건?
+template_required?(setting)  # 템플릿 필수 조건?</code></pre>
+
+<p>
+  <code>?</code>는 실제 동작을 바꾸지 않는다 — 순전히 <strong>읽는 사람을 위한 약속</strong>이다.
+  이 메서드는 boolean을 리턴하니 <code>if</code>에 바로 쓸 수 있다는 의미다.
+</p>
+
+<h2>2. <code>!</code> — "조심해, 위험해" 메서드</h2>
+
+<p>두 가지 중 하나를 의미한다:</p>
+
+<pre><code># (1) 실패 시 예외를 던진다
+record.save      # 실패하면 false 반환
+record.save!     # 실패하면 ActiveRecord::RecordInvalid 예외 발생
+
+# (2) 원본 객체를 직접 변경한다
+arr = [3, 1, 2]
+arr.sort         # 새 배열 반환, arr는 그대로
+arr.sort!        # arr 자체가 [1, 2, 3]으로 변함</code></pre>
+
+<div class="analogy">
+  JavaScript의 <code>Array.prototype.sort()</code>가 원본을 바꾸는 것처럼 <code>!</code>가 붙은 건
+  "사이드 이펙트 있음"이라는 경고다. 이 레포에서 <code>comment.discard!</code>,
+  <code>workspace.save!</code>가 모두 이 패턴이다.
+</div>
+
+<h2>3. 단락 평가 (Short-circuit Evaluation)</h2>
+
+<p>
+  <code>&&</code>는 왼쪽이 <strong>falsy면 오른쪽을 아예 실행하지 않는다.</strong>
+  JavaScript와 완전히 동일하다.
+</p>
+
+<pre><code># JavaScript
+null && someFunction()   // someFunction() 실행 안 됨
+
+# Ruby — 동일한 원리
+nil && setting.user?     # setting.user? 실행 안 됨
+false && expensive_call  # expensive_call 실행 안 됨</code></pre>
+
+<p>오늘 실무에서 이게 핵심이었다:</p>
+
+<pre><code>setting = workspace.one_on_one_setting  # nil일 수도 있음
+
+# 이 줄은 안전하다
+if setting&amp;.user? &amp;&amp; setting.use_required_template &amp;&amp; ...
+#     ↑ nil이면 nil 반환 → &&가 여기서 멈춤 → setting.use_required_template 실행 안 됨</code></pre>
+
+<p>
+  단락 평가 덕분에 <code>setting</code>이 nil이어도 두 번째 조건에서 <code>NoMethodError</code>가
+  발생하지 않는다. <strong>앞이 거짓이면 뒤는 건드리지 않는다.</strong>
+</p>
+
+<h2>4. <code>&amp;.</code> — nil-safe 메서드 호출</h2>
+
+<p>
+  Ruby 2.3에서 추가된 <strong>Safe Navigation Operator</strong>다.
+  <code>object&amp;.method</code>는 "object가 nil이면 nil을 반환하고, 아니면 method를 호출"한다.
+</p>
+
+<pre><code>setting = nil
+
+setting.user?    # NoMethodError: undefined method 'user?' for nil
+setting&amp;.user?   # => nil (예외 없이 조용히 nil 반환)</code></pre>
+
+<div class="analogy">
+  JavaScript의 Optional Chaining과 완전히 같다:<br>
+  <code>setting?.user()</code> → <code>setting&amp;.user?</code>
+</div>
+
+<h2>5. 오늘 실제로 겪은 버그</h2>
+
+<p>
+  오늘 <code>setting&amp;.user?</code>의 <code>&amp;.</code>을 제거했더니
+  기존 테스트 12개가 한꺼번에 터졌다:
+</p>
+
+<pre><code>NoMethodError (undefined method 'user?' for nil):
+  app/controllers/v2/comments.rb:145</code></pre>
+
+<p>
+  <strong>원인:</strong> 기존 테스트들은 API를 통하지 않고 팩토리로 <code>OneOnOne</code>을 직접 생성해서
+  <code>one_on_one_setting</code>이 nil이었다. 프로덕션에서는
+  <code>GET /one_on_one_settings</code> 호출 시 <code>find_or_create_by!</code>로 항상 생성되지만,
+  테스트는 그 경로를 거치지 않았다.
+</p>
+
+<p><strong>해결:</strong> 테스트의 <code>before</code> 블록에 GET 요청을 추가해서 실제 플로우를 재현했다:</p>
+
+<pre><code>before do
+  stub_authenticate(assigne_user)
+  get "/api/v1/workspaces/#{workspace.hash_id}/one_on_one_settings"
+  # 이 호출이 find_or_create_by!를 트리거 → setting이 nil이 아님
+end</code></pre>
+
+<p>이후 <code>&amp;.</code> 없이도 안전하게 동작한다.</p>
+
+<h2>정리</h2>
+
+<table style="width:100%; border-collapse:collapse; font-family:var(--font-sans); font-size:0.9rem; margin-top:1rem;">
+  <thead>
+    <tr style="border-bottom:2px solid var(--border);">
+      <th style="text-align:left; padding:0.4rem 0.6rem;">기호</th>
+      <th style="text-align:left; padding:0.4rem 0.6rem;">의미</th>
+      <th style="text-align:left; padding:0.4rem 0.6rem;">JS 대응</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:0.4rem 0.6rem;"><code>?</code></td>
+      <td style="padding:0.4rem 0.6rem;">boolean 반환 약속</td>
+      <td style="padding:0.4rem 0.6rem;"><code>is*()</code> / <code>has*()</code> prefix</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:0.4rem 0.6rem;"><code>!</code></td>
+      <td style="padding:0.4rem 0.6rem;">예외 던지거나 원본 변경</td>
+      <td style="padding:0.4rem 0.6rem;">(명시적 관습 없음)</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:0.4rem 0.6rem;"><code>&amp;&amp;</code> 단락평가</td>
+      <td style="padding:0.4rem 0.6rem;">왼쪽 falsy → 오른쪽 실행 안 함</td>
+      <td style="padding:0.4rem 0.6rem;"><code>&&</code> 동일</td>
+    </tr>
+    <tr>
+      <td style="padding:0.4rem 0.6rem;"><code>&amp;.</code></td>
+      <td style="padding:0.4rem 0.6rem;">nil이면 nil 반환, 아니면 메서드 호출</td>
+      <td style="padding:0.4rem 0.6rem;"><code>?.</code> Optional Chaining</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr style="margin-top:2.5rem; border:none; border-top:1px solid var(--border);">
+
+<h2>퀴즈</h2>
+
+<div class="quiz">
+  <div class="quiz-q">Q1. 다음 중 Ruby에서 <code>?</code>로 끝나는 메서드가 보장하는 것은?</div>
+  <ul class="options" id="q1">
+    <li><button onclick="answer(this,'q1',false)">A. 메서드가 예외를 발생시키지 않는다</button></li>
+    <li><button onclick="answer(this,'q1',true)">B. boolean(truthy/falsy) 값을 반환한다</button></li>
+    <li><button onclick="answer(this,'q1',false)">C. 원본 객체를 변경하지 않는다</button></li>
+    <li><button onclick="answer(this,'q1',false)">D. nil을 받아도 안전하게 처리된다</button></li>
+  </ul>
+  <div class="quiz-result" id="q1-result"></div>
+</div>
+
+<div class="quiz">
+  <div class="quiz-q">Q2. <code>setting&amp;.user? &amp;&amp; setting.use_required_template</code>에서 <code>setting</code>이 nil일 때 어떤 일이 일어나는가?</div>
+  <ul class="options" id="q2">
+    <li><button onclick="answer(this,'q2',false)">A. NoMethodError가 발생한다</button></li>
+    <li><button onclick="answer(this,'q2',false)">B. setting.use_required_template가 실행되고 nil을 반환한다</button></li>
+    <li><button onclick="answer(this,'q2',true)">C. &amp;.이 nil을 반환 → &&가 단락평가로 오른쪽을 실행하지 않는다</button></li>
+    <li><button onclick="answer(this,'q2',false)">D. 빈 문자열을 반환하고 계속 진행한다</button></li>
+  </ul>
+  <div class="quiz-result" id="q2-result"></div>
+</div>
+
+<div class="quiz">
+  <div class="quiz-q">Q3. <code>record.save</code>와 <code>record.save!</code>의 차이는?</div>
+  <ul class="options" id="q3">
+    <li><button onclick="answer(this,'q3',false)">A. save!는 더 빠르게 저장한다</button></li>
+    <li><button onclick="answer(this,'q3',false)">B. save는 비동기, save!는 동기 처리다</button></li>
+    <li><button onclick="answer(this,'q3',true)">C. 저장 실패 시 save는 false를 반환하고, save!는 예외를 발생시킨다</button></li>
+    <li><button onclick="answer(this,'q3',false)">D. save!는 유효성 검사를 건너뛴다</button></li>
+  </ul>
+  <div class="quiz-result" id="q3-result"></div>
+</div>
+
+<div class="ask-teacher">
+  개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+  특히 "그럼 이 경우엔 어떻게 되나요?" 같은 엣지 케이스 질문을 환영합니다.
+</div>
+
+<div class="nav-links">
+  <a href="0004-sql-joins.html">← 레슨 4: SQL JOIN</a>
+  <span>레슨 5: Ruby <code>? ! &amp;.</code></span>
+</div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  container.querySelectorAll('button').forEach(b => b.disabled = true);
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    result.textContent = '다시 생각해보세요. 힌트: 단락 평가(short-circuit)와 &. 의 조합을 떠올려보세요.';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. ?는 동작 방식이 아니라 반환값에 대한 약속입니다.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. !의 핵심은 "실패했을 때 어떻게 되는가"입니다.';
+  }
+}
+</script>
+
+</body>
+</html>
