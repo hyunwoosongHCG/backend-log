@@ -11,13 +11,54 @@
   <h1>SQL JOIN: 테이블을 합치는 법</h1>
   <div class="lesson-meta">
     <span>레슨 004</span>
-    <span>SQL · JOIN · INNER JOIN · LEFT OUTER JOIN</span>
-    <span>~20분</span>
+    <span>SQL · PK · FK · JOIN · INNER JOIN · LEFT OUTER JOIN</span>
+    <span>~25분</span>
   </div>
 
   <div class="mission-link">
     🎯 미션 연결: Sentry 에러 <code>Unknown column 'appraisal_result_formal_objection.status' in subquery</code>를 직접 디버깅하면서 배운 개념
     — <a href="../work-log/2026-06-29-sentry-appraisees-query-bug.md">워크로그</a>
+  </div>
+
+  <h2>먼저 알아야 할 것 — PK와 FK</h2>
+
+  <h3>기본키 (Primary Key, PK)</h3>
+  <p>
+    테이블에서 <strong>각 행을 유일하게 구별하는 값</strong>이다.
+    이름이 같은 사람이 두 명일 수 있지만, <code>id</code>는 절대 겹치지 않는다.
+    Rails에서는 <code>id</code> 컬럼이 자동으로 PK가 된다.
+  </p>
+
+<pre><code>appraisal_appraisees
+┌──────┬──────┐
+│  id  │ name │
+├──────┼──────┤
+│   1  │ 김철수│  ← id=1은 이 행만을 가리킴
+│   2  │ 이영희│  ← id=2는 이 행만을 가리킴
+│   3  │ 박민준│
+└──────┴──────┘
+   ↑
+   PK</code></pre>
+
+  <h3>외래키 (Foreign Key, FK)</h3>
+  <p>
+    <strong>다른 테이블의 PK를 참조하는 컬럼</strong>이다.
+    "이 행이 저 테이블의 어떤 행에 속하는지"를 기록하는 연결고리다.
+  </p>
+
+<pre><code>appraisal_result_formal_objections
+┌────┬──────────────────────┬────────┐
+│ id │ appraisal_appraisee_id│ status │
+├────┼──────────────────────┼────────┤
+│  1 │          1           │ review │  ← "appraisee id=1의 이의신청"
+│  2 │          2           │ submit │  ← "appraisee id=2의 이의신청"
+└────┴──────────────────────┴────────┘
+              ↑
+              FK — appraisal_appraisees.id(PK)를 가리킴</code></pre>
+
+  <div class="analogy">
+    React에서 자식 컴포넌트가 <code>parentId</code> prop을 받아 부모를 참조하듯,
+    FK는 "나는 저 테이블의 id=1 행에 속해요"라고 기록하는 컬럼이다.
   </div>
 
   <h2>왜 JOIN이 필요한가</h2>
@@ -32,7 +73,7 @@
     DB도 테이블 두 개를 JOIN으로 합쳐야 한 행(row)에서 같이 볼 수 있다.
   </div>
 
-  <p>두 테이블의 연결고리는 <strong>외래키(FK)</strong>다:</p>
+  <p>JOIN은 <strong>FK ↔ PK가 일치하는 행끼리 붙이는 것</strong>이다:</p>
 
 <pre><code>appraisal_appraisees                  appraisal_result_formal_objections
 ┌────┬──────┐                         ┌────┬──────────────────────┬────────┐

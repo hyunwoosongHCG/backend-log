@@ -34,7 +34,7 @@
 
 - [ ] 관계형 데이터베이스(RDB)란?
 - [ ] 테이블, 컬럼, 로우
-- [ ] 기본키(PK)와 외래키(FK)
+- [x] 기본키(PK)와 외래키(FK) → [레슨](lessons/0004-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [ ] 1:1, 1:N, N:M 관계
 - [ ] 인덱스(Index)란? 왜 필요한가
 - [ ] 트랜잭션(Transaction)과 ACID
