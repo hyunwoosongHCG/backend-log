@@ -26,8 +26,23 @@ JS Optional Chaining `?.`과 동일한 개념.
 
 `setting.user?`에서 `&.`을 제거했더니 기존 테스트 12개 `NoMethodError` 발생.
 원인: 테스트는 팩토리로 객체를 직접 생성해 `one_on_one_setting`이 nil.
-해결: `before` 블록에 `GET /one_on_one_settings` 추가 → 실제 프로덕션 플로우 재현
-→ `find_or_create_by!` 트리거 → setting 항상 존재 → `&.` 제거 가능.
+프로덕션에서는 `GET /one_on_one_settings`가 `find_or_create_by!`를 트리거하므로 항상 존재하지만,
+테스트는 그 경로를 거치지 않았다.
+
+**1차 시도**: `before` 블록에 GET 요청 추가 → 동작은 하지만 side effect로 setting을 만드는 방식이라
+테스트 의도가 불명확하다.
+
+**최종 해결**: 각 context에 `let`으로 명시적 생성.
+
+```ruby
+context '...' do
+  let(:one_on_one_setting) { create(:one_on_one_setting, workspace: workspace) }
+  # ...
+end
+```
+
+`let`은 처음 참조될 때 lazily 생성되고 해당 context 안에서만 유효하다.
+"이 테스트는 setting이 존재하는 상황을 가정한다"는 의도가 코드로 명시된다.
 
 ## 리팩토링 흐름
 
