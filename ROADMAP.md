@@ -39,7 +39,7 @@
 - [ ] 인덱스(Index)란? 왜 필요한가
 - [ ] 트랜잭션(Transaction)과 ACID
 - [ ] SQL 기본 (SELECT, INSERT, UPDATE, DELETE)
-- [ ] JOIN이란?
+- [x] JOIN이란? → [레슨](lessons/0004-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 
 ### 인증과 인가
 

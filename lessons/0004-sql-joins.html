@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 4 — SQL JOIN: 테이블을 합치는 법</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>SQL JOIN: 테이블을 합치는 법</h1>
+  <div class="lesson-meta">
+    <span>레슨 004</span>
+    <span>SQL · JOIN · INNER JOIN · LEFT OUTER JOIN</span>
+    <span>~20분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 미션 연결: Sentry 에러 <code>Unknown column 'appraisal_result_formal_objection.status' in subquery</code>를 직접 디버깅하면서 배운 개념
+    — <a href="../work-log/2026-06-29-sentry-appraisees-query-bug.md">워크로그</a>
+  </div>
+
+  <h2>왜 JOIN이 필요한가</h2>
+  <p>
+    데이터베이스는 정보를 여러 테이블에 나눠서 저장한다.
+    평가 대상자 정보는 <code>appraisal_appraisees</code>에, 이의신청 정보는 <code>appraisal_result_formal_objections</code>에 따로 있다.
+    두 정보를 같이 보려면 테이블을 합쳐야 한다 — 이것이 JOIN이다.
+  </p>
+
+  <div class="analogy">
+    컴포넌트 A의 state와 컴포넌트 B의 state를 한 화면에 보여주려면 상위에서 합쳐야 하듯,
+    DB도 테이블 두 개를 JOIN으로 합쳐야 한 행(row)에서 같이 볼 수 있다.
+  </div>
+
+  <p>두 테이블의 연결고리는 <strong>외래키(FK)</strong>다:</p>
+
+<pre><code>appraisal_appraisees                  appraisal_result_formal_objections
+┌────┬──────┐                         ┌────┬──────────────────────┬────────┐
+│ id │ name │                         │ id │ appraisal_appraisee_id│ status │
+├────┼──────┤                         ├────┼──────────────────────┼────────┤
+│  1 │ 김철수│                         │  1 │          1           │ review │
+│  2 │ 이영희│                         │  2 │          2           │ submit │
+│  3 │ 박민준│  ← 이의신청 없음          └────┴──────────────────────┴────────┘
+└────┴──────┘
+         ↑
+appraisal_appraisee_id 컬럼이 연결고리</code></pre>
+
+  <h2>INNER JOIN — 양쪽에 모두 있는 것만</h2>
+
+  <p>매칭되지 않는 행은 결과에서 <strong>완전히 제외</strong>된다.</p>
+
+<pre><code>SELECT appraisees.name, objections.status
+FROM appraisal_appraisees AS appraisees
+INNER JOIN appraisal_result_formal_objections AS objections
+  ON objections.appraisal_appraisee_id = appraisees.id
+
+결과:
+┌──────┬────────┐
+│ name │ status │
+├──────┼────────┤
+│ 김철수│ review │  ← 매칭 ✓
+│ 이영희│ submit │  ← 매칭 ✓
+└──────┴────────┘
+박민준은 결과에 없음 — 이의신청 행 자체가 없으니 매칭 불가</code></pre>
+
+  <p>ActiveRecord에서는:</p>
+<pre><code>AppraisalAppraisee.joins(:appraisal_result_formal_objection)</code></pre>
+
+  <p>
+    오늘 버그 수정에서 <code>objection_status</code> 필터에 INNER JOIN을 쓴 이유:
+    이의신청이 있고 특정 상태인 사람만 보겠다는 의도이므로, 이의신청 없는 사람은 결과에 나오면 안 된다.
+  </p>
+
+<pre><code># app/queries/appraisees_query.rb
+def objection_status(option)
+  return relation if option.nil?
+
+  relation
+    .joins(:appraisal_result_formal_objection)           # INNER JOIN
+    .where(appraisal_result_formal_objection: { status: option })
+end</code></pre>
+
+  <h2>LEFT OUTER JOIN — 왼쪽은 전부, 오른쪽은 있으면 붙이고 없으면 NULL</h2>
+
+  <p>왼쪽 테이블의 모든 행이 결과에 포함된다. 오른쪽에 매칭되는 행이 없으면 NULL로 채운다.</p>
+
+<pre><code>SELECT appraisees.name, objections.status
+FROM appraisal_appraisees AS appraisees
+LEFT OUTER JOIN appraisal_result_formal_objections AS objections
+  ON objections.appraisal_appraisee_id = appraisees.id
+
+결과:
+┌──────┬────────┐
+│ name │ status │
+├──────┼────────┤
+│ 김철수│ review │  ← 매칭 ✓
+│ 이영희│ submit │  ← 매칭 ✓
+│ 박민준│  NULL  │  ← 이의신청 없지만 행은 살아있음
+└──────┴────────┘</code></pre>
+
+  <p>ActiveRecord에서는:</p>
+<pre><code>AppraisalAppraisee.left_outer_joins(:appraisal_result_formal_objection)</code></pre>
+
+  <p>
+    <code>is_objection=false</code> (이의신청 없는 사람 필터)에 LEFT OUTER JOIN이 필요한 이유:
+    찾으려는 대상이 바로 오른쪽 테이블에 없는 행이기 때문이다.
+    INNER JOIN을 쓰면 그 대상이 JOIN 단계에서 이미 사라진다.
+  </p>
+
+<pre><code># app/queries/appraisees_query.rb
+def is_objection(option)
+  return relation if option.nil?
+
+  if option
+    # 이의신청 있는 사람만 → INNER JOIN으로 충분
+    relation.joins(:appraisal_result_formal_objection)
+  else
+    # 이의신청 없는 사람만 → LEFT OUTER JOIN + NULL 조건
+    relation
+      .left_outer_joins(:appraisal_result_formal_objection)
+      .where(appraisal_result_formal_objection: { id: nil })
+  end
+end</code></pre>
+
+  <h2>JOIN 없이 WHERE를 쓰면 어떻게 되나</h2>
+
+  <p>
+    JOIN 없이 다른 테이블의 컬럼을 WHERE 조건에 쓰면 MySQL이 그 테이블을 알 수 없어서 에러가 난다.
+    단순 쿼리에서는 운 좋게 동작하는 경우도 있지만, <strong>서브쿼리 안에서는 반드시 에러</strong>가 발생한다.
+  </p>
+
+<pre><code>-- 서브쿼리 안에서 JOIN 없이 컬럼 참조 → 에러
+SELECT * FROM appraisal_appraisees
+WHERE id IN (
+  SELECT id FROM appraisal_appraisees
+  -- appraisal_result_formal_objections가 JOIN되지 않았음
+  WHERE appraisal_result_formal_objections.status = 'review'
+  --    ↑↑↑↑ MySQL: "이 테이블이 어딨죠?"
+)
+
+-- Mysql2::Error: Unknown column 'appraisal_result_formal_objection.status'
+--   in 'IN/ALL/ANY subquery'</code></pre>
+
+  <p>오늘 Sentry에서 발생한 에러가 정확히 이 패턴이었다.</p>
+
+  <h2>정리</h2>
+
+  <table style="width:100%;border-collapse:collapse;font-family:var(--font-sans);font-size:0.9rem;margin-top:1rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left;padding:0.4rem 0.8rem;">JOIN 종류</th>
+        <th style="text-align:left;padding:0.4rem 0.8rem;">결과</th>
+        <th style="text-align:left;padding:0.4rem 0.8rem;">쓰는 경우</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.8rem;"><code>INNER JOIN</code></td>
+        <td style="padding:0.4rem 0.8rem;">양쪽 모두 있는 행만</td>
+        <td style="padding:0.4rem 0.8rem;">연관 데이터가 반드시 있어야 할 때</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.8rem;"><code>LEFT OUTER JOIN</code></td>
+        <td style="padding:0.4rem 0.8rem;">왼쪽 전부 + 오른쪽은 NULL 가능</td>
+        <td style="padding:0.4rem 0.8rem;">연관 데이터가 없는 행도 포함할 때</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Quiz -->
+  <div class="quiz">
+    <h3>퀴즈 1</h3>
+    <p class="quiz-q">
+      "이의신청을 한 적이 없는 평가 대상자"를 조회하려고 한다. 어떤 JOIN을 써야 하는가?
+    </p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer('q1', this, false)">INNER JOIN — 이의신청 테이블과 매칭된 것만 가져온다</button></li>
+      <li><button onclick="answer('q1', this, true)">LEFT OUTER JOIN — 전체를 가져온 뒤 NULL인 행을 필터한다</button></li>
+      <li><button onclick="answer('q1', this, false)">JOIN 없이 WHERE만 써도 된다</button></li>
+      <li><button onclick="answer('q1', this, false)">RIGHT OUTER JOIN — 오른쪽 테이블 기준으로 가져온다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2</h3>
+    <p class="quiz-q">
+      <code>AppraisalAppraisee.joins(:appraisal_result_formal_objection)</code> 를 실행했을 때,
+      이의신청 레코드가 없는 appraisee는 결과에 포함되는가?
+    </p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer('q2', this, false)">포함된다 — NULL로 채워진 채 결과에 나온다</button></li>
+      <li><button onclick="answer('q2', this, true)">포함되지 않는다 — INNER JOIN이므로 매칭 안 된 행은 제외된다</button></li>
+      <li><button onclick="answer('q2', this, false)">에러가 발생한다</button></li>
+      <li><button onclick="answer('q2', this, false)">결과는 같지만 성능이 느려진다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 3</h3>
+    <p class="quiz-q">
+      서브쿼리 안에서 JOIN 없이 다른 테이블의 컬럼을 WHERE 조건으로 쓰면 어떻게 되는가?
+    </p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer('q3', this, false)">정상 작동한다 — Rails가 자동으로 JOIN을 추가해준다</button></li>
+      <li><button onclick="answer('q3', this, false)">성능이 느려지지만 결과는 맞다</button></li>
+      <li><button onclick="answer('q3', this, true)">MySQL 에러가 발생한다 — 테이블을 찾을 수 없어서</button></li>
+      <li><button onclick="answer('q3', this, false)">NULL을 반환한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <div class="ask-teacher">
+    궁금한 점이 있으면 Claude Code에서 질문하세요.
+    다음 레슨: <a href="0005-subquery.html">서브쿼리 — WHERE id IN (SELECT ...)</a>
+  </div>
+
+  <div class="nav-links">
+    <a href="0003-domain-vs-entity.html">← 레슨 3: 도메인과 엔티티</a>
+    <a href="0005-subquery.html">레슨 5: 서브쿼리 →</a>
+  </div>
+
+  <script>
+    function answer(qId, btn, correct) {
+      const container = document.getElementById(qId);
+      const buttons = container.querySelectorAll('button');
+      const result = document.getElementById(qId + '-result');
+      buttons.forEach(b => b.disabled = true);
+      if (correct) {
+        btn.classList.add('correct');
+        result.style.color = 'var(--correct)';
+        result.textContent = '정답입니다.';
+      } else {
+        btn.classList.add('wrong');
+        result.style.color = 'var(--wrong)';
+        result.textContent = '다시 생각해보세요.';
+        buttons.forEach(b => b.disabled = false);
+        btn.disabled = true;
+      }
+    }
+  </script>
+
+</body>
+</html>
