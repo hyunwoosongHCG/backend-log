@@ -140,79 +140,6 @@ end</code></pre>
 
 <p>이후 <code>&amp;.</code> 없이도 안전하게 동작한다.</p>
 
-<h2>6. Grape의 <code>mount</code>와 helpers 전파</h2>
-
-<p>
-  오늘 <code>check_one_on_one_setting</code> 안에서 <code>workspace</code>를 바로 쓸 수 있는지
-  의문이 생겼다. <code>V2::Comments</code>를 보면 이렇게 돼 있다:
-</p>
-
-<pre><code>class V2::Comments &lt; Grape::API   # Grape::API를 직접 상속
-  helpers do
-    def check_one_on_one_setting
-      setting = workspace.one_on_one_setting  # workspace는 어디서?
-    end
-  end
-end</code></pre>
-
-<p>
-  <code>V2::Comments</code>는 <code>GrapeBase</code>를 include하지 않는다.
-  <code>workspace</code>를 직접 선언한 곳도 없다. 그런데 왜 쓸 수 있을까?
-</p>
-
-<h3>마운트 구조</h3>
-
-<pre><code># app/controllers/v2/base.rb
-class V2::Base &lt; Grape::API
-  include ::GrapeBase        # workspace, current_user 등이 여기서 정의됨
-
-  resource 'workspaces/:workspace_id' do
-    mount V2::Comments       # V2::Comments를 여기에 붙임
-  end
-end</code></pre>
-
-<p>
-  <code>mount</code>는 Ruby의 클래스 상속(<code>&lt;</code>)이 아니다.
-  Grape 자체의 메커니즘으로, <strong>마운트된 자식 API는 부모의 helpers 컨텍스트 안에서 실행</strong>된다.
-  <code>V2::Base</code>가 <code>GrapeBase</code>를 include해서 가진 <code>workspace</code>가
-  요청 처리 시 <code>V2::Comments</code> 엔드포인트까지 전달되는 것이다.
-</p>
-
-<div class="analogy">
-  React Context와 비슷하다. 부모 컴포넌트에서 <code>Provider</code>로 값을 제공하면,
-  어디에 중첩된 자식 컴포넌트든 <code>useContext</code>로 그 값을 꺼내 쓸 수 있다.
-  <code>V2::Base</code>가 Provider, <code>workspace</code>가 context 값, <code>V2::Comments</code>가 자식 컴포넌트다.
-</div>
-
-<h3>핵심 구분</h3>
-
-<table style="width:100%; border-collapse:collapse; font-family:var(--font-sans); font-size:0.9rem; margin-top:1rem;">
-  <thead>
-    <tr style="border-bottom:2px solid var(--border);">
-      <th style="text-align:left; padding:0.4rem 0.6rem;"></th>
-      <th style="text-align:left; padding:0.4rem 0.6rem;">Ruby 클래스 상속 <code>&lt;</code></th>
-      <th style="text-align:left; padding:0.4rem 0.6rem;">Grape <code>mount</code></th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:0.4rem 0.6rem;">관계</td>
-      <td style="padding:0.4rem 0.6rem;">클래스 계층 (is-a)</td>
-      <td style="padding:0.4rem 0.6rem;">라우트 조합 (has-routes)</td>
-    </tr>
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:0.4rem 0.6rem;">helpers 공유</td>
-      <td style="padding:0.4rem 0.6rem;">자동 상속</td>
-      <td style="padding:0.4rem 0.6rem;">요청 컨텍스트로 전파</td>
-    </tr>
-    <tr>
-      <td style="padding:0.4rem 0.6rem;">코드에서</td>
-      <td style="padding:0.4rem 0.6rem;"><code>class A &lt; B</code></td>
-      <td style="padding:0.4rem 0.6rem;"><code>mount A</code></td>
-    </tr>
-  </tbody>
-</table>
-
 <h2>정리</h2>
 
 <table style="width:100%; border-collapse:collapse; font-family:var(--font-sans); font-size:0.9rem; margin-top:1rem;">
@@ -284,17 +211,6 @@ end</code></pre>
   <div class="quiz-result" id="q3-result"></div>
 </div>
 
-<div class="quiz">
-  <div class="quiz-q">Q4. <code>V2::Comments &lt; Grape::API</code>인데 <code>workspace</code> 메서드를 쓸 수 있는 이유는?</div>
-  <ul class="options" id="q4">
-    <li><button onclick="answer(this,'q4',false)">A. Grape::API가 workspace를 기본 제공하기 때문이다</button></li>
-    <li><button onclick="answer(this,'q4',false)">B. V2::Comments가 내부적으로 GrapeBase를 자동 include하기 때문이다</button></li>
-    <li><button onclick="answer(this,'q4',true)">C. V2::Base가 GrapeBase를 include하고 V2::Comments를 mount해 요청 컨텍스트로 helpers가 전파되기 때문이다</button></li>
-    <li><button onclick="answer(this,'q4',false)">D. workspace는 Ruby 전역 변수라 어디서든 접근 가능하기 때문이다</button></li>
-  </ul>
-  <div class="quiz-result" id="q4-result"></div>
-</div>
-
 <div class="ask-teacher">
   개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
   특히 "그럼 이 경우엔 어떻게 되나요?" 같은 엣지 케이스 질문을 환영합니다.
@@ -303,6 +219,7 @@ end</code></pre>
 <div class="nav-links">
   <a href="0004-sql-joins.html">← 레슨 4: SQL JOIN</a>
   <span>레슨 5: Ruby <code>? ! &amp;.</code></span>
+  <a href="0006-mixin-vs-inheritance-and-grape-mount.html">레슨 6: 상속 vs 믹스인 →</a>
 </div>
 
 <script>
@@ -319,7 +236,6 @@ function answer(btn, qid, correct) {
     result.textContent = '다시 생각해보세요. 힌트: 단락 평가(short-circuit)와 &. 의 조합을 떠올려보세요.';
     if (qid === 'q1') result.textContent = '다시 생각해보세요. ?는 동작 방식이 아니라 반환값에 대한 약속입니다.';
     if (qid === 'q3') result.textContent = '다시 생각해보세요. !의 핵심은 "실패했을 때 어떻게 되는가"입니다.';
-    if (qid === 'q4') result.textContent = '다시 생각해보세요. Ruby 상속(< )과 Grape mount는 다른 개념입니다.';
   }
 }
 </script>

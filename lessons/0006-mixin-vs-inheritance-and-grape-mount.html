@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 6 — 상속 vs 믹스인, 그리고 Grape mount</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<h1>레슨 6 — 상속 vs 믹스인, 그리고 Grape <code>mount</code></h1>
+<div class="lesson-meta">
+  <span>2026-06-29</span>
+  <span>실무 출처: ppback V2::Comments helpers 리팩토링</span>
+  <span>이전: <a href="0005-ruby-truthiness-and-short-circuit.html">레슨 5 — ? ! &amp;.</a></span>
+</div>
+
+<div class="mission-link">
+  <code>check_one_on_one_setting</code> 안에서 <code>workspace</code>를 바로 쓸 수 있는 이유가 뭔지
+  파악이 안 됐다. 상속인지, include인지, mount인지 — 세 가지가 각각 다른 개념이다.
+</div>
+
+<h2>1. 세 가지는 완전히 다른 것이다</h2>
+
+<pre><code>class V2::Base &lt; Grape::API   # (1) 클래스 상속
+  include ::GrapeBase          # (2) 모듈 믹스인
+  mount V2::Comments           # (3) Grape 마운트
+end</code></pre>
+
+<p>한 줄에 세 개가 다 나온다. 하나씩 뜯어보자.</p>
+
+<h2>2. 클래스 상속 <code>&lt;</code></h2>
+
+<p>
+  Ruby는 <strong>단일 상속</strong>이다. 부모 클래스는 딱 하나만 가질 수 있다.
+  상속하면 부모의 모든 것 — 메서드, 동작 방식, "정체성"까지 물려받는다.
+</p>
+
+<pre><code>class V2::Base &lt; Grape::API
+# V2::Base는 Grape::API의 일종(is-a)
+# version, format, prefix, resource, mount 등 Grape 기능을 전부 사용 가능
+end</code></pre>
+
+<div class="analogy">
+  React에서 <code>class MyComponent extends React.Component</code>와 같다.
+  상속하는 순간 <code>setState</code>, <code>render</code>, 라이프사이클 메서드가 전부 딸려온다.
+</div>
+
+<h2>3. 모듈 믹스인 <code>include</code></h2>
+
+<p>
+  Ruby에서 모듈(Module)은 메서드 묶음이다. 클래스가 아니라서 직접 인스턴스를 만들 수 없고,
+  <code>include</code>로 다른 클래스에 섞어 넣는 용도로 쓴다.
+  클래스 상속과 달리 <strong>여러 모듈을 동시에 포함</strong>할 수 있다.
+</p>
+
+<pre><code># GrapeBase는 모듈
+module GrapeBase
+  extend ActiveSupport::Concern
+  included do
+    helpers do
+      def workspace ...   # workspace, current_user 등 정의
+      def current_user ...
+    end
+  end
+end
+
+# V2::Base가 GrapeBase를 포함 → 메서드를 빌려옴
+class V2::Base &lt; Grape::API
+  include ::GrapeBase   # GrapeBase 기능 추가
+  include AnotherModule # 이것도 동시에 가능 (상속과 다른 점)
+end</code></pre>
+
+<div class="analogy">
+  React Hook과 비슷하다. <code>useAuth()</code>, <code>useFetch()</code>를
+  여러 컴포넌트에 동시에 꽂을 수 있는 것처럼,
+  믹스인도 <code>GrapeBase</code>를 여러 클래스에 동시에 포함할 수 있다.
+  상속 관계가 생기는 게 아니라 기능만 빌려오는 것이다.
+</div>
+
+<h3>상속 vs 믹스인 핵심 차이</h3>
+
+<table style="width:100%; border-collapse:collapse; font-family:var(--font-sans); font-size:0.9rem; margin-top:1rem;">
+  <thead>
+    <tr style="border-bottom:2px solid var(--border);">
+      <th style="text-align:left; padding:0.4rem 0.6rem;"></th>
+      <th style="text-align:left; padding:0.4rem 0.6rem;">클래스 상속 <code>&lt;</code></th>
+      <th style="text-align:left; padding:0.4rem 0.6rem;">모듈 믹스인 <code>include</code></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:0.4rem 0.6rem;">개수 제한</td>
+      <td style="padding:0.4rem 0.6rem;">하나만 가능</td>
+      <td style="padding:0.4rem 0.6rem;">여러 개 가능</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:0.4rem 0.6rem;">관계</td>
+      <td style="padding:0.4rem 0.6rem;">is-a (정체성 공유)</td>
+      <td style="padding:0.4rem 0.6rem;">has-behavior (기능만 빌림)</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:0.4rem 0.6rem;">JS 대응</td>
+      <td style="padding:0.4rem 0.6rem;"><code>extends</code></td>
+      <td style="padding:0.4rem 0.6rem;">Custom Hook</td>
+    </tr>
+    <tr>
+      <td style="padding:0.4rem 0.6rem;">ppback 예시</td>
+      <td style="padding:0.4rem 0.6rem;"><code>V2::Base &lt; Grape::API</code></td>
+      <td style="padding:0.4rem 0.6rem;"><code>include GrapeBase</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>4. Grape <code>mount</code> — 라우트 조합</h2>
+
+<p>
+  <code>mount</code>는 Ruby 언어 기능이 아니다. Grape 프레임워크가 제공하는 메커니즘으로,
+  <strong>한 API의 라우트를 다른 API 아래에 붙인다.</strong>
+</p>
+
+<pre><code>class V2::Base &lt; Grape::API
+  include ::GrapeBase   # workspace, current_user 여기서 정의
+
+  resource 'workspaces/:workspace_id' do
+    mount V2::Comments  # V2::Comments의 라우트를 여기에 붙임
+  end
+end
+
+class V2::Comments &lt; Grape::API  # Grape::API만 상속, GrapeBase include 없음
+  helpers do
+    def check_one_on_one_setting
+      setting = workspace.one_on_one_setting  # workspace를 쓸 수 있다?
+    end
+  end
+end</code></pre>
+
+<p>
+  <code>V2::Comments</code>는 <code>GrapeBase</code>를 직접 include하지 않았는데
+  <code>workspace</code>를 쓸 수 있다. 이유는 <strong>Grape의 mount가 요청 컨텍스트를 전달</strong>하기 때문이다.
+  마운트된 자식 API는 부모의 helpers 컨텍스트 안에서 실행된다.
+</p>
+
+<div class="analogy">
+  React Context와 비슷하다. 부모가 <code>&lt;Provider value={workspace}&gt;</code>로 값을 제공하면
+  어디에 중첩된 자식이든 <code>useContext</code>로 꺼내 쓸 수 있다.
+  <code>V2::Base</code>가 Provider, <code>workspace</code>가 context 값, <code>V2::Comments</code>가 자식이다.
+</div>
+
+<h2>5. 전체 흐름 한눈에</h2>
+
+<div class="flow">
+  <div class="flow-step">① <code>module GrapeBase</code> — workspace, current_user 등 헬퍼 정의</div>
+  <div class="flow-arrow">↓ include</div>
+  <div class="flow-step">② <code>class V2::Base &lt; Grape::API</code> — GrapeBase 믹스인, V2::Comments 마운트</div>
+  <div class="flow-arrow">↓ mount (요청 컨텍스트 전달)</div>
+  <div class="flow-step">③ <code>class V2::Comments &lt; Grape::API</code> — workspace 직접 사용 가능</div>
+</div>
+
+<pre><code># 결론: 세 줄의 의미
+class V2::Base &lt; Grape::API   # Grape 기능 전체를 상속
+  include ::GrapeBase          # workspace 등 헬퍼를 믹스인으로 추가
+  mount V2::Comments           # 라우트 조합 + 컨텍스트 전달
+end</code></pre>
+
+<hr style="margin-top:2.5rem; border:none; border-top:1px solid var(--border);">
+
+<h2>퀴즈</h2>
+
+<div class="quiz">
+  <div class="quiz-q">Q1. Ruby에서 클래스 상속과 모듈 믹스인의 가장 큰 차이는?</div>
+  <ul class="options" id="q1">
+    <li><button onclick="answer(this,'q1',false)">A. 상속은 메서드만 물려받고, 믹스인은 정체성까지 물려받는다</button></li>
+    <li><button onclick="answer(this,'q1',true)">B. 상속은 하나만 가능하고, 믹스인은 여러 모듈을 동시에 포함할 수 있다</button></li>
+    <li><button onclick="answer(this,'q1',false)">C. 상속은 런타임에, 믹스인은 컴파일 타임에 결정된다</button></li>
+    <li><button onclick="answer(this,'q1',false)">D. 믹스인은 private 메서드만 공유한다</button></li>
+  </ul>
+  <div class="quiz-result" id="q1-result"></div>
+</div>
+
+<div class="quiz">
+  <div class="quiz-q">Q2. <code>V2::Comments &lt; Grape::API</code>인데 <code>workspace</code>를 쓸 수 있는 이유는?</div>
+  <ul class="options" id="q2">
+    <li><button onclick="answer(this,'q2',false)">A. Grape::API가 workspace를 기본 제공하기 때문이다</button></li>
+    <li><button onclick="answer(this,'q2',false)">B. V2::Comments가 내부적으로 GrapeBase를 자동 include하기 때문이다</button></li>
+    <li><button onclick="answer(this,'q2',true)">C. V2::Base가 GrapeBase를 include하고 V2::Comments를 mount해 요청 컨텍스트로 helpers가 전파되기 때문이다</button></li>
+    <li><button onclick="answer(this,'q2',false)">D. workspace는 Ruby 전역 변수라 어디서든 접근 가능하기 때문이다</button></li>
+  </ul>
+  <div class="quiz-result" id="q2-result"></div>
+</div>
+
+<div class="quiz">
+  <div class="quiz-q">Q3. Grape <code>mount</code>와 Ruby <code>&lt;</code> 상속의 차이는?</div>
+  <ul class="options" id="q3">
+    <li><button onclick="answer(this,'q3',false)">A. mount는 Ruby 언어 기능이고, &lt;는 Grape 기능이다</button></li>
+    <li><button onclick="answer(this,'q3',false)">B. 둘 다 클래스 계층을 만들지만 문법이 다르다</button></li>
+    <li><button onclick="answer(this,'q3',true)">C. &lt;는 클래스 계층(is-a)을 만들고, mount는 라우트를 조합하며 요청 컨텍스트를 전달한다</button></li>
+    <li><button onclick="answer(this,'q3',false)">D. mount는 상속보다 느리지만 더 많은 기능을 제공한다</button></li>
+  </ul>
+  <div class="quiz-result" id="q3-result"></div>
+</div>
+
+<div class="ask-teacher">
+  개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+  특히 "그럼 이 경우엔 어떻게 되나요?" 같은 엣지 케이스 질문을 환영합니다.
+</div>
+
+<div class="nav-links">
+  <a href="0005-ruby-truthiness-and-short-circuit.html">← 레슨 5: Ruby ? ! &amp;.</a>
+  <span>레슨 6: 상속 vs 믹스인 &amp; Grape mount</span>
+</div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  container.querySelectorAll('button').forEach(b => b.disabled = true);
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 상속과 믹스인의 "개수 제한" 차이를 떠올려보세요.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. V2::Comments가 GrapeBase를 직접 include했는지 확인해보세요.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. mount는 Ruby 언어 기능이 아닌 Grape 프레임워크 기능입니다.';
+  }
+}
+</script>
+
+</body>
+</html>
