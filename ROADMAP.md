@@ -104,7 +104,7 @@
 
 ### ActiveRecord (Model)
 
-- [ ] 모델(Model)이란? 테이블과의 관계
+- [x] 모델(Model)이란? 테이블과의 관계 → [레슨](lessons/0011-activerecord-base-and-model-layer.html)
 - [x] 마이그레이션(Migration)이란? → [정리](concepts/migration.md) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
 - [x] 연관관계 (`belongs_to`, `has_many`, `has_one`, `has_many :through`) → [레슨](lessons/0008-active-record-associations.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [ ] 유효성 검사 (`validates`)
