@@ -191,7 +191,11 @@ end</code></pre>
 
     function answer(button, quizId, isCorrect) {
       const quiz = document.getElementById(quizId);
-      quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
       button.classList.add(isCorrect ? 'correct' : 'wrong');
       const result = document.getElementById(quizId + '-result');
       result.textContent = (isCorrect ? '✓ ' : '✗ ') + explanations[quizId][isCorrect ? 'correct' : 'wrong'];

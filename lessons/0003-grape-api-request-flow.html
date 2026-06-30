@@ -241,8 +241,11 @@ end</code></pre>
 
     function answer(button, quizId, isCorrect) {
       const quiz = document.getElementById(quizId);
-      const buttons = quiz.querySelectorAll('button');
-      buttons.forEach(b => b.disabled = true);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
       button.classList.add(isCorrect ? 'correct' : 'wrong');
 
       const result = document.getElementById(quizId + '-result');

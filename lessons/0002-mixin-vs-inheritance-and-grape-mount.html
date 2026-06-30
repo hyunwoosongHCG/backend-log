@@ -214,7 +214,11 @@ end</code></pre>
 <script>
 function answer(btn, qid, correct) {
   const container = document.getElementById(qid);
-  container.querySelectorAll('button').forEach(b => b.disabled = true);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
   btn.classList.add(correct ? 'correct' : 'wrong');
   const result = document.getElementById(qid + '-result');
   if (correct) {
