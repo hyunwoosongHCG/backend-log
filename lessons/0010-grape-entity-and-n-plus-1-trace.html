@@ -19,6 +19,40 @@
     🎯 미션 연결: <code>id → ids</code> 성능 개선 PR — 컨트롤러에서 Entity까지 흐름을 추적해 N+1이 어디서 발생하고 어떻게 해소되는지 파악한다.
   </div>
 
+  <h2>백엔드에서 "렌더링"이란?</h2>
+
+  <p>
+    프론트엔드에서 렌더링은 <strong>화면에 그리는 것</strong>이다.<br>
+    백엔드에서 렌더링은 <strong>Ruby 객체를 JSON으로 변환해서 HTTP 응답으로 내보내는 것</strong>이다.
+    화면과 전혀 관계없다.
+  </p>
+
+<pre><code>프론트 요청 (GET /api/v2/workspaces/.../one_on_ones/histories)
+    ↓
+컨트롤러 — DB에서 데이터 조회 → Ruby 객체
+    ↓
+"렌더링" — Ruby 객체를 JSON 문자열로 변환
+    ↓
+HTTP 응답으로 전송 → 프론트가 받아서 화면에 그림</code></pre>
+
+  <p>Entity가 하는 일이 바로 이 변환이다:</p>
+
+<pre><code># Ruby 객체
+#&lt;OneOnOneSchedule id=1, user_id=5, one_on_one_id=3 ...&gt;
+
+# Entity가 변환한 JSON
+{
+  "id": 1,
+  "creator_id": 5,       ← expose :user_id, as: :creator_id
+  "assignee_id": 3,      ← delegate :assignee_id, to: :one_on_one
+  "creator_info": { ... } ← expose :creator_info, using: Entities::UserEntity
+}</code></pre>
+
+  <div class="analogy">
+    React에서 <code>JSON.stringify(state)</code>로 상태를 문자열로 바꾸는 것과 비슷하다.
+    Entity는 모델 데이터를 "어떤 키로, 어떤 값으로, 어떤 형식으로" JSON에 담을지 정의하는 변환 설명서다.
+  </div>
+
   <h2>오늘 배운 것 한눈에 정리</h2>
 
   <table style="width:100%;border-collapse:collapse;font-family:var(--font-sans);font-size:0.9rem;margin-top:1rem;">
