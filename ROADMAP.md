@@ -140,7 +140,7 @@
 ### Grape API
 
 - [ ] Grape란? Rails 컨트롤러와의 차이
-- [ ] 엔티티(Entity)란? (Grape::Entity)
+- [x] 엔티티(Entity)란? (Grape::Entity) → [레슨](lessons/0010-grape-entity-and-n-plus-1-trace.html)
 - [ ] `present`로 응답 만들기
 - [ ] `params do` 블록으로 파라미터 정의
 - [ ] `desc`와 Swagger 문서 자동 생성

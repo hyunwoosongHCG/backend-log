@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 10 — Grape Entity와 N+1 추적: expose·delegate·object</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>Grape Entity와 N+1 추적</h1>
+  <div class="lesson-meta">
+    <span>레슨 010</span>
+    <span>Grape::Entity · expose · delegate · object · :: · N+1 추적</span>
+    <span>~35분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 미션 연결: <code>id → ids</code> 성능 개선 PR — 컨트롤러에서 Entity까지 흐름을 추적해 N+1이 어디서 발생하고 어떻게 해소되는지 파악한다.
+  </div>
+
+  <h2>오늘 배운 것 한눈에 정리</h2>
+
+  <table style="width:100%;border-collapse:collapse;font-family:var(--font-sans);font-size:0.9rem;margin-top:1rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="padding:0.5rem 0.8rem; text-align:left;">개념</th>
+        <th style="padding:0.5rem 0.8rem; text-align:left;">한 줄 요약</th>
+        <th style="padding:0.5rem 0.8rem; text-align:left;">JS 대응</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.5rem 0.8rem;"><code>object</code></td>
+        <td style="padding:0.5rem 0.8rem;">Entity 안에서 렌더링 대상 모델 인스턴스</td>
+        <td style="padding:0.5rem 0.8rem;"><code>props</code></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.5rem 0.8rem;"><code>delegate :x, to: :object</code></td>
+        <td style="padding:0.5rem 0.8rem;"><code>object.x</code> 를 <code>x</code>로 단축</td>
+        <td style="padding:0.5rem 0.8rem;">구조 분해 <code>const { x } = props</code></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.5rem 0.8rem;"><code>Entities::</code></td>
+        <td style="padding:0.5rem 0.8rem;">Ruby 모듈 네임스페이스 — 파일 경로와 1:1 대응</td>
+        <td style="padding:0.5rem 0.8rem;">폴더 import 경로</td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.8rem;"><code>&lt; Grape::Entity</code></td>
+        <td style="padding:0.5rem 0.8rem;">expose·present·object 기능을 상속받음</td>
+        <td style="padding:0.5rem 0.8rem;">컴포넌트 extend</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>expose — Ruby DSL (어노테이션처럼 생긴 클래스 메서드)</h2>
+
+  <p>
+    <code>expose</code>는 어노테이션이 아니다.
+    <strong>클래스 본문에서 호출하는 Ruby 메서드</strong>다.
+    Grape::Entity가 제공하는 DSL(Domain Specific Language)로, 클래스 정의 시점에 실행된다.
+  </p>
+
+<pre><code># 이렇게 생겼지만
+expose :user_id, as: :creator_id, documentation: { type: 'Integer', example: 1 }
+
+# 사실 이걸 호출하는 것과 같다
+self.expose(:user_id, as: :creator_id, documentation: { type: 'Integer', example: 1 })</code></pre>
+
+  <div class="analogy">
+    React에서 <code>static propTypes = { ... }</code> 또는 TypeScript 데코레이터 <code>@Column()</code>처럼
+    "클래스를 정의하는 시점에 메타데이터를 등록하는 구문"이다.
+    문법이 어노테이션처럼 보이지만 실제로는 메서드 호출이다.
+  </div>
+
+  <h3>expose 옵션들</h3>
+
+<pre><code># 기본 — 모델의 user_id 컬럼을 그대로 노출
+expose :user_id
+
+# as: — JSON 키 이름을 바꿔서 노출
+expose :user_id, as: :creator_id
+# → { "creator_id": 1 }  (user_id가 아니라 creator_id로 나감)
+
+# using: — 다른 Entity로 중첩 렌더링
+expose :creator_info, using: Entities::UserEntity
+# → creator_info 키 아래 UserEntity 형식으로 렌더링
+
+# documentation: — Swagger 문서 자동 생성용 메타데이터 (런타임 동작과 무관)
+expose :id, documentation: { type: 'Integer', example: 1 }
+
+# if: — 조건부 노출
+expose :place, if: ->(_instance) { next_schedule.place != place }</code></pre>
+
+  <h3>expose와 def의 관계</h3>
+
+<pre><code>expose :creator_info, using: Entities::UserEntity
+# ↑ "creator_info라는 키로 UserEntity 형식을 노출하겠다" 선언
+# Rails가 렌더링할 때 아래 메서드를 자동으로 호출함
+
+def creator_info
+  object.user  # 실제 데이터를 어디서 가져올지 정의
+end</code></pre>
+
+  <p>
+    <code>expose :x</code>만 쓰면 Rails가 <code>object.x</code>를 자동으로 호출한다.
+    커스텀 로직이 필요할 때만 <code>def x</code>를 추가한다.
+  </p>
+
+  <h2>컨트롤러 → Entity 흐름 추적하기</h2>
+
+  <p>N+1이 어디서 생기는지 파악하려면 이 흐름을 따라가야 한다:</p>
+
+<pre><code>컨트롤러
+  └─ present :data, one_on_one_schedules, with: Entity
+       └─ 스케줄 100개 × Entity 렌더링
+            └─ expose :creator_info  → def creator_info → object.user  ← 쿼리 100번?
+            └─ expose :assignee_info → def assignee_info → one_on_one.assignee ← 쿼리 100번?</code></pre>
+
+  <h3>실제 컨트롤러 코드 (v2/admins/one_on_ones.rb)</h3>
+
+<pre><code>one_on_one_schedules =
+  OneOnOneSchedule
+    .where(one_on_one_id: one_on_ones.select(:id))
+    .page(params[:page]).per(params[:size])
+    .includes(
+      template: :elements,           # schedule.template, template.elements
+      user: :members,                # schedule.user (= creator), user.members
+      one_on_one: [
+        assignee: :members,          # one_on_one.assignee, assignee.members
+        manager:  :members,          # one_on_one.manager, manager.members
+      ],
+    )
+
+present :data,
+        one_on_one_schedules,
+        workspace:,
+        with: Entities::OneOnOneSchedules::HistoryScheduleEntity</code></pre>
+
+  <p>
+    <code>includes</code>가 없었다면 Entity가 100개 스케줄을 렌더링하면서
+    <code>object.user</code>, <code>one_on_one.assignee</code>, <code>one_on_one.manager</code>를
+    각각 100번씩 조회했을 것이다.
+  </p>
+
+  <h2>이번 PR이 해결한 것 — id → ids</h2>
+
+  <p>
+    <code>includes</code>로 N+1을 막았어도,
+    프론트엔드가 실제로 필요한 것이 user 객체 전체가 아니라 id뿐이라면
+    User 테이블을 join하고 members까지 preload하는 것 자체가 낭비다.
+  </p>
+
+<pre><code># 변경 전 — User 전체를 로드해서 id를 뽑음
+def creator_id
+  object.user_id  # 사실 이건 이미 schedule 테이블에 있는 컬럼
+end
+
+# 변경 후 — schedule 테이블의 컬럼을 바로 노출 (User 조회 불필요)
+expose :user_id, as: :creator_id</code></pre>
+
+<pre><code># 변경 전 — assignee_id를 얻으려고 one_on_one 전체를 로드
+delegate :assignee_id, to: :one_on_one  # one_on_one 쿼리 필요
+
+# 변경 후 — one_on_one 테이블의 assignee_id 컬럼을 직접 노출
+delegate :assignee_id, to: :one_on_one
+# (one_on_one은 이미 includes로 로드됨 — 추가 쿼리 없음)</code></pre>
+
+  <h2>코드를 타고 들어가는 법</h2>
+
+  <p>Entity 코드를 볼 때 "이게 쿼리를 날리나?"를 확인하는 체크리스트:</p>
+
+  <table style="width:100%;border-collapse:collapse;font-family:var(--font-sans);font-size:0.9rem;margin-top:1rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="padding:0.4rem 0.8rem; text-align:left;">코드 패턴</th>
+        <th style="padding:0.4rem 0.8rem; text-align:left;">쿼리 발생 여부</th>
+        <th style="padding:0.4rem 0.8rem; text-align:left;">해결</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.8rem;"><code>object.컬럼명</code></td>
+        <td style="padding:0.4rem 0.8rem;">없음 — 이미 로드된 값</td>
+        <td style="padding:0.4rem 0.8rem;">-</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.8rem;"><code>object.연관관계</code></td>
+        <td style="padding:0.4rem 0.8rem;">includes 없으면 N+1</td>
+        <td style="padding:0.4rem 0.8rem;">컨트롤러에서 includes 추가</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.8rem;"><code>연관.연관.컬럼</code></td>
+        <td style="padding:0.4rem 0.8rem;">체인 깊이만큼 위험</td>
+        <td style="padding:0.4rem 0.8rem;"><code>includes(a: :b)</code> 중첩</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.8rem;"><code>@memoize ||= ...</code></td>
+        <td style="padding:0.4rem 0.8rem;">첫 호출만 쿼리, 이후 캐시</td>
+        <td style="padding:0.4rem 0.8rem;">같은 Entity 안에서 반복 접근 시 사용</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Quiz -->
+  <div class="quiz">
+    <h3>퀴즈 1</h3>
+    <p class="quiz-q">
+      <code>expose :creator_info, using: Entities::UserEntity</code>가 있을 때,
+      렌더링 시 실제 데이터를 어디서 가져오는가?
+    </p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer('q1', this, false)">Entities::UserEntity 클래스에서 자동으로 가져온다</button></li>
+      <li><button onclick="answer('q1', this, true)"><code>def creator_info</code> 메서드의 반환값을 UserEntity 형식으로 렌더링한다</button></li>
+      <li><button onclick="answer('q1', this, false)">documentation에 명시된 type에서 가져온다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2</h3>
+    <p class="quiz-q">
+      Entity에서 <code>object.user</code>를 렌더링 시마다 호출하면 N+1이 생긴다.
+      컨트롤러에서 어떻게 해결하나?
+    </p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer('q2', this, false)">Entity 안에서 <code>@user ||= object.user</code>로 메모이제이션한다</button></li>
+      <li><button onclick="answer('q2', this, true)">컨트롤러의 쿼리에 <code>.includes(:user)</code>를 추가해 미리 로드한다</button></li>
+      <li><button onclick="answer('q2', this, false)">expose 대신 직접 SQL을 작성한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 3</h3>
+    <p class="quiz-q">
+      <code>expose :user_id, as: :creator_id</code>는 JSON에서 어떤 키로 응답되는가?
+    </p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer('q3', this, false)"><code>user_id</code></button></li>
+      <li><button onclick="answer('q3', this, true)"><code>creator_id</code></button></li>
+      <li><button onclick="answer('q3', this, false)"><code>user_id</code>와 <code>creator_id</code> 둘 다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <div class="ask-teacher">
+    궁금한 점이 있으면 Claude Code에서 질문하세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="0009-n-plus-1.html">← 레슨 9: N+1 문제</a>
+  </div>
+
+  <script>
+    function answer(qId, btn, correct) {
+      const container = document.getElementById(qId);
+      container.querySelectorAll('button').forEach(b => b.disabled = true);
+      const result = document.getElementById(qId + '-result');
+      if (correct) {
+        btn.classList.add('correct');
+        result.style.color = 'var(--correct)';
+        result.textContent = '정답입니다.';
+      } else {
+        btn.classList.add('wrong');
+        result.style.color = 'var(--wrong)';
+        result.textContent = '다시 생각해보세요.';
+        container.querySelectorAll('button').forEach(b => b.disabled = false);
+        btn.disabled = true;
+      }
+    }
+  </script>
+
+</body>
+</html>
