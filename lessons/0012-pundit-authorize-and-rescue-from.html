@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 12 — Pundit 권한 체크와 rescue_from</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>Pundit 권한 체크와 rescue_from</h1>
+  <div class="lesson-meta">
+    <span>레슨 012</span>
+    <span>Pundit · Policy · rescue_from · 403</span>
+    <span>~20분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 미션 연결: "왜 403이 반환되는가"를 코드에서 추적할 수 있다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>오늘의 출발점</h2>
+  <p>
+    <code>review_template_policy.rb</code>를 리뷰하다가 이런 의문이 생겼다:
+  </p>
+
+<pre><code># app/policies/review_template_policy.rb
+def update?
+  show? && !record.reviews.kept.exists?
+end</code></pre>
+
+  <p>
+    이 메서드가 <code>false</code>를 반환하면 403이 된다고 했는데 — 어떤 경로로?
+    컨트롤러에서 에러를 직접 던지는 코드는 없다. 그런데 403이 나온다.
+    이 레슨에서 그 경로를 코드 수준에서 완전히 추적한다.
+  </p>
+
+  <h2>등장인물 세 명</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">이름</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">위치</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">하는 일</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><strong>Pundit</strong></td>
+        <td style="padding:0.4rem 0.5rem;">gem (외부 라이브러리)</td>
+        <td style="padding:0.4rem 0.5rem;">"이 사람이 이 작업을 할 권한이 있나?" 를 확인하는 도구</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><strong>Policy 클래스</strong></td>
+        <td style="padding:0.4rem 0.5rem;"><code>app/policies/*.rb</code></td>
+        <td style="padding:0.4rem 0.5rem;">권한 규칙이 실제로 정의된 곳</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><strong>rescue_from</strong></td>
+        <td style="padding:0.4rem 0.5rem;"><code>grape_base.rb</code></td>
+        <td style="padding:0.4rem 0.5rem;">예외를 전역으로 잡아서 HTTP 응답으로 바꾸는 핸들러</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>1단계: authorize — 권한 확인 명령</h2>
+
+  <p>컨트롤러에서 권한 확인이 필요한 시점에 한 줄을 쓴다:</p>
+
+<pre><code># app/controllers/v2/reviews/review_templates.rb
+put ':id' do
+  authorize review_template, :update?   # ← 이 한 줄
+  # ...
+end</code></pre>
+
+  <p>
+    <code>authorize</code>는 Pundit이 제공하는 메서드다.
+    두 개의 인자를 받는다:
+  </p>
+  <ul style="margin:0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>첫 번째</strong>: 검사 대상 객체 (<code>review_template</code>)</li>
+    <li><strong>두 번째</strong>: 어떤 권한인지 (<code>:update?</code>)</li>
+  </ul>
+
+  <div class="analogy">
+    React에서 비유하면 이렇다:<br><br>
+    <code>authorize(reviewTemplate, 'update')</code> →
+    "이 리뷰 템플릿을 update할 권한이 있어?"
+  </div>
+
+  <h2>2단계: Policy 클래스 — 권한 규칙 정의</h2>
+
+  <p>
+    Pundit은 <strong>네이밍 컨벤션</strong>으로 Policy 클래스를 자동으로 찾는다.
+    규칙은 단순하다: <code>모델명 + Policy</code>.
+  </p>
+
+<pre><code>authorize review_template, :update?
+    ↓
+review_template.class  →  ReviewTemplate
+    ↓
+ReviewTemplate + "Policy"  →  ReviewTemplatePolicy
+    ↓
+ReviewTemplatePolicy.new(pundit_user, review_template).update?</code></pre>
+
+  <p>실제 Policy 파일:</p>
+
+<pre><code># app/policies/review_template_policy.rb
+class ReviewTemplatePolicy < ApplicationPolicy
+  def show?
+    !record.discarded? && admin?
+  end
+
+  def update?
+    show? && !record.reviews.kept.exists?
+  end
+end</code></pre>
+
+  <p>세 가지를 짚고 가자:</p>
+  <ul style="margin:0.5rem 0 0.5rem 1.5rem;">
+    <li>
+      <strong><code>ApplicationPolicy</code>를 상속</strong> — Pundit 규칙.
+      <code>admin?</code> 같은 공통 메서드가 여기 정의돼 있다.
+    </li>
+    <li>
+      <strong><code>record</code></strong> — 검사 대상 객체. 여기서는 <code>review_template</code>.
+      Pundit이 자동으로 두 번째 인자를 <code>record</code>에 담는다.
+    </li>
+    <li>
+      <strong><code>user</code></strong> — 권한을 확인할 사람. 바로 아래에서 설명.
+    </li>
+  </ul>
+
+  <h3>pundit_user: "누구" 기준으로 권한을 확인하나?</h3>
+
+  <p>
+    Pundit은 기본적으로 <code>current_user</code>를 policy에 넘긴다.
+    그런데 이 프로젝트는 다르게 설정돼 있다:
+  </p>
+
+<pre><code># app/controllers/grape_base.rb
+def pundit_user
+  Member.find_by(workspace: workspace, user: current_user) || current_user
+end</code></pre>
+
+  <p>
+    <code>User</code>가 아닌 <code>Member</code>를 넘긴다.
+    이 앱에서 권한은 "누구인가"가 아니라 "이 워크스페이스에서 어떤 역할인가"로 결정되기 때문이다.
+    그래서 <code>admin?</code> 체크도 Member 기준으로 동작한다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. <code>authorize comment, :destroy?</code>를 호출하면 Pundit이 자동으로 찾는 Policy 클래스는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. AuthorizationPolicy</button></li>
+      <li><button onclick="answer(this,'q1',false)">B. DestroyPolicy</button></li>
+      <li><button onclick="answer(this,'q1',true)">C. CommentPolicy</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. BasePolicy</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>3단계: authorize 내부 — false면 예외를 던진다</h2>
+
+  <p>
+    <code>authorize</code>는 내부적으로 이렇게 동작한다:
+  </p>
+
+<pre><code># Pundit 내부 (실제 소스를 단순화한 것)
+def authorize(record, query)
+  policy = policy(record)               # Policy 클래스 찾기
+  result = policy.public_send(query)    # .update? 호출
+  raise Pundit::NotAuthorizedError unless result  # false면 예외 발생!
+  true
+end</code></pre>
+
+  <p>
+    중요한 점은 <strong>컨트롤러 코드가 아무것도 하지 않아도</strong> Pundit이 예외를 던진다는 것이다.
+    컨트롤러에 별도의 <code>if/else</code>가 없어도 된다.
+  </p>
+
+  <p><code>update?</code>가 <code>false</code>가 되는 두 가지 경우:</p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">조건</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">이유</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">결과</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>show?</code> == false</td>
+        <td style="padding:0.4rem 0.5rem;">삭제된 템플릿 이거나 어드민이 아님</td>
+        <td style="padding:0.4rem 0.5rem;">예외 발생 → 403</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>reviews.kept.exists?</code> == true</td>
+        <td style="padding:0.4rem 0.5rem;">살아있는 리뷰가 존재함</td>
+        <td style="padding:0.4rem 0.5rem;">예외 발생 → 403</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4단계: rescue_from — 전역 예외 핸들러</h2>
+
+  <p>
+    예외가 던져졌다. 이걸 누가 잡는가?
+    <code>grape_base.rb</code>에 미리 등록된 핸들러가 잡는다:
+  </p>
+
+<pre><code># app/controllers/grape_base.rb
+rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized</code></pre>
+
+  <p>
+    <code>rescue_from</code>은 "이 예외가 발생하면 이 메서드로 처리해라"라고 등록하는 것이다.
+    한 번 등록해두면 <strong>이후 어느 엔드포인트에서 예외가 발생하든</strong> 자동으로 잡는다.
+  </p>
+
+  <div class="analogy">
+    <strong>JS의 try/catch와 비교:</strong>
+<pre><code>// JS: 매번 직접 감싸야 함
+try {
+  await authorizeUpdate(template)
+} catch (e) {
+  if (e instanceof NotAuthorizedError) {
+    return res.status(403).json({ errors: [...] })
+  }
+}</code></pre>
+<pre><code># Ruby/Grape: 한 번 등록 → 전체 자동 적용
+rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized</code></pre>
+    JS에서는 매 함수마다 try/catch를 써야 하지만,
+    <code>rescue_from</code>은 전체 API에 걸쳐 작동하는 <strong>전역 에러 핸들러</strong>다.
+    Express의 <code>app.use(errorHandler)</code>와 같은 역할이다.
+  </div>
+
+  <h3>user_not_authorized: 실제 403을 만드는 메서드</h3>
+
+<pre><code># app/controllers/grape_base.rb
+def user_not_authorized(exception)
+  policy_name = exception.policy.class.to_s.underscore
+  errors = exception.record&.errors&.full_messages
+  if errors.blank?
+    errors = [I18n.t("#{policy_name}.#{exception.query}", ...)]
+  end
+  error!({ errors: errors }, 403)   # ← Grape 메서드: 즉시 응답 종료
+end</code></pre>
+
+  <p>
+    <code>error!</code>는 Grape가 제공하는 메서드다.
+    호출되는 순간 요청 처리가 즉시 중단되고 지정한 코드(403)로 응답이 나간다.
+    이후 코드는 실행되지 않는다.
+  </p>
+
+  <h3>이 프로젝트에 등록된 전체 핸들러</h3>
+
+<pre><code># app/controllers/grape_base.rb
+rescue_from ActiveRecord::RecordNotFound,        with: :not_found                # 404
+rescue_from ActiveRecord::RecordInvalid,         with: :bad_request              # 400
+rescue_from Pundit::NotAuthorizedError,          with: :user_not_authorized      # 403
+rescue_from Grape::Exceptions::ValidationErrors, with: :parameter_validate_error # 400
+rescue_from ActiveRecord::RecordNotUnique,       with: :conflict                 # 409</code></pre>
+
+  <p>
+    예외 종류별로 HTTP 상태코드를 매핑해두는 <strong>전역 에러 맵</strong>이다.
+    컨트롤러에서 에러 코드를 직접 쓰지 않아도 되는 이유가 바로 이것이다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. DB에서 존재하지 않는 id로 레코드를 조회하면 발생하는 예외는? (이 프로젝트 기준 어떤 HTTP 코드로 응답하나?)</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. Pundit::NotAuthorizedError → 403</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. ActiveRecord::RecordNotFound → 404</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. ActiveRecord::RecordInvalid → 400</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. ActiveRecord::RecordNotUnique → 409</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>전체 흐름 한눈에</h2>
+
+  <div class="flow">
+    <div class="flow-step">① <strong>PUT /review_templates/:id</strong> 요청 도착</div>
+    <div class="flow-arrow">↓ GrapeBase before 훅</div>
+    <div class="flow-step">② <strong>authenticate_user!</strong> — 로그인 여부 확인 (실패 시 401)</div>
+    <div class="flow-arrow">↓ put ':id' 블록 진입</div>
+    <div class="flow-step">③ <strong>authorize review_template, :update?</strong> 호출</div>
+    <div class="flow-arrow">↓ Pundit이 ReviewTemplatePolicy 찾아서 .update? 실행</div>
+    <div class="flow-step">④ <strong>update?</strong> → true: 아래 코드 계속 실행 / false: Pundit::NotAuthorizedError 발생</div>
+    <div class="flow-arrow">↓ (false인 경우) rescue_from 이 잡음</div>
+    <div class="flow-step">⑤ <strong>user_not_authorized</strong> 실행 → <strong>error!({…}, 403)</strong></div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">⑥ 클라이언트에게 <strong>403 Forbidden</strong> 반환</div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q3. <code>reviews.kept.exists?</code>가 true일 때, 최종적으로 403 응답을 만드는 메서드는?</div>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">A. authorize</button></li>
+      <li><button onclick="answer(this,'q3',false)">B. update?</button></li>
+      <li><button onclick="answer(this,'q3',true)">C. user_not_authorized</button></li>
+      <li><button onclick="answer(this,'q3',false)">D. rescue_from</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">개념</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">역할</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">JS 비유</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>authorize</code></td>
+        <td style="padding:0.4rem 0.5rem;">Policy 실행 + false면 예외 발생</td>
+        <td style="padding:0.4rem 0.5rem;"><code>if (!canUpdate) throw new Error()</code></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Policy 클래스</td>
+        <td style="padding:0.4rem 0.5rem;">권한 규칙 정의 (true/false 반환)</td>
+        <td style="padding:0.4rem 0.5rem;">permission 판단 함수</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>rescue_from</code></td>
+        <td style="padding:0.4rem 0.5rem;">전역 예외 → HTTP 코드 매핑 등록</td>
+        <td style="padding:0.4rem 0.5rem;">Express <code>app.use(errorHandler)</code></td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>error!</code></td>
+        <td style="padding:0.4rem 0.5rem;">즉시 응답 종료 (Grape 제공)</td>
+        <td style="padding:0.4rem 0.5rem;"><code>return res.status(403).json(…)</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고:
+    <a href="https://github.com/varvet/pundit" target="_blank">Pundit 공식 README</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/ruby-grape/grape#exception-handling" target="_blank">Grape — Exception Handling</a>
+  </p>
+
+  <p class="source">
+    관련 레슨:
+    <a href="0003-grape-api-request-flow.html">레슨 3 — GET 요청이 JSON이 되기까지</a>
+    &nbsp;·&nbsp;
+    <a href="0002-mixin-vs-inheritance-and-grape-mount.html">레슨 2 — Mixin과 상속, Grape mount</a>
+  </p>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    특히 "그럼 이 경우엔 어떻게 되나요?" 같은 엣지 케이스 질문을 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  container.querySelectorAll('button').forEach(b => b.disabled = true);
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 모델명 + "Policy" 가 규칙입니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. grape_base.rb의 rescue_from 매핑 표를 떠올려보세요.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. rescue_from은 등록만 하고, 실제 응답을 만드는 것은 with: 에 지정된 메서드입니다.';
+  }
+}
+</script>
+
+</body>
+</html>
