@@ -18,7 +18,7 @@
 
     .app {
       display: grid;
-      grid-template-rows: 52px 1fr;
+      grid-template-rows: 52px 42px 38px 1fr;
       grid-template-columns: 256px 1fr 228px;
       height: 100vh;
       overflow: hidden;
@@ -98,6 +98,89 @@
       white-space: nowrap;
     }
 
+    /* ── Track tabs (row 2, 상위) ── */
+    .track-tabs {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: stretch;
+      gap: 2px;
+      padding: 0 12px;
+      background: #131327;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      overflow-x: auto;
+    }
+    .track-tabs::-webkit-scrollbar { height: 0; }
+
+    .track-tab {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 16px;
+      height: 100%;
+      border: none;
+      background: transparent;
+      border-bottom: 2px solid transparent;
+      color: rgba(255, 255, 255, 0.5);
+      font-family: var(--font-sans);
+      font-size: 0.83rem;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: color 0.12s, border-color 0.12s;
+    }
+    .track-tab:hover { color: rgba(255, 255, 255, 0.85); }
+    .track-tab.active { color: #fff; border-bottom-color: #b00; }
+
+    .track-count {
+      font-family: var(--font-mono);
+      font-size: 0.62rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.06);
+      padding: 1px 6px;
+      border-radius: 8px;
+    }
+    .track-tab.active .track-count { color: rgba(255, 255, 255, 0.62); }
+
+    /* ── Section tabs (row 3, 하위) ── */
+    .section-tabs {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: stretch;
+      padding: 0 12px;
+      background: #1a1a30;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      overflow-x: auto;
+    }
+    .section-tabs::-webkit-scrollbar { height: 3px; }
+    .section-tabs::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 2px; }
+
+    .section-tab {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0 12px;
+      height: 100%;
+      border: none;
+      background: transparent;
+      border-bottom: 2px solid transparent;
+      color: rgba(255, 255, 255, 0.42);
+      font-family: var(--font-sans);
+      font-size: 0.75rem;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: color 0.12s, border-color 0.12s;
+    }
+    .section-tab:hover { color: rgba(255, 255, 255, 0.8); }
+    .section-tab.active { color: #fff; border-bottom-color: #b00; }
+
+    .section-count {
+      font-family: var(--font-mono);
+      font-size: 0.58rem;
+      color: rgba(255, 255, 255, 0.3);
+    }
+    .section-tab.active .section-count { color: rgba(255, 255, 255, 0.55); }
+
     /* ── Sidebar ── */
     .sidebar-nav {
       background: #16213e;
@@ -120,7 +203,7 @@
       letter-spacing: 0.09em;
       text-transform: uppercase;
       color: rgba(255, 255, 255, 0.28);
-      padding: 10px 14px 4px;
+      padding: 10px 14px 6px;
       display: block;
     }
 
@@ -160,6 +243,40 @@
       min-width: 26px;
       margin-top: 1px;
       flex-shrink: 0;
+    }
+
+    .nav-lesson-title { flex: 1; }
+
+    .nav-lesson-dur {
+      font-family: var(--font-mono);
+      font-size: 0.6rem;
+      color: rgba(255, 255, 255, 0.24);
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+
+    /* stub (아직 작성 전) lessons — dimmed */
+    .nav-lesson-btn.stub .nav-lesson-title {
+      color: rgba(255, 255, 255, 0.38);
+      font-style: italic;
+    }
+    .nav-lesson-btn.stub.active .nav-lesson-title {
+      color: rgba(255, 255, 255, 0.85);
+      font-style: normal;
+    }
+    /* written lessons get a small accent marker */
+    .nav-lesson-btn:not(.stub) .nav-lesson-num::before {
+      content: '● ';
+      color: #b00;
+      font-size: 0.7em;
+    }
+
+    .sidebar-empty {
+      padding: 14px;
+      color: rgba(255, 255, 255, 0.3);
+      font-family: var(--font-sans);
+      font-size: 0.8rem;
+      font-style: italic;
     }
 
     /* ── Content Area ── */
@@ -316,7 +433,7 @@
     /* ── Search Results Overlay ── */
     .search-results {
       position: fixed;
-      top: 52px;
+      top: 132px;
       left: 256px;
       right: 228px;
       max-height: 55vh;
@@ -426,16 +543,22 @@
         type="text"
         class="search-input"
         id="searchInput"
-        placeholder="레슨 내용 검색 (개념, 코드, 설명...)"
+        placeholder="전체 레슨 검색 (개념, 코드, 설명...)"
         autocomplete="off"
         spellcheck="false"
       >
     </div>
 
     <div class="header-spacer"></div>
-    <div class="kbd-hint"><span class="kbd">←</span> <span class="kbd">→</span> 이전·다음 레슨</div>
-    <div class="lesson-badge" id="lessonBadge">레슨 11개</div>
+    <div class="kbd-hint"><span class="kbd">←</span> <span class="kbd">→</span> 섹션 내 이전·다음</div>
+    <div class="lesson-badge" id="lessonBadge"></div>
   </header>
+
+  <!-- ── Track tabs (상위) ── -->
+  <nav class="track-tabs" id="trackTabs" aria-label="학습 트랙"></nav>
+
+  <!-- ── Section tabs (하위) ── -->
+  <nav class="section-tabs" id="sectionTabs" aria-label="섹션"></nav>
 
   <!-- ── Sidebar ── -->
   <nav class="sidebar-nav" id="sidebarNav" aria-label="레슨 목록"></nav>
@@ -444,8 +567,8 @@
   <main class="content-area" id="contentArea" tabindex="0">
     <div class="welcome">
       <h2>백엔드 학습 허브</h2>
-      <p>좌측 메뉴에서 레슨을 선택하세요</p>
-      <p>상단 검색창으로 전체 내용을 검색할 수 있습니다</p>
+      <p>상단 탭에서 트랙(백엔드 실무 · 네트워크 · SQL)과 섹션을 고르세요</p>
+      <p>좌측에서 레슨을 선택하거나, 상단 검색창으로 전체 내용을 검색할 수 있습니다</p>
       <div class="welcome-hint">
         💡 <strong>파일로 직접 열면</strong> 레슨 로딩이 안 될 수 있습니다.<br>
         터미널에서 이 폴더로 이동 후<br>
@@ -468,189 +591,250 @@
 
 <script>
 /* ──────────────────────────────────────────
-   Lesson manifest
+   Tracks (상위 탭) + section order (하위 탭)
 ────────────────────────────────────────── */
-const LESSONS = [
+const TRACKS = [
   {
-    id: '0001',
-    title: '레슨 1 — Ruby의 ? ! &.',
-    short: 'Ruby 메서드 컨벤션',
-    file: 'lessons/0001-ruby-truthiness-and-short-circuit.html',
-    category: 'Ruby 기초'
+    key: 'backend',
+    label: '백엔드 실무',
+    sections: ['Ruby 기초', 'Grape API', '엔티티·도메인', 'ActiveRecord']
   },
   {
-    id: '0002',
-    title: '레슨 2 — 상속 vs 믹스인, Grape mount',
-    short: '모듈 시스템과 API 구조',
-    file: 'lessons/0002-mixin-vs-inheritance-and-grape-mount.html',
-    category: 'Grape API'
+    key: 'network',
+    label: '네트워크',
+    sections: [
+      '인터넷 네트워크', 'URI·요청 흐름', 'HTTP 기본', 'HTTP 메서드',
+      'HTTP 메서드 활용', 'HTTP 상태코드', 'HTTP 헤더 - 일반', 'HTTP 헤더 - 캐시'
+    ]
   },
   {
-    id: '0003',
-    title: '레슨 3 — GET 요청이 JSON이 되기까지',
-    short: 'Grape API 요청 흐름',
-    file: 'lessons/0003-grape-api-request-flow.html',
-    category: 'Grape API'
-  },
-  {
-    id: '0004',
-    title: '레슨 4 — Entity의 두 가지 의미',
-    short: 'Grape::Entity vs DB Entity',
-    file: 'lessons/0004-entity-two-meanings.html',
-    category: '엔티티·도메인'
-  },
-  {
-    id: '0005',
-    title: '레슨 5 — SQL JOIN 완전 정복',
-    short: 'INNER JOIN · LEFT OUTER JOIN',
-    file: 'lessons/0005-sql-joins.html',
-    category: 'SQL·쿼리'
-  },
-  {
-    id: '0006',
-    title: '레슨 6 — 도메인과 엔티티',
-    short: 'DDD · 책임 분리',
-    file: 'lessons/0006-domain-vs-entity.html',
-    category: '엔티티·도메인'
-  },
-  {
-    id: '0007',
-    title: '레슨 7 — 서브쿼리',
-    short: 'SQL 서브쿼리 · ActiveRecord',
-    file: 'lessons/0007-subquery.html',
-    category: 'SQL·쿼리'
-  },
-  {
-    id: '0008',
-    title: '레슨 8 — ActiveRecord 연관관계',
-    short: 'belongs_to · has_many · joins',
-    file: 'lessons/0008-active-record-associations.html',
-    category: 'ActiveRecord'
-  },
-  {
-    id: '0009',
-    title: '레슨 9 — N+1 문제',
-    short: 'preload · includes · eager_load',
-    file: 'lessons/0009-n-plus-1.html',
-    category: 'ActiveRecord'
-  },
-  {
-    id: '0010',
-    title: '레슨 10 — Grape Entity와 N+1 추적',
-    short: 'expose DSL · Entity 흐름',
-    file: 'lessons/0010-grape-entity-and-n-plus-1-trace.html',
-    category: 'Grape API'
-  },
-  {
-    id: '0011',
-    title: '레슨 11 — ActiveRecord::Base와 모델 레이어',
-    short: 'ApplicationRecord · 테이블 자동 매핑',
-    file: 'lessons/0011-activerecord-base-and-model-layer.html',
-    category: 'ActiveRecord'
-  },
-  {
-    id: '0012',
-    title: '레슨 12 — Pundit 권한 체크와 rescue_from',
-    short: 'authorize · Policy · 403 흐름',
-    file: 'lessons/0012-pundit-authorize-and-rescue-from.html',
-    category: 'Grape API'
-  },
-  {
-    id: '0013',
-    title: '레슨 13 — ActiveRecord 쿼리 메서드',
-    short: 'find · find_by · where · Relation',
-    file: 'lessons/0013-activerecord-query-methods.html',
-    category: 'ActiveRecord'
-  },
-  {
-    id: '0014',
-    title: '레슨 14 — Scope와 validates',
-    short: 'scope · kept · validates · RecordInvalid',
-    file: 'lessons/0014-activerecord-scope-and-validates.html',
-    category: 'ActiveRecord'
-  },
-  {
-    id: '0015',
-    title: '레슨 15 — Ruby 블록',
-    short: 'Block · yield · lambda · do...end',
-    file: 'lessons/0015-ruby-blocks.html',
-    category: 'Ruby 기초'
-  },
-  {
-    id: '0016',
-    title: '레슨 16 — 인증과 JWT',
-    short: 'Authentication · JWT · Bearer · 401 vs 403',
-    file: 'lessons/0016-authentication-and-jwt.html',
-    category: 'Grape API'
-  },
-  {
-    id: '0017',
-    title: '레슨 17 — Sidekiq와 백그라운드 잡',
-    short: 'Sidekiq · Redis · Worker · perform_async',
-    file: 'lessons/0017-sidekiq-and-background-jobs.html',
-    category: '실무 패턴'
-  },
-  {
-    id: '0018',
-    title: '레슨 18 — Grape params do 블록',
-    short: 'params · requires · optional · ValidationErrors',
-    file: 'lessons/0018-grape-params.html',
-    category: 'Grape API'
+    key: 'sql',
+    label: 'SQL',
+    sections: ['SQL·쿼리']
   }
 ];
 
-const CATEGORY_ORDER = ['Ruby 기초', 'Grape API', '엔티티·도메인', 'SQL·쿼리', 'ActiveRecord', '실무 패턴'];
+/* ──────────────────────────────────────────
+   Lesson manifest
+────────────────────────────────────────── */
+const LESSONS = [
+  { id: '0001', title: '레슨 1 — Ruby의 ? ! &.', short: 'Ruby 메서드 컨벤션', file: 'lessons/0001-ruby-truthiness-and-short-circuit.html', track: 'backend', category: 'Ruby 기초' },
+  { id: '0002', title: '레슨 2 — 상속 vs 믹스인, Grape mount', short: '모듈 시스템과 API 구조', file: 'lessons/0002-mixin-vs-inheritance-and-grape-mount.html', track: 'backend', category: 'Grape API' },
+  { id: '0003', title: '레슨 3 — GET 요청이 JSON이 되기까지', short: 'Grape API 요청 흐름', file: 'lessons/0003-grape-api-request-flow.html', track: 'backend', category: 'Grape API' },
+  { id: '0004', title: '레슨 4 — Entity의 두 가지 의미', short: 'Grape::Entity vs DB Entity', file: 'lessons/0004-entity-two-meanings.html', track: 'backend', category: '엔티티·도메인' },
+  { id: '0005', title: '레슨 5 — SQL JOIN 완전 정복', short: 'INNER JOIN · LEFT OUTER JOIN', file: 'lessons/0005-sql-joins.html', track: 'sql', category: 'SQL·쿼리' },
+  { id: '0006', title: '레슨 6 — 도메인과 엔티티', short: 'DDD · 책임 분리', file: 'lessons/0006-domain-vs-entity.html', track: 'backend', category: '엔티티·도메인' },
+  { id: '0007', title: '레슨 7 — 서브쿼리', short: 'SQL 서브쿼리 · ActiveRecord', file: 'lessons/0007-subquery.html', track: 'sql', category: 'SQL·쿼리' },
+  { id: '0008', title: '레슨 8 — ActiveRecord 연관관계', short: 'belongs_to · has_many · joins', file: 'lessons/0008-active-record-associations.html', track: 'backend', category: 'ActiveRecord' },
+  { id: '0009', title: '레슨 9 — N+1 문제', short: 'preload · includes · eager_load', file: 'lessons/0009-n-plus-1.html', track: 'backend', category: 'ActiveRecord' },
+  { id: '0010', title: '레슨 10 — Grape Entity와 N+1 추적', short: 'expose DSL · Entity 흐름', file: 'lessons/0010-grape-entity-and-n-plus-1-trace.html', track: 'backend', category: 'Grape API' },
+  { id: '0011', title: '레슨 11 — ActiveRecord::Base와 모델 레이어', short: 'ApplicationRecord · 테이블 자동 매핑', file: 'lessons/0011-activerecord-base-and-model-layer.html', track: 'backend', category: 'ActiveRecord' },
+  { id: '0012', title: '레슨 12 — Pundit 권한 체크와 rescue_from', short: 'authorize · Policy · 403 흐름', file: 'lessons/0012-pundit-authorize-and-rescue-from.html', track: 'backend', category: 'Grape API' },
+  { id: '0013', title: '레슨 13 — ActiveRecord 쿼리 메서드', short: 'find · find_by · where · Relation', file: 'lessons/0013-activerecord-query-methods.html', track: 'backend', category: 'ActiveRecord' },
+  { id: '0014', title: '레슨 14 — Scope와 validates', short: 'scope · kept · validates · RecordInvalid', file: 'lessons/0014-activerecord-scope-and-validates.html', track: 'backend', category: 'ActiveRecord' },
+
+  /* ── 네트워크 트랙 — 김영한「모든 개발자를 위한 HTTP 웹 기본 지식」(스텁) ── */
+  { id:'net-01', short:'인터넷 통신', title:'인터넷 통신', file:'lessons/net-01-internet-communication.html', track:'network', category:'인터넷 네트워크', duration:'01:51', num:4, stub:true },
+  { id:'net-02', short:'IP (인터넷 프로토콜)', title:'IP (인터넷 프로토콜)', file:'lessons/net-02-ip-protocol.html', track:'network', category:'인터넷 네트워크', duration:'07:11', num:5, stub:true },
+  { id:'net-03', short:'TCP, UDP', title:'TCP, UDP', file:'lessons/net-03-tcp-udp.html', track:'network', category:'인터넷 네트워크', duration:'14:08', num:6, stub:true },
+  { id:'net-04', short:'PORT', title:'PORT', file:'lessons/net-04-port.html', track:'network', category:'인터넷 네트워크', duration:'04:03', num:7, stub:true },
+  { id:'net-05', short:'DNS', title:'DNS', file:'lessons/net-05-dns.html', track:'network', category:'인터넷 네트워크', duration:'03:26', num:8, stub:true },
+  { id:'net-06', short:'URI', title:'URI', file:'lessons/net-06-uri.html', track:'network', category:'URI·요청 흐름', duration:'11:24', num:9, stub:true },
+  { id:'net-07', short:'웹 브라우저 요청 흐름', title:'웹 브라우저 요청 흐름', file:'lessons/net-07-web-browser-request-flow.html', track:'network', category:'URI·요청 흐름', duration:'04:57', num:10, stub:true },
+  { id:'net-08', short:'모든 것이 HTTP', title:'모든 것이 HTTP', file:'lessons/net-08-everything-is-http.html', track:'network', category:'HTTP 기본', duration:'06:38', num:11, stub:true },
+  { id:'net-09', short:'클라이언트 서버 구조', title:'클라이언트 서버 구조', file:'lessons/net-09-client-server.html', track:'network', category:'HTTP 기본', duration:'02:50', num:12, stub:true },
+  { id:'net-10', short:'Stateful, Stateless', title:'Stateful, Stateless', file:'lessons/net-10-stateful-stateless.html', track:'network', category:'HTTP 기본', duration:'11:32', num:13, stub:true },
+  { id:'net-11', short:'비 연결성 (connectionless)', title:'비 연결성 (connectionless)', file:'lessons/net-11-connectionless.html', track:'network', category:'HTTP 기본', duration:'08:43', num:14, stub:true },
+  { id:'net-12', short:'HTTP 메시지', title:'HTTP 메시지', file:'lessons/net-12-http-message.html', track:'network', category:'HTTP 기본', duration:'09:41', num:15, stub:true },
+  { id:'net-13', short:'HTTP API를 만들어보자', title:'HTTP API를 만들어보자', file:'lessons/net-13-http-api-intro.html', track:'network', category:'HTTP 메서드', duration:'07:02', num:16, stub:true },
+  { id:'net-14', short:'GET, POST', title:'GET, POST', file:'lessons/net-14-get-post.html', track:'network', category:'HTTP 메서드', duration:'13:05', num:17, stub:true },
+  { id:'net-15', short:'PUT, PATCH, DELETE', title:'PUT, PATCH, DELETE', file:'lessons/net-15-put-patch-delete.html', track:'network', category:'HTTP 메서드', duration:'06:11', num:18, stub:true },
+  { id:'net-16', short:'HTTP 메서드의 속성', title:'HTTP 메서드의 속성', file:'lessons/net-16-method-properties.html', track:'network', category:'HTTP 메서드', duration:'08:55', num:19, stub:true },
+  { id:'net-17', short:'클라이언트에서 서버로 데이터 전송', title:'클라이언트에서 서버로 데이터 전송', file:'lessons/net-17-client-to-server-data.html', track:'network', category:'HTTP 메서드 활용', duration:'18:56', num:20, stub:true },
+  { id:'net-18', short:'HTTP API 설계 예시', title:'HTTP API 설계 예시', file:'lessons/net-18-api-design-example.html', track:'network', category:'HTTP 메서드 활용', duration:'28:19', num:21, stub:true },
+  { id:'net-19', short:'HTTP 상태코드 소개', title:'HTTP 상태코드 소개', file:'lessons/net-19-status-code-intro.html', track:'network', category:'HTTP 상태코드', duration:'04:19', num:22, stub:true },
+  { id:'net-20', short:'2xx 성공', title:'2xx 성공', file:'lessons/net-20-status-2xx.html', track:'network', category:'HTTP 상태코드', duration:'05:53', num:23, stub:true },
+  { id:'net-21', short:'3xx 리다이렉션1', title:'3xx 리다이렉션1', file:'lessons/net-21-status-3xx-redirect-1.html', track:'network', category:'HTTP 상태코드', duration:'09:58', num:24, stub:true },
+  { id:'net-22', short:'3xx 리다이렉션2', title:'3xx 리다이렉션2', file:'lessons/net-22-status-3xx-redirect-2.html', track:'network', category:'HTTP 상태코드', duration:'13:52', num:25, stub:true },
+  { id:'net-23', short:'4xx 클라이언트 오류, 5xx 서버 오류', title:'4xx 클라이언트 오류, 5xx 서버 오류', file:'lessons/net-23-status-4xx-5xx.html', track:'network', category:'HTTP 상태코드', duration:'09:50', num:26, stub:true },
+  { id:'net-24', short:'HTTP 헤더 개요', title:'HTTP 헤더 개요', file:'lessons/net-24-header-overview.html', track:'network', category:'HTTP 헤더 - 일반', duration:'06:43', num:27, stub:true },
+  { id:'net-25', short:'표현', title:'표현', file:'lessons/net-25-representation.html', track:'network', category:'HTTP 헤더 - 일반', duration:'05:39', num:28, stub:true },
+  { id:'net-26', short:'콘텐츠 협상', title:'콘텐츠 협상', file:'lessons/net-26-content-negotiation.html', track:'network', category:'HTTP 헤더 - 일반', duration:'10:04', num:29, stub:true },
+  { id:'net-27', short:'전송 방식', title:'전송 방식', file:'lessons/net-27-transfer-methods.html', track:'network', category:'HTTP 헤더 - 일반', duration:'03:47', num:30, stub:true },
+  { id:'net-28', short:'일반 정보', title:'일반 정보', file:'lessons/net-28-general-info.html', track:'network', category:'HTTP 헤더 - 일반', duration:'05:20', num:31, stub:true },
+  { id:'net-29', short:'특별한 정보', title:'특별한 정보', file:'lessons/net-29-special-info.html', track:'network', category:'HTTP 헤더 - 일반', duration:'04:35', num:32, stub:true },
+  { id:'net-30', short:'인증', title:'인증', file:'lessons/net-30-authentication.html', track:'network', category:'HTTP 헤더 - 일반', duration:'01:38', num:33, stub:true },
+  { id:'net-31', short:'쿠키', title:'쿠키', file:'lessons/net-31-cookie.html', track:'network', category:'HTTP 헤더 - 일반', duration:'14:31', num:34, stub:true },
+  { id:'net-32', short:'캐시 기본 동작', title:'캐시 기본 동작', file:'lessons/net-32-cache-basics.html', track:'network', category:'HTTP 헤더 - 캐시', duration:'05:49', num:35, stub:true },
+  { id:'net-33', short:'검증 헤더와 조건부 요청1', title:'검증 헤더와 조건부 요청1', file:'lessons/net-33-cache-validation-1.html', track:'network', category:'HTTP 헤더 - 캐시', duration:'10:13', num:36, stub:true },
+  { id:'net-34', short:'검증 헤더와 조건부 요청2', title:'검증 헤더와 조건부 요청2', file:'lessons/net-34-cache-validation-2.html', track:'network', category:'HTTP 헤더 - 캐시', duration:'08:46', num:37, stub:true },
+  { id:'net-35', short:'캐시와 조건부 요청 헤더', title:'캐시와 조건부 요청 헤더', file:'lessons/net-35-cache-conditional-headers.html', track:'network', category:'HTTP 헤더 - 캐시', duration:'04:43', num:38, stub:true },
+  { id:'net-36', short:'프록시 캐시', title:'프록시 캐시', file:'lessons/net-36-proxy-cache.html', track:'network', category:'HTTP 헤더 - 캐시', duration:'05:06', num:39, stub:true },
+  { id:'net-37', short:'캐시 무효화', title:'캐시 무효화', file:'lessons/net-37-cache-invalidation.html', track:'network', category:'HTTP 헤더 - 캐시', duration:'07:39', num:40, stub:true }
+];
 
 /* ──────────────────────────────────────────
    State
 ────────────────────────────────────────── */
 let currentLessonIndex = -1;
+let currentTrack = TRACKS[0].key;
+let currentSection = null;
 let searchIndex = [];
 let searchIndexReady = false;
 let searchIndexPending = false;
 let scrollObserver = null;
 
 /* ──────────────────────────────────────────
-   Sidebar
+   Track / section helpers
+────────────────────────────────────────── */
+function trackLabel(trackKey) {
+  const track = TRACKS.find(item => item.key === trackKey);
+  return track ? track.label : trackKey;
+}
+
+function lessonsInTrack(trackKey) {
+  return LESSONS.filter(lesson => lesson.track === trackKey);
+}
+
+function lessonsInSection(trackKey, section) {
+  return LESSONS.filter(lesson => lesson.track === trackKey && lesson.category === section);
+}
+
+// declared section order, keeping only sections that actually have lessons
+function sectionsInTrack(trackKey) {
+  const track = TRACKS.find(item => item.key === trackKey);
+  if (!track) return [];
+  const present = new Set(lessonsInTrack(trackKey).map(lesson => lesson.category));
+  return track.sections.filter(section => present.has(section));
+}
+
+/* ──────────────────────────────────────────
+   Track tabs (상위)
+────────────────────────────────────────── */
+function renderTrackTabs() {
+  const bar = document.getElementById('trackTabs');
+  bar.innerHTML = '';
+
+  TRACKS.forEach(track => {
+    const lessons = lessonsInTrack(track.key);
+    if (!lessons.length) return;
+
+    const written = lessons.filter(lesson => !lesson.stub).length;
+    const btn = document.createElement('button');
+    btn.className = 'track-tab' + (track.key === currentTrack ? ' active' : '');
+    btn.dataset.track = track.key;
+    btn.innerHTML =
+      `<span>${track.label}</span>` +
+      `<span class="track-count">${written}/${lessons.length}</span>`;
+    btn.addEventListener('click', () => selectTrack(track.key));
+    bar.appendChild(btn);
+  });
+}
+
+/* ──────────────────────────────────────────
+   Section tabs (하위)
+────────────────────────────────────────── */
+function renderSectionTabs() {
+  const bar = document.getElementById('sectionTabs');
+  bar.innerHTML = '';
+
+  const sections = sectionsInTrack(currentTrack);
+  sections.forEach(section => {
+    const lessons = lessonsInSection(currentTrack, section);
+    const written = lessons.filter(lesson => !lesson.stub).length;
+
+    const btn = document.createElement('button');
+    btn.className = 'section-tab' + (section === currentSection ? ' active' : '');
+    btn.dataset.section = section;
+    btn.innerHTML =
+      `<span>${section}</span>` +
+      `<span class="section-count">${written}/${lessons.length}</span>`;
+    btn.addEventListener('click', () => selectSection(section));
+    bar.appendChild(btn);
+  });
+
+  const activeTab = bar.querySelector('.section-tab.active');
+  if (activeTab) activeTab.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+}
+
+/* ──────────────────────────────────────────
+   Selection
+────────────────────────────────────────── */
+function selectTrack(trackKey) {
+  if (trackKey === currentTrack) return;
+  currentTrack = trackKey;
+  const sections = sectionsInTrack(trackKey);
+  currentSection = sections[0] || null;
+  renderTrackTabs();
+  renderSectionTabs();
+  renderSidebar();
+}
+
+function selectSection(section) {
+  currentSection = section;
+  renderSectionTabs();
+  renderSidebar();
+}
+
+/* ──────────────────────────────────────────
+   Sidebar (current track + section)
 ────────────────────────────────────────── */
 function renderSidebar() {
   const nav = document.getElementById('sidebarNav');
   nav.innerHTML = '';
 
-  CATEGORY_ORDER.forEach(category => {
-    const lessons = LESSONS.filter(lesson => lesson.category === category);
-    if (!lessons.length) return;
+  if (!currentSection) {
+    nav.innerHTML = '<div class="sidebar-empty">이 트랙엔 아직 레슨이 없습니다</div>';
+    return;
+  }
 
-    const section = document.createElement('div');
-    section.className = 'nav-category';
+  const label = document.createElement('span');
+  label.className = 'nav-category-label';
+  label.textContent = currentSection;
+  nav.appendChild(label);
 
-    const label = document.createElement('span');
-    label.className = 'nav-category-label';
-    label.textContent = category;
-    section.appendChild(label);
+  lessonsInSection(currentTrack, currentSection).forEach(lesson => {
+    const lessonIndex = LESSONS.indexOf(lesson);
+    const btn = document.createElement('button');
+    btn.className = 'nav-lesson-btn'
+      + (lessonIndex === currentLessonIndex ? ' active' : '')
+      + (lesson.stub ? ' stub' : '');
+    btn.dataset.index = lessonIndex;
+    btn.setAttribute('aria-label', lesson.title || lesson.short);
 
-    lessons.forEach(lesson => {
-      const lessonIndex = LESSONS.indexOf(lesson);
-      const btn = document.createElement('button');
-      btn.className = 'nav-lesson-btn';
-      btn.dataset.index = lessonIndex;
-      btn.setAttribute('aria-label', lesson.title);
+    const numSpan = document.createElement('span');
+    numSpan.className = 'nav-lesson-num';
+    numSpan.textContent = lesson.track === 'network' ? lesson.num : lesson.id;
 
-      const numSpan = document.createElement('span');
-      numSpan.className = 'nav-lesson-num';
-      numSpan.textContent = lesson.id;
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'nav-lesson-title';
+    titleSpan.textContent = lesson.short;
 
-      const titleSpan = document.createElement('span');
-      titleSpan.textContent = lesson.short;
+    btn.appendChild(numSpan);
+    btn.appendChild(titleSpan);
 
-      btn.appendChild(numSpan);
-      btn.appendChild(titleSpan);
-      btn.addEventListener('click', () => loadLesson(lessonIndex));
-      section.appendChild(btn);
-    });
+    if (lesson.duration) {
+      const durSpan = document.createElement('span');
+      durSpan.className = 'nav-lesson-dur';
+      durSpan.textContent = lesson.duration;
+      btn.appendChild(durSpan);
+    }
 
-    nav.appendChild(section);
+    btn.addEventListener('click', () => loadLesson(lessonIndex));
+    nav.appendChild(btn);
   });
+
+  const activeBtn = nav.querySelector('.nav-lesson-btn.active');
+  if (activeBtn) activeBtn.scrollIntoView({ block: 'nearest' });
+}
+
+/* ──────────────────────────────────────────
+   Badge
+────────────────────────────────────────── */
+function updateBadge() {
+  const total = LESSONS.length;
+  const written = LESSONS.filter(lesson => !lesson.stub).length;
+  document.getElementById('lessonBadge').textContent = `정리 ${written} · 전체 ${total}`;
 }
 
 /* ──────────────────────────────────────────
@@ -662,16 +846,14 @@ async function loadLesson(index) {
   const lesson = LESSONS[index];
   currentLessonIndex = index;
 
-  // Update sidebar active state
-  document.querySelectorAll('.nav-lesson-btn').forEach(btn => {
-    btn.classList.toggle('active', Number(btn.dataset.index) === index);
-  });
-
-  // Scroll active button into view in sidebar
-  const activeBtn = document.querySelector('.nav-lesson-btn.active');
-  if (activeBtn) {
-    activeBtn.scrollIntoView({ block: 'nearest' });
-  }
+  // Sync tabs to the lesson's track/section (e.g. when opened from search)
+  const trackChanged = lesson.track !== currentTrack;
+  const sectionChanged = lesson.category !== currentSection;
+  currentTrack = lesson.track;
+  currentSection = lesson.category;
+  if (trackChanged) renderTrackTabs();
+  if (trackChanged || sectionChanged) renderSectionTabs();
+  renderSidebar();
 
   const contentArea = document.getElementById('contentArea');
   contentArea.innerHTML = '<div class="loading-msg">레슨 불러오는 중...</div>';
@@ -710,7 +892,7 @@ async function loadLesson(index) {
     history.replaceState({ lessonIndex: index }, '', `#${lesson.id}`);
 
     // Update page title
-    document.title = `${lesson.title} — Backend Log`;
+    document.title = `${lesson.title || lesson.short} — Backend Log`;
 
   } catch (error) {
     contentArea.innerHTML = `
@@ -898,7 +1080,7 @@ function runSearch(query) {
   const lower = query.toLowerCase();
 
   const matches = searchIndex.filter(lesson =>
-    lesson.title.toLowerCase().includes(lower) ||
+    (lesson.title || '').toLowerCase().includes(lower) ||
     lesson.short.toLowerCase().includes(lower) ||
     lesson.category.toLowerCase().includes(lower) ||
     lesson.text.toLowerCase().includes(lower)
@@ -911,12 +1093,13 @@ function runSearch(query) {
   }
 
   const html = matches.map(lesson => {
-    const lessonIndex = LESSONS.findIndex(l => l.id === lesson.id);
+    const lessonIndex = LESSONS.findIndex(item => item.id === lesson.id);
     const excerpt = getExcerpt(lesson.text, query);
+    const displayTitle = lesson.title || lesson.short;
     return `
       <div class="search-result-item" data-index="${lessonIndex}" role="option" tabindex="0">
-        <div class="search-result-title">${highlight(lesson.title, query)}</div>
-        <div class="search-result-cat">${lesson.category}</div>
+        <div class="search-result-title">${highlight(displayTitle, query)}</div>
+        <div class="search-result-cat">${trackLabel(lesson.track)} · ${lesson.category}</div>
         <div class="search-result-excerpt">${highlight(excerpt, query)}</div>
       </div>
     `;
@@ -957,23 +1140,35 @@ document.addEventListener('click', event => {
 });
 
 /* ──────────────────────────────────────────
-   Keyboard navigation (← →)
+   Keyboard navigation (← →) — within the open lesson's section only
 ────────────────────────────────────────── */
 document.addEventListener('keydown', event => {
   if (event.target === searchInput) return;
-  if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-    const direction = event.key === 'ArrowRight' ? 1 : -1;
-    const nextIndex = currentLessonIndex + direction;
-    if (nextIndex >= 0 && nextIndex < LESSONS.length) {
-      loadLesson(nextIndex);
-    }
+  if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+
+  const current = LESSONS[currentLessonIndex];
+  if (!current) return;
+
+  // Stay inside the current lesson's own section — never cross section/track
+  const sectionLessons = lessonsInSection(current.track, current.category);
+  const position = sectionLessons.indexOf(current);
+  if (position === -1) return;
+
+  const nextPosition = position + (event.key === 'ArrowRight' ? 1 : -1);
+  if (nextPosition >= 0 && nextPosition < sectionLessons.length) {
+    loadLesson(LESSONS.indexOf(sectionLessons[nextPosition]));
   }
 });
 
 /* ──────────────────────────────────────────
    Init
 ────────────────────────────────────────── */
+currentTrack = TRACKS[0].key;
+currentSection = sectionsInTrack(currentTrack)[0] || null;
+renderTrackTabs();
+renderSectionTabs();
 renderSidebar();
+updateBadge();
 
 // Restore lesson from URL hash
 const hash = location.hash.replace('#', '');
