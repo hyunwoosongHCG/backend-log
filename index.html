@@ -589,7 +589,7 @@ const TRACKS = [
   {
     key: 'backend',
     label: '백엔드 실무',
-    sections: ['Ruby 기초', 'Grape API', '엔티티·도메인', 'ActiveRecord']
+    sections: ['Ruby 기초', 'Grape API', '엔티티·도메인', 'ActiveRecord', '실무 패턴']
   },
   {
     key: 'network',
@@ -624,6 +624,10 @@ const LESSONS = [
   { id: '0012', title: '레슨 12 — Pundit 권한 체크와 rescue_from', short: 'authorize · Policy · 403 흐름', file: 'lessons/0012-pundit-authorize-and-rescue-from.html', track: 'backend', category: 'Grape API' },
   { id: '0013', title: '레슨 13 — ActiveRecord 쿼리 메서드', short: 'find · find_by · where · Relation', file: 'lessons/0013-activerecord-query-methods.html', track: 'backend', category: 'ActiveRecord' },
   { id: '0014', title: '레슨 14 — Scope와 validates', short: 'scope · kept · validates · RecordInvalid', file: 'lessons/0014-activerecord-scope-and-validates.html', track: 'backend', category: 'ActiveRecord' },
+  { id: '0015', title: '레슨 15 — Ruby 블록', short: 'Block · yield · lambda · do...end', file: 'lessons/0015-ruby-blocks.html', track: 'backend', category: 'Ruby 기초' },
+  { id: '0016', title: '레슨 16 — 인증과 JWT', short: 'Authentication · JWT · Bearer · 401 vs 403', file: 'lessons/0016-authentication-and-jwt.html', track: 'backend', category: 'Grape API' },
+  { id: '0017', title: '레슨 17 — Sidekiq와 백그라운드 잡', short: 'Sidekiq · Redis · Worker · perform_async', file: 'lessons/0017-sidekiq-and-background-jobs.html', track: 'backend', category: '실무 패턴' },
+  { id: '0018', title: '레슨 18 — Grape params do 블록', short: 'params · requires · optional · ValidationErrors', file: 'lessons/0018-grape-params.html', track: 'backend', category: 'Grape API' },
 
   /* ── 네트워크 트랙 — 김영한「모든 개발자를 위한 HTTP 웹 기본 지식」(스텁) ── */
   { id:'net-01', short:'인터넷 통신', title:'인터넷 통신', file:'lessons/net-01-internet-communication.html', track:'network', category:'인터넷 네트워크', duration:'01:51', num:4 },
