@@ -16,18 +16,140 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · 인터넷 네트워크 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · 인터넷 네트워크 —
+    <code>fetch()</code> 한 줄 뒤에 숨어 있는 "인터넷"의 실체를 본다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    인터넷 통신은 두 컴퓨터가 <strong>직접 연결</strong>돼 주고받는 게 아니라,
+    중간의 <strong>수많은 노드(라우터·케이블)</strong>를 거쳐 메시지가 전달되는 것이다.
+    그래서 "누구에게, 어떤 규칙으로 보낼지"에 대한 <strong>약속(프로토콜)</strong>이 필요하다.
+  </p>
+
+  <h2>출발점: <code>fetch()</code> 한 줄 뒤에서 무슨 일이?</h2>
+
+  <p>
+    프론트에서는 이 한 줄이면 지구 반대편 서버의 데이터가 손에 들어온다.
+  </p>
+
+<pre><code>const res = await fetch('https://api.example.com/users');
+const users = await res.json();</code></pre>
+
+  <p>
+    그런데 이 <code>fetch</code>가 요청을 보내는 순간, 내 브라우저와 그 서버 사이에서
+    실제로 무슨 일이 벌어질까? 둘은 케이블 하나로 <em>직접</em> 이어져 있을까?
+    아니다 — 그 사이에는 어마어마하게 복잡한 길이 있다.
+  </p>
+
+  <div class="analogy">
+    <code>fetch()</code>가 Promise 하나로 "네트워크 요청"의 온갖 복잡함을 감춰주듯,
+    <strong>"인터넷"이라는 단어 자체가 그 아래의 거대한 노드망을 감춰주는 추상화</strong>다.
+    평소엔 몰라도 되지만, 요청이 느리거나 끊길 때 원인을 짚으려면 이 아래층을 알아야 한다.
+  </div>
+
+  <h2>두 컴퓨터는 직접 연결돼 있지 않다</h2>
+
+  <p>
+    클라이언트(내 컴퓨터)와 서버는 1:1 전용선으로 묶여 있지 않다.
+    메시지는 중간의 여러 노드를 <strong>거쳐서(hop by hop)</strong> 목적지까지 전달된다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">클라이언트 (내 브라우저)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">공유기 · 집/회사 네트워크</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">ISP(통신사) 라우터</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">인터넷 백본 — 수많은 라우터·해저 광케이블</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">대상 서버 측 ISP · 데이터센터</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">서버</div>
+  </div>
+
+  <p>
+    중간 노드가 수천 개일 수도 있고, 물리적으로는 대륙을 잇는 해저 케이블을 지나기도 한다.
+    이 복잡한 경로 전체를 뭉뚱그려 우리는 그냥 <strong>"인터넷"</strong>이라고 부른다.
+  </p>
+
+  <h2>그래서 "규칙"이 필요하다</h2>
+
+  <p>
+    노드가 이렇게 많은데 아무 약속도 없다면, 메시지를 다음 노드에게
+    "어디로, 어떤 형식으로" 넘겨야 할지 알 수 없다.
+    그래서 인터넷의 모든 노드가 공통으로 지키는 <strong>약속 = 프로토콜(protocol)</strong>이 필요하다.
+  </p>
+
+  <p>
+    그 약속 중 가장 밑바닥, "이 메시지를 어느 컴퓨터로 보낼 것인가"를 정하는 것이
+    바로 다음 강의에서 볼 <strong>IP(인터넷 프로토콜)</strong>다.
+  </p>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>인터넷 통신 = 중간 노드를 <strong>거쳐 전달되는 간접 통신</strong> (직접 연결 아님)</li>
+    <li>"인터넷"은 복잡한 노드망 전체를 감추는 <strong>추상화된 이름</strong></li>
+    <li>수많은 노드가 협력하려면 공통 <strong>규칙(프로토콜)</strong>이 필수</li>
+    <li>가장 아래 규칙부터 → 다음 강의 <strong>IP</strong>로 이어진다</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 클라이언트에서 서버로 메시지가 전달될 때 실제 모습에 가장 가까운 것은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 두 컴퓨터가 전용 케이블로 1:1 직접 연결돼 주고받는다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 공유기·ISP·백본 등 수많은 중간 노드를 거쳐 전달된다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 서버가 클라이언트를 직접 찾아와 데이터를 놓고 간다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 브라우저가 서버 하드디스크를 원격으로 직접 읽는다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 인터넷의 수많은 노드가 메시지를 목적지까지 협력해서 전달하려면 반드시 필요한 것은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 모든 노드가 같은 회사 제품이어야 한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. 노드들이 물리적으로 가까이 있어야 한다</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. 공통으로 지키는 약속, 즉 프로토콜이 있어야 한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 클라이언트가 경로의 모든 노드 주소를 미리 알아야 한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "노드가 다음에 어디로 보낼지는 누가 정하나요?"(→ 라우팅), "경로는 매번 같은가요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <span>강의 4: 인터넷 통신</span>
+    <a href="net-02-ip-protocol.html">강의 5: IP(인터넷 프로토콜) →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    result.textContent = '다시 생각해보세요.';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 내 컴퓨터와 서버 사이에 무엇이 있는지 떠올려보세요.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: 서로 다른 노드들이 협력하려면 공통의 "약속"이 있어야 합니다.';
+  }
+}
+</script>
 
 </body>
 </html>

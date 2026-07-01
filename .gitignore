@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# Playwright MCP (로컬 검증용 스냅샷·스크린샷)
+.playwright-mcp/
+
+# 로컬 검증 스크린샷
+backend-log-*.png
