@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 14 — ActiveRecord Scope와 validates</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>ActiveRecord Scope와 validates</h1>
+  <div class="lesson-meta">
+    <span>레슨 014</span>
+    <span>scope · kept · validates · RecordInvalid</span>
+    <span>~20분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 레슨 12의 <code>.kept</code>가 뭔지, <code>RecordInvalid → 400</code>이 어디서 오는지 완성한다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>두 가지 질문에서 시작한다</h2>
+
+  <p>지금까지 코드에서 두 가지가 설명 없이 지나갔다.</p>
+
+  <p><strong>첫 번째</strong> — 레슨 12의 이 코드:</p>
+
+<pre><code>def update?
+  show? && !record.reviews.kept.exists?
+end</code></pre>
+
+  <p>
+    <code>.kept</code>는 레슨 13에서 배운 <code>where</code>도 아니고 <code>find_by</code>도 아니다.
+    이것이 <strong>scope</strong>다.
+  </p>
+
+  <p><strong>두 번째</strong> — 레슨 12의 rescue_from 목록:</p>
+
+<pre><code>rescue_from ActiveRecord::RecordInvalid, with: :bad_request  # 400</code></pre>
+
+  <p>
+    <code>RecordInvalid</code>는 어디서 발생하는가? 바로 <strong>validates</strong>에서 온다.
+    이 레슨에서 두 가지를 모두 완성한다.
+  </p>
+
+  <h2>파트 1: Scope — 자주 쓰는 where 조건에 이름을 붙이다</h2>
+
+  <p>
+    <code>where(discarded_at: nil)</code> 같은 조건을 매번 쓰는 건 번거롭다.
+    scope는 이 조건에 이름을 붙여서 메서드처럼 호출하는 기능이다.
+  </p>
+
+<pre><code># 정의
+class Review < ApplicationRecord
+  scope :kept,      -> { where(discarded_at: nil) }
+  scope :discarded, -> { where.not(discarded_at: nil) }
+  scope :submitted, -> { where(status: :submitted) }
+end
+
+# 호출
+Review.kept                    # discarded_at이 nil인 것만
+Review.kept.submitted          # 체이닝 가능 (Relation 반환이므로)
+record.reviews.kept.exists?    # 레슨 12에서 봤던 그것</code></pre>
+
+  <p>
+    <code>-&gt; { ... }</code>는 람다(lambda)다. "호출될 때 이 블록을 실행해라"는 의미인데,
+    지금은 그냥 "조건을 감싸는 껍데기"로 이해해도 충분하다.
+  </p>
+
+  <div class="analogy">
+    JS에서 자주 쓰는 필터를 함수로 추출하는 것과 같다:<br><br>
+    <code>const activeUsers = users =&gt; users.filter(u =&gt; u.discardedAt === null)</code><br><br>
+    scope도 "자주 쓰는 where 조건을 이름 붙인 것"이다.
+    차이는 scope는 Relation을 반환하므로 뒤에 계속 체이닝할 수 있다는 점.
+  </div>
+
+  <h3>실무에서: Discard gem의 .kept와 .discarded</h3>
+
+  <p>
+    이 프로젝트에서 레코드를 "삭제"할 때 실제로 DB에서 지우지 않는다.
+    대신 <code>discarded_at</code> 컬럼에 삭제 시각을 기록한다.
+    이를 <strong>소프트 삭제(Soft Delete)</strong>라고 한다.
+  </p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">scope</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">의미</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">SQL 조건</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>.kept</code></td>
+        <td style="padding:0.4rem 0.5rem;">"살아있는" 레코드 (삭제 안 됨)</td>
+        <td style="padding:0.4rem 0.5rem;"><code>WHERE discarded_at IS NULL</code></td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>.discarded</code></td>
+        <td style="padding:0.4rem 0.5rem;">"삭제된" 레코드</td>
+        <td style="padding:0.4rem 0.5rem;"><code>WHERE discarded_at IS NOT NULL</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    이 두 scope는 Discard gem이 자동으로 만들어 준다.
+    레슨 12의 <code>!record.discarded?</code>, <code>reviews.kept.exists?</code>가
+    모두 이 gem에서 오는 것이다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. <code>scope :pending, -> { where(status: :pending) }</code> 를 정의했다. <code>Review.pending.order(created_at: :asc)</code>가 동작하는 이유는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. pending이 배열을 반환하기 때문에</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. scope도 Relation을 반환해서 체이닝이 가능하기 때문에</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. order가 배열에도 동작하기 때문에</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. scope가 자동으로 order를 포함하기 때문에</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>파트 2: validates — 저장 전에 데이터를 검사한다</h2>
+
+  <p>
+    모델에 "이 컬럼은 반드시 있어야 한다", "이 값은 유일해야 한다" 같은 규칙을 선언한다.
+    ActiveRecord는 <code>save</code>나 <code>create</code> 전에 이 규칙을 자동으로 검사한다.
+  </p>
+
+<pre><code>class ReviewTemplate < ApplicationRecord
+  validates :name, presence: true
+  validates :name, uniqueness: { scope: :workspace_id }
+  validates :status, inclusion: { in: %w[draft active archived] }
+end</code></pre>
+
+  <p>자주 쓰는 검사 종류:</p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">검사</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">의미</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>presence: true</code></td>
+        <td style="padding:0.4rem 0.5rem;">nil이거나 빈 문자열이면 안 됨</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>uniqueness: true</code></td>
+        <td style="padding:0.4rem 0.5rem;">테이블 전체에서 중복 불가</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>inclusion: { in: [...] }</code></td>
+        <td style="padding:0.4rem 0.5rem;">지정한 값 목록 안에 있어야 함</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>length: { maximum: 100 }</code></td>
+        <td style="padding:0.4rem 0.5rem;">길이 제한</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>save vs save! — 검사 실패시 어떻게 되나</h3>
+
+  <p>
+    저장 메서드가 두 가지 버전으로 존재한다.
+    느낌표(<code>!</code>)가 있는 버전과 없는 버전이다.
+  </p>
+
+<pre><code>template = ReviewTemplate.new(name: nil)  # presence: true 위반
+
+# ! 없는 버전 — 조용히 실패
+template.save    # → false 반환, 예외 없음
+template.errors.full_messages  # → ["Name can't be blank"]
+
+# ! 있는 버전 — 예외를 발생시킨다
+template.save!   # → ActiveRecord::RecordInvalid 예외 발생!</code></pre>
+
+  <p>
+    그래서 레슨 12의 <code>rescue_from ActiveRecord::RecordInvalid, with: :bad_request</code>가
+    잡는 예외가 바로 이것이다.
+    컨트롤러에서 <code>record.save!</code>나 <code>Model.create!</code>를 쓰면,
+    validates가 실패했을 때 예외가 발생하고 → rescue_from이 잡아 → 400 Bad Request로 응답한다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">① 클라이언트가 name 없이 POST 요청</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">② 컨트롤러에서 <code>ReviewTemplate.create!(params)</code></div>
+    <div class="flow-arrow">↓ validates :name, presence: true 실패</div>
+    <div class="flow-step">③ <code>ActiveRecord::RecordInvalid</code> 예외 발생</div>
+    <div class="flow-arrow">↓ rescue_from 이 잡음</div>
+    <div class="flow-step">④ <code>bad_request</code> 메서드 → <code>error!({ errors: [...] }, 400)</code></div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">⑤ 클라이언트에게 <strong>400 Bad Request</strong> 반환</div>
+  </div>
+
+  <div class="analogy">
+    프론트에서 form validation을 생각하면 된다:<br><br>
+    <code>if (!name) return setError('이름은 필수입니다')</code><br><br>
+    validates는 이 검사를 모델 레이어에서 선언적으로 하는 것이다.
+    <code>save!</code>는 "검사 통과 못 하면 throw해라"는 옵션이다.
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. <code>validates :email, presence: true</code>가 선언된 모델에서 email 없이 <code>user.save!</code>를 호출하면?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. false를 반환하고 종료된다</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. nil을 반환한다</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. ActiveRecord::RecordInvalid 예외가 발생한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 경고 메시지를 출력하고 저장된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>연결: scope + validates + 레슨 12</h2>
+
+  <p>이제 레슨 12의 Policy 코드를 완전히 읽을 수 있다:</p>
+
+<pre><code>def show?
+  !record.discarded? &&  # Discard gem: discarded_at IS NOT NULL 이면 false
+  admin?
+end
+
+def update?
+  show? &&
+  !record.reviews           # has_many 연관관계 (레슨 8)
+               .kept        # scope: discarded_at IS NULL 인 것만 (오늘 배움)
+               .exists?     # 존재 여부 체크 (레슨 13)
+end</code></pre>
+
+  <p>그리고 400이 나오는 경로:</p>
+
+<pre><code># validates 위반 → save! → RecordInvalid → rescue_from → 400
+rescue_from ActiveRecord::RecordInvalid, with: :bad_request</code></pre>
+
+  <div class="quiz">
+    <div class="quiz-q">Q3. <code>record.reviews.kept</code>에서 <code>.kept</code>의 정체는?</div>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">A. ActiveRecord 기본 내장 메서드</button></li>
+      <li><button onclick="answer(this,'q3',false)">B. has_many 연관관계 옵션</button></li>
+      <li><button onclick="answer(this,'q3',true)">C. Discard gem이 자동으로 정의한 scope</button></li>
+      <li><button onclick="answer(this,'q3',false)">D. SQL의 KEEP 키워드에 대응하는 메서드</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">개념</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">역할</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">실패하면</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">scope</td>
+        <td style="padding:0.4rem 0.5rem;">자주 쓰는 where에 이름 붙이기</td>
+        <td style="padding:0.4rem 0.5rem;">— (빈 Relation 반환)</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">validates</td>
+        <td style="padding:0.4rem 0.5rem;">저장 전 데이터 규칙 검사</td>
+        <td style="padding:0.4rem 0.5rem;"><code>save</code> → false / <code>save!</code> → RecordInvalid</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">RecordInvalid</td>
+        <td style="padding:0.4rem 0.5rem;">validates 실패 + ! 메서드</td>
+        <td style="padding:0.4rem 0.5rem;">rescue_from → 400 Bad Request</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고:
+    <a href="https://guides.rubyonrails.org/active_record_validations.html" target="_blank">Rails Guides — Active Record Validations</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/jhawthorn/discard" target="_blank">Discard gem</a>
+  </p>
+
+  <div class="nav-links">
+    <a href="0013-activerecord-query-methods.html">← 레슨 13 — ActiveRecord 쿼리 메서드</a>
+    <a href="0015-ruby-blocks.html">레슨 15 — Ruby 블록 →</a>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "save와 save!를 언제 구분해서 쓰나요?" 같은 실무 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. scope의 반환값 타입이 핵심입니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. !가 붙은 메서드의 동작 원칙을 떠올려보세요.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. 이 프로젝트에서 소프트 삭제를 담당하는 gem이 어디서 왔는지 확인해보세요.';
+  }
+}
+</script>
+
+</body>
+</html>
