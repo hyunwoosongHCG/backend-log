@@ -247,14 +247,6 @@
 
     .nav-lesson-title { flex: 1; }
 
-    .nav-lesson-dur {
-      font-family: var(--font-mono);
-      font-size: 0.6rem;
-      color: rgba(255, 255, 255, 0.24);
-      margin-top: 2px;
-      flex-shrink: 0;
-    }
-
     /* stub (아직 작성 전) lessons — dimmed */
     .nav-lesson-btn.stub .nav-lesson-title {
       color: rgba(255, 255, 255, 0.38);
@@ -793,7 +785,7 @@ function renderSidebar() {
   label.textContent = currentSection;
   nav.appendChild(label);
 
-  lessonsInSection(currentTrack, currentSection).forEach(lesson => {
+  lessonsInSection(currentTrack, currentSection).forEach((lesson, sectionIndex) => {
     const lessonIndex = LESSONS.indexOf(lesson);
     const btn = document.createElement('button');
     btn.className = 'nav-lesson-btn'
@@ -804,7 +796,8 @@ function renderSidebar() {
 
     const numSpan = document.createElement('span');
     numSpan.className = 'nav-lesson-num';
-    numSpan.textContent = lesson.track === 'network' ? lesson.num : lesson.id;
+    // 백엔드/SQL은 전역 레슨 ID, 네트워크는 섹션 내 1부터의 순번
+    numSpan.textContent = lesson.track === 'network' ? String(sectionIndex + 1) : lesson.id;
 
     const titleSpan = document.createElement('span');
     titleSpan.className = 'nav-lesson-title';
@@ -812,13 +805,6 @@ function renderSidebar() {
 
     btn.appendChild(numSpan);
     btn.appendChild(titleSpan);
-
-    if (lesson.duration) {
-      const durSpan = document.createElement('span');
-      durSpan.className = 'nav-lesson-dur';
-      durSpan.textContent = lesson.duration;
-      btn.appendChild(durSpan);
-    }
 
     btn.addEventListener('click', () => loadLesson(lessonIndex));
     nav.appendChild(btn);
