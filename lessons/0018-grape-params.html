@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 18 — Grape params do 블록</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>Grape <code>params do</code> 블록 — 입력 검증</h1>
+  <div class="lesson-meta">
+    <span>레슨 018</span>
+    <span>params · requires · optional · ValidationErrors</span>
+    <span>~20분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 API가 잘못된 입력을 받았을 때 400을 만드는 나머지 경로를 완성한다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>출발점: 두 가지 400 경로</h2>
+
+  <p>레슨 12에서 rescue_from 목록을 봤다:</p>
+
+<pre><code>rescue_from ActiveRecord::RecordInvalid,         with: :bad_request  # ← 레슨 14에서 완성
+rescue_from Grape::Exceptions::ValidationErrors, with: :parameter_validate_error  # ← 오늘</code></pre>
+
+  <p>
+    <code>RecordInvalid</code>는 모델 레이어의 validates에서 온다 (레슨 14).
+    <code>ValidationErrors</code>는 Grape가 API 입력을 검증하다 실패할 때 발생한다.
+    이 레슨에서 그 경로를 완성한다.
+  </p>
+
+  <h2>params do 블록 — API 파라미터 선언</h2>
+
+  <p>
+    Grape는 각 엔드포인트에 어떤 파라미터를 받는지 선언하는 DSL을 제공한다.
+    라우트 핸들러가 실행되기 <strong>전에</strong> Grape가 이 선언대로 자동으로 검증한다.
+  </p>
+
+<pre><code># app/controllers/v2/reviews/review_templates.rb
+post do
+  params do
+    requires :name,        type: String,  desc: '템플릿 이름'
+    requires :category_id, type: Integer, desc: '카테고리 ID'
+    optional :description, type: String,  desc: '설명 (선택)'
+    optional :status,      type: String,  default: 'draft', values: %w[draft active]
+  end
+  template = ReviewTemplate.create!(declared(params))
+  present template, with: ReviewTemplateEntity
+end</code></pre>
+
+  <div class="analogy">
+    TypeScript의 인터페이스로 함수 인자를 타입 검사하는 것과 같다:<br><br>
+<pre><code>// TS: 함수 선언에 타입을 붙임
+function createTemplate(args: { name: string; categoryId: number; description?: string }) { ... }
+
+# Grape: 라우트에 파라미터 스펙을 붙임
+params do
+  requires :name,        type: String
+  requires :category_id, type: Integer
+  optional :description, type: String
+end</code></pre>
+    둘 다 "이 인자가 없거나 타입이 다르면 에러"라는 규칙을 선언하는 방식이다.
+  </div>
+
+  <h2>requires vs optional</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">키워드</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">의미</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">없으면</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>requires</code></td>
+        <td style="padding:0.4rem 0.5rem;">필수 파라미터</td>
+        <td style="padding:0.4rem 0.5rem;"><code>ValidationErrors</code> 예외 발생 → 400</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>optional</code></td>
+        <td style="padding:0.4rem 0.5rem;">선택 파라미터</td>
+        <td style="padding:0.4rem 0.5rem;">nil 또는 default 값</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>주요 옵션들:</p>
+
+<pre><code>requires :age,    type: Integer                    # 타입 강제 (문자열 "3" → 정수 3 자동 변환)
+optional :status, type: String, default: 'draft'  # 기본값
+optional :role,   type: String, values: %w[admin member]  # 허용값 목록
+requires :email,  type: String, regexp: /.+@.+/   # 정규식 검사</code></pre>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. <code>requires :name, type: String</code>으로 선언된 파라미터를 빠뜨리고 요청하면?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. name이 nil로 설정되어 핸들러가 실행된다</button></li>
+      <li><button onclick="answer(this,'q1',false)">B. ActiveRecord::RecordInvalid 예외가 발생한다</button></li>
+      <li><button onclick="answer(this,'q1',true)">C. Grape::Exceptions::ValidationErrors 예외가 발생해 400이 반환된다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 핸들러가 실행되고 params[:name]이 빈 문자열이 된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>declared(params) — 선언한 것만 통과시키기</h2>
+
+  <p>
+    <code>params</code>에는 클라이언트가 보낸 모든 값이 담긴다.
+    <code>declared(params)</code>는 <code>params do</code>에서 선언한 키만 걸러낸 것이다.
+  </p>
+
+<pre><code># 클라이언트가 보낸 것
+{ name: "월간 리뷰", category_id: 3, hacker_field: "DROP TABLE users" }
+
+# declared(params) — 선언한 것만 남음
+{ name: "월간 리뷰", category_id: 3 }
+# hacker_field는 선언하지 않았으므로 자동으로 제거됨</code></pre>
+
+  <p>
+    Rails의 Strong Parameters (<code>params.require(:user).permit(:name, :email)</code>)과 같은 역할이다.
+    선언하지 않은 파라미터는 자동으로 걸러내서 의도치 않은 대입을 막는다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. <code>declared(params)</code>를 쓰는 이유는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. params를 Hash로 변환하기 위해서</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. params의 타입을 검사하기 위해서</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. 선언한 파라미터만 남겨 의도치 않은 값이 DB에 저장되는 것을 막기 위해서</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 요청 속도를 높이기 위해서</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>전체 400 에러 경로 정리</h2>
+
+  <p>이제 400이 나오는 두 경로가 모두 완성됐다:</p>
+
+  <div class="flow">
+    <div class="flow-step">경로 A: 필수 파라미터 누락 또는 타입 불일치<br>→ <code>Grape::Exceptions::ValidationErrors</code> → rescue_from → 400</div>
+    <div class="flow-arrow" style="margin: 0.5rem 0;">또는</div>
+    <div class="flow-step">경로 B: 파라미터는 맞지만 모델 validates 실패<br>→ <code>ActiveRecord::RecordInvalid</code> (save! 호출 시) → rescue_from → 400</div>
+  </div>
+
+  <p>
+    두 검증의 차이:
+    Grape params 검증은 <strong>API 경계</strong>에서 (입력 형식),
+    validates는 <strong>모델 레이어</strong>에서 (비즈니스 규칙).
+    둘 다 있으면 두 겹으로 보호된다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q3. <code>Grape::Exceptions::ValidationErrors</code>와 <code>ActiveRecord::RecordInvalid</code>의 차이는?</div>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">A. 둘 다 같은 레이어에서 발생하며 차이가 없다</button></li>
+      <li><button onclick="answer(this,'q3',true)">B. ValidationErrors는 API 입력 형식, RecordInvalid는 모델의 비즈니스 규칙 위반이다</button></li>
+      <li><button onclick="answer(this,'q3',false)">C. ValidationErrors는 500에러이고 RecordInvalid는 400에러다</button></li>
+      <li><button onclick="answer(this,'q3',false)">D. RecordInvalid는 Grape에서만 발생한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">개념</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">역할</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>params do</code></td>
+        <td style="padding:0.4rem 0.5rem;">엔드포인트가 받을 파라미터 선언</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>requires</code></td>
+        <td style="padding:0.4rem 0.5rem;">필수 — 없으면 ValidationErrors → 400</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>optional</code></td>
+        <td style="padding:0.4rem 0.5rem;">선택 — 없으면 nil 또는 default</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>declared(params)</code></td>
+        <td style="padding:0.4rem 0.5rem;">선언한 파라미터만 필터링해서 반환</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고:
+    <a href="https://github.com/ruby-grape/grape#parameter-validation-and-coercion" target="_blank">Grape — Parameter Validation</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/ruby-grape/grape#declared" target="_blank">Grape — declared(params)</a>
+  </p>
+
+  <div class="nav-links">
+    <a href="0017-sidekiq-and-background-jobs.html">← 레슨 17 — Sidekiq와 백그라운드 잡</a>
+    <span style="color: var(--muted);">다음 레슨 준비 중</span>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "params do를 라우트 밖에서도 쓸 수 있나요?" 같은 구조적 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. Grape params 검증은 핸들러 실행 전에 일어납니다. 어떤 예외가 발생하는지 rescue_from 목록을 떠올려보세요.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 클라이언트가 선언하지 않은 파라미터도 보낼 수 있다는 것을 생각해보세요.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. 각 예외가 어느 레이어(API vs 모델)에서 발생하는지 확인해보세요.';
+  }
+}
+</script>
+
+</body>
+</html>

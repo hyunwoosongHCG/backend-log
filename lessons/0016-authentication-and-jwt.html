@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 16 — 인증과 JWT</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>인증(Authentication)과 JWT</h1>
+  <div class="lesson-meta">
+    <span>레슨 016</span>
+    <span>Authentication · JWT · Bearer Token · 401 vs 403</span>
+    <span>~25분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 레슨 12는 인가(Authorization)를 완성했다. 이번엔 그 앞 단계인 인증(Authentication)을 채운다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>인증과 인가 — 먼저 정확히 구분한다</h2>
+
+  <p>두 개념이 자주 혼용되지만 완전히 다른 질문에 답한다:</p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">개념</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">질문</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">실패하면</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">담당</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><strong>인증 (Authentication)</strong></td>
+        <td style="padding:0.4rem 0.5rem;">"당신이 누구인가?"</td>
+        <td style="padding:0.4rem 0.5rem;"><strong>401</strong> Unauthorized</td>
+        <td style="padding:0.4rem 0.5rem;"><code>authenticate_user!</code></td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><strong>인가 (Authorization)</strong></td>
+        <td style="padding:0.4rem 0.5rem;">"당신이 이걸 할 수 있는가?"</td>
+        <td style="padding:0.4rem 0.5rem;"><strong>403</strong> Forbidden</td>
+        <td style="padding:0.4rem 0.5rem;">Pundit (레슨 12)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    순서도 중요하다: 인증 먼저, 인가 나중.
+    "누구인지 모르면 권한 확인 자체가 의미 없다."
+  </p>
+
+  <div class="analogy">
+    사무실 출입을 예로 들면:<br><br>
+    <strong>인증</strong> = 사원증으로 신원 확인 → "이 사람이 우리 회사 직원인가?" (401: 사원증 없음)<br>
+    <strong>인가</strong> = 층별 권한 확인 → "이 직원이 서버실에 들어갈 수 있는가?" (403: 권한 없음)
+  </div>
+
+  <h2>토큰 기반 인증 흐름</h2>
+
+  <p>세션/쿠키 방식 대신 이 프로젝트는 토큰을 쓴다. 흐름은 두 단계다.</p>
+
+  <div class="flow">
+    <div class="flow-step">① 로그인: 클라이언트가 이메일+비밀번호로 POST /auth/sign_in</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">② 서버가 신원 확인 후 <strong>JWT 토큰</strong>을 응답으로 발급</div>
+    <div class="flow-arrow">↓ 클라이언트가 토큰을 로컬에 저장</div>
+    <div class="flow-step">③ 이후 요청마다 HTTP 헤더에 토큰을 실어 보냄</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">④ 서버의 <code>authenticate_user!</code>가 토큰을 검증 → <code>current_user</code> 설정</div>
+    <div class="flow-arrow">↓ 토큰 유효하면 계속, 유효하지 않으면 401</div>
+    <div class="flow-step">⑤ 컨트롤러 로직 실행</div>
+  </div>
+
+  <p>헤더에는 이렇게 실린다:</p>
+
+<pre><code>Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjozfQ.abc123</code></pre>
+
+  <p>
+    <code>Bearer</code>는 "이 토큰을 가진 사람에게 권한을 줘라"는 의미의 접두사 관용어다.
+    프론트에서 API 요청 시 헤더에 붙이는 그것이다.
+  </p>
+
+  <h2>JWT 구조 — 세 파트</h2>
+
+  <p>
+    <strong>JWT(JSON Web Token)</strong>는 점(<code>.</code>)으로 구분된 세 부분으로 이루어진다.
+    위 토큰을 분해하면:
+  </p>
+
+<pre><code>eyJhbGciOiJIUzI1NiJ9          ← Header  (알고리즘 정보)
+.
+eyJ1c2VyX2lkIjozfQ            ← Payload (실제 데이터, Base64 인코딩)
+.
+abc123                         ← Signature (위변조 확인용)</code></pre>
+
+  <p>
+    Payload를 Base64 디코딩하면 JSON이 나온다:
+  </p>
+
+<pre><code>{ "user_id": 3, "exp": 1751234567 }</code></pre>
+
+  <p>
+    서버는 이 <code>user_id</code>로 DB에서 사용자를 찾아 <code>current_user</code>에 담는다.
+    Signature 덕분에 클라이언트가 Payload를 임의로 수정하면 서버가 감지한다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. JWT에서 실제 사용자 데이터(user_id 등)가 담기는 파트는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. Header</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. Payload</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. Signature</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. Bearer</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>authenticate_user! 내부 — 이 프로젝트 기준</h2>
+
+  <p>
+    Grape에서 <code>before</code> 훅으로 모든 요청 앞에 실행된다:
+  </p>
+
+<pre><code># app/controllers/grape_base.rb
+before do
+  authenticate_user!
+end
+
+def authenticate_user!
+  token = headers['Authorization']&.split('Bearer ')&.last
+  payload = JwtService.decode(token)          # 토큰 검증 + 디코딩
+  @current_user = User.find(payload['user_id'])
+rescue JWT::DecodeError, ActiveRecord::RecordNotFound
+  error!('Unauthorized', 401)                 # 유효하지 않으면 즉시 401
+end</code></pre>
+
+  <p>
+    <code>before do ... end</code>는 레슨 15에서 배운 블록이다.
+    모든 엔드포인트가 실행되기 전에 이 블록이 먼저 실행된다.
+  </p>
+
+  <h3>current_user vs pundit_user</h3>
+
+<pre><code>def current_user
+  @current_user        # JWT에서 꺼낸 User 객체
+end
+
+def pundit_user        # 레슨 12에서 봤던 것
+  Member.find_by(workspace: workspace, user: current_user) || current_user
+end</code></pre>
+
+  <p>
+    <code>current_user</code>는 인증 결과 (누구인가),
+    <code>pundit_user</code>는 인가 기준 (이 워크스페이스에서 어떤 역할인가).
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 토큰 없이 요청을 보내면 어떤 HTTP 상태코드가 반환되나?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 400 Bad Request</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. 401 Unauthorized</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. 403 Forbidden</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 404 Not Found</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>전체 요청 흐름 — 인증 + 인가 합산</h2>
+
+  <div class="flow">
+    <div class="flow-step">① 요청 도착</div>
+    <div class="flow-arrow">↓ before 블록</div>
+    <div class="flow-step">② <code>authenticate_user!</code> — JWT 검증 → 실패 시 <strong>401</strong></div>
+    <div class="flow-arrow">↓ 성공: current_user 설정됨</div>
+    <div class="flow-step">③ 라우트 핸들러 진입</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">④ <code>authorize record, :action?</code> — Pundit 권한 확인 → 실패 시 <strong>403</strong></div>
+    <div class="flow-arrow">↓ 성공: 실제 로직 실행</div>
+    <div class="flow-step">⑤ 정상 응답 반환</div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q3. 로그인은 됐지만 관리자 전용 API에 일반 사용자가 접근하면?</div>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">A. 401 — 인증 실패</button></li>
+      <li><button onclick="answer(this,'q3',true)">B. 403 — 인증은 됐지만 권한 없음</button></li>
+      <li><button onclick="answer(this,'q3',false)">C. 404 — 존재하지 않는 리소스</button></li>
+      <li><button onclick="answer(this,'q3',false)">D. 400 — 잘못된 요청</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">개념</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">한 줄 설명</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">JWT</td>
+        <td style="padding:0.4rem 0.5rem;">Header.Payload.Signature — 자기완결적 토큰</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Bearer Token</td>
+        <td style="padding:0.4rem 0.5rem;">Authorization 헤더로 JWT를 전송하는 방식</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>authenticate_user!</code></td>
+        <td style="padding:0.4rem 0.5rem;">before 블록에서 JWT 검증 → current_user 설정</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">401</td>
+        <td style="padding:0.4rem 0.5rem;">인증 실패 (누군지 모름)</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">403</td>
+        <td style="padding:0.4rem 0.5rem;">인가 실패 (누군진 알지만 권한 없음)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고:
+    <a href="https://jwt.io/introduction" target="_blank">jwt.io — JWT 공식 소개</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/jwt/ruby-jwt" target="_blank">ruby-jwt gem</a>
+  </p>
+
+  <div class="nav-links">
+    <a href="0015-ruby-blocks.html">← 레슨 15 — Ruby 블록</a>
+    <a href="0017-sidekiq-and-background-jobs.html">레슨 17 — Sidekiq와 백그라운드 잡 →</a>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "JWT Payload는 누구나 디코딩할 수 있는데 안전한가요?" 같은 보안 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. Header는 알고리즘 정보, Signature는 위변조 방지용입니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 인증(Authentication) 실패 코드와 인가(Authorization) 실패 코드를 구분해보세요.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. 로그인은 성공했으니 인증은 통과된 상태입니다. 다음 관문은 무엇인가요?';
+  }
+}
+</script>
+
+</body>
+</html>
