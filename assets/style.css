@@ -6,6 +6,8 @@
   --muted: #666;
   --border: #ddd;
   --code-bg: #f4f4f0;
+  --surface: #f4f4f0;
+  --surface2: #1e1e2e;
   --correct: #2a7a2a;
   --wrong: #b00;
   --font-body: Georgia, 'Times New Roman', serif;
@@ -159,3 +161,20 @@ pre code { background: none; padding: 0; font-size: 1em; }
   margin-top: 0.3rem;
 }
 .source a { color: var(--muted); }
+
+/* ── 강조용 다크 테이블 행 ──
+   레슨 표에서 <tr style="...var(--surface2)...">로 배경이 어두운 행은
+   글자가 검정이라 밝은 테마 위에서 안 보인다 → 셀 배경을 확실히 어둡게 고정하고 글자를 흰색으로.
+   (뷰어 주입 콘텐츠·단독 열람 양쪽 커버) */
+tr[style*="surface2"] th,
+tr[style*="surface2"] td {
+  background: var(--surface2);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+tr[style*="surface2"] strong { color: #fff; }
+tr[style*="surface2"] a { color: #ff9d9d; }
+tr[style*="surface2"] code {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
