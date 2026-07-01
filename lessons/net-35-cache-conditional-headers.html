@@ -16,18 +16,240 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 캐시 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 캐시 — 캐시를 제어하는 Cache-Control 지시어들을 한데 모아 정리한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    캐시 관련 헤더는 크게 <strong>캐시 지시어(Cache-Control)</strong>와
+    <strong>조건부 요청 헤더 쌍</strong>(검증·조건) 두 종류로 나뉜다.
+    각 지시어가 무엇을 제어하는지 명확히 알아야 캐시 전략을 설계할 수 있다.
+  </p>
+
+  <h2>Cache-Control 지시어 총정리</h2>
+
+  <h3>캐시 수명 제어</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>지시어</th>
+        <th>위치</th>
+        <th>의미</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>max-age=N</code></td>
+        <td>응답</td>
+        <td>캐시 유효 시간(초). 그 안에는 서버에 묻지 않고 캐시 사용.</td>
+      </tr>
+      <tr>
+        <td><code>s-maxage=N</code></td>
+        <td>응답</td>
+        <td>프록시·CDN 같은 공유 캐시 서버의 유효 시간. max-age보다 우선 적용.</td>
+      </tr>
+      <tr>
+        <td><code>max-stale=N</code></td>
+        <td>요청</td>
+        <td>만료된 캐시라도 N초 이내라면 사용해도 된다. (클라가 허용 범위를 넓힘)</td>
+      </tr>
+      <tr>
+        <td><code>min-fresh=N</code></td>
+        <td>요청</td>
+        <td>유효기간이 N초 이상 남아 있는 캐시만 사용하겠다.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>캐시 저장·검증 정책</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>지시어</th>
+        <th>의미</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>no-cache</code></td>
+        <td>캐시에 저장은 하지만, 사용 전 <strong>반드시 Origin 서버에 검증</strong>을 받아야 한다.
+        (프록시 캐시가 검증을 생략하고 오래된 자원을 200으로 줄 수 있는 것을 막기 위해)</td>
+      </tr>
+      <tr>
+        <td><code>no-store</code></td>
+        <td>캐시 저장 자체를 금지한다. 민감한 응답(토큰, 잔고 등)에 사용.</td>
+      </tr>
+      <tr>
+        <td><code>must-revalidate</code></td>
+        <td>캐시 만료 후 사용 전에 반드시 Origin 서버에 검증해야 한다.
+        Origin 서버에 접근할 수 없으면 <strong>504 Gateway Timeout</strong>을 반환해야 한다.</td>
+      </tr>
+      <tr>
+        <td><code>proxy-revalidate</code></td>
+        <td>must-revalidate와 같지만, 프록시 캐시에만 적용된다.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>캐시 공개 범위</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>지시어</th>
+        <th>의미</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>public</code></td>
+        <td>응답을 프록시·CDN 같은 공유 캐시 서버에도 저장해도 된다.</td>
+      </tr>
+      <tr>
+        <td><code>private</code></td>
+        <td>해당 사용자의 브라우저 캐시에만 저장. 공유 캐시(프록시)에는 저장 금지.
+        (개인 데이터 보호)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>no-cache vs must-revalidate — 왜 같이 쓰나?</h2>
+
+  <p>
+    이 둘의 차이는 <strong>프록시 캐시가 Origin 서버에 접근하지 못하는 상황</strong>에서 드러난다.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>상황</th>
+        <th>no-cache만 적용 시</th>
+        <th>must-revalidate 적용 시</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Origin 서버 정상</td>
+        <td>서버에 검증 후 사용 (동일)</td>
+        <td>서버에 검증 후 사용 (동일)</td>
+      </tr>
+      <tr>
+        <td>Origin 서버 일시 장애</td>
+        <td>프록시가 오래된 캐시를 <code>200 OK</code>로 반환할 수 있다</td>
+        <td>반드시 <code>504 Gateway Timeout</code> 반환</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    캐시 무효화(강의 40)에서 두 지시어를 함께 쓰는 이유가 바로 이것이다.
+    통장 잔고처럼 절대 오래된 값이 나오면 안 되는 경우에는
+    <code>no-cache</code>만으로는 부족하고 <code>must-revalidate</code>도 같이 써야 한다.
+  </p>
+
+  <h2>조건부 요청 헤더 쌍 요약</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>검증 헤더 (응답)</th>
+        <th>조건부 요청 헤더 (재요청)</th>
+        <th>비교 방식</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>Last-Modified</code></td>
+        <td><code>If-Modified-Since</code></td>
+        <td>날짜 비교 — 수정 시각이 이후면 200, 아니면 304</td>
+      </tr>
+      <tr>
+        <td><code>ETag</code></td>
+        <td><code>If-None-Match</code></td>
+        <td>태그 비교 — 다르면 200, 같으면 304</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    둘 다 있을 때는 <strong>ETag / If-None-Match가 우선</strong> 적용된다.
+  </p>
+
+  <div class="analogy">
+    React 앱 빌드 전략과 대응시키면 이렇다.
+    정적 파일(JS·CSS·이미지)엔 <code>Cache-Control: public, max-age=31536000, immutable</code> —
+    1년 캐시, 내용이 바뀌면 파일명 해시가 바뀌므로 무효화는 파일명이 담당한다.
+    <code>index.html</code>엔 <code>Cache-Control: no-cache</code> —
+    항상 Origin에서 최신 버전을 확인해야 최신 해시 파일명 목록을 알 수 있기 때문이다.
+    Rails도 <code>public/assets/</code> 아래 컴파일된 파일에 동일한 전략을 쓴다.
+  </div>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><code>max-age</code>: 캐시 유효 시간(초)</li>
+    <li><code>no-cache</code>: 저장은 하되 사용 전 매번 Origin 서버 검증 필수</li>
+    <li><code>no-store</code>: 캐시 저장 자체 금지</li>
+    <li><code>must-revalidate</code>: 만료 후 Origin 검증 필수, 실패 시 504 강제</li>
+    <li><code>public / private</code>: 공유 캐시 허용 여부</li>
+    <li>조건부 요청 헤더 쌍: <code>Last-Modified ↔ If-Modified-Since</code>, <code>ETag ↔ If-None-Match</code></li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. <code>Cache-Control: no-cache</code>의 정확한 의미는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 캐시를 전혀 사용하지 않는다</button></li>
+      <li><button onclick="answer(this,'q1',false)">B. 캐시에 저장도 하지 않고 Origin 서버에서 항상 새로 받는다</button></li>
+      <li><button onclick="answer(this,'q1',true)">C. 캐시에 저장은 하되, 사용 전 반드시 Origin 서버에서 검증을 받아야 한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 프록시 캐시에는 저장하지 말고 브라우저 캐시에만 저장한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. <code>no-cache</code>와 <code>must-revalidate</code>를 함께 써야 하는 이유는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 두 헤더는 중복이라 하나만 써도 되지만 호환성을 위해 같이 쓴다</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. Origin 서버 장애 시 no-cache만으로는 오래된 캐시가 200으로 나올 수 있고, must-revalidate는 이 경우 504를 강제한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. must-revalidate는 HTTPS 전용이라 HTTP 환경을 위해 no-cache를 같이 쓴다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. no-cache는 요청 헤더, must-revalidate는 응답 헤더라 다른 시점에 동작한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "immutable 지시어는 뭔가요?", "s-maxage는 언제 쓰나요?", "Rails가 자동으로 붙여주는 캐시 헤더가 있나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-34-cache-validation-2.html">← 강의 37: 검증 헤더와 조건부 요청2</a>
+    <a href="net-36-proxy-cache.html">강의 39: 프록시 캐시 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: no-cache = "저장은 OK, 쓰기 전 확인 필수" 입니다. no-store와 혼동하지 마세요.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: 프록시 캐시가 Origin 서버에 접근할 수 없을 때 no-cache만 있으면 어떻게 될까요?';
+  }
+}
+</script>
 
 </body>
 </html>

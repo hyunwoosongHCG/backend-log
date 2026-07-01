@@ -16,18 +16,268 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 메서드 활용 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 메서드 활용 —
+    클라이언트가 서버에 데이터를 전달하는 두 가지 방식과 실무 전송 유형 4가지를 파악한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    클라이언트가 서버에 데이터를 보내는 방법은 크게 두 가지다 —
+    <strong>URL 쿼리 파라미터(Query Parameter)</strong>로 보내거나,
+    <strong>HTTP 메시지 바디(Message Body)</strong>에 담아 보내거나.
+    언제 어느 방법을 쓰는지는 "조회냐, 변경이냐"로 갈린다.
+  </p>
+
+  <h2>데이터 전달 방식 2가지</h2>
+
+  <h3>1. 쿼리 파라미터(Query Parameter)를 통한 전송</h3>
+
+  <p>
+    URL 끝에 <code>?key=value</code> 형태로 데이터를 붙여 보내는 방식이다.
+    <strong>GET 요청</strong>에서 주로 사용한다.
+    메시지 바디 없이 URL 자체에 데이터가 드러나기 때문에,
+    검색어·정렬 조건·필터처럼 <strong>"어떤 데이터를 달라"는 조회 조건</strong>을 전달할 때 적합하다.
+  </p>
+
+<pre><code>GET /search?keyword=ruby&sort=latest&page=2 HTTP/1.1
+Host: api.example.com</code></pre>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>URL에 데이터가 그대로 노출된다 → 민감 정보(비밀번호 등)는 절대 사용 금지</li>
+    <li>북마크·공유가 가능하다 → 검색 결과 URL을 그대로 공유할 수 있는 이유</li>
+    <li>브라우저 히스토리·서버 로그에 남는다</li>
+  </ul>
+
+  <h3>2. 메시지 바디(Message Body)를 통한 전송</h3>
+
+  <p>
+    HTTP 요청의 본문(body)에 데이터를 담아 보내는 방식이다.
+    <strong>POST, PUT, PATCH</strong> 요청에서 사용한다.
+    URL에 데이터가 드러나지 않으며, 대용량 데이터와 민감 정보 전송에 적합하다.
+    <strong>회원 가입, 게시글 등록, 주문 처리</strong>처럼 "서버에 리소스를 등록하거나 수정"할 때 쓴다.
+  </p>
+
+<pre><code>POST /members HTTP/1.1
+Host: api.example.com
+Content-Type: application/json
+
+{
+  "username": "hyunwoo",
+  "email": "hw@example.com",
+  "password": "secret123"
+}</code></pre>
+
+  <div class="analogy">
+    <code>useSearchParams()</code>로 URL 쿼리를 읽고 쓰는 것이 바로 쿼리 파라미터 방식이다.
+    검색·필터 UI 상태를 URL에 반영할 때 <code>?keyword=ruby&sort=latest</code>처럼 붙이는 그 값들.
+    반면 <code>fetch('/api/members', { method: 'POST', body: JSON.stringify(form) })</code>처럼
+    body에 담아 보내는 것이 메시지 바디 방식이다. 비밀번호가 URL에 뜨면 안 되는 이유가 바로 여기 있다.
+  </div>
+
+  <h2>실무 전송 유형 4가지</h2>
+
+  <p>두 가지 방식이 실제로 어떤 시나리오로 쓰이는지 4가지 유형으로 정리한다.</p>
+
+  <h3>유형 1. 정적 데이터 조회 (Static Data)</h3>
+
+  <p>
+    이미지·HTML·CSS·JS 파일처럼 쿼리 파라미터 없이 경로만으로 리소스를 가져오는 경우다.
+    데이터를 따로 전달할 필요가 없다.
+  </p>
+
+<pre><code>GET /images/logo.png HTTP/1.1</code></pre>
+
+  <h3>유형 2. 동적 데이터 조회 (Dynamic Data, 쿼리 파라미터)</h3>
+
+  <p>
+    검색, 정렬, 필터처럼 조건에 따라 결과가 달라지는 조회다.
+    쿼리 파라미터로 조건을 전달한다.
+  </p>
+
+<pre><code>GET /articles?category=backend&sort=newest&page=3 HTTP/1.1</code></pre>
+
+  <h3>유형 3. HTML Form 전송</h3>
+
+  <p>
+    브라우저의 <code>&lt;form&gt;</code> 태그로 데이터를 전송하는 방식이다.
+    <strong>HTML Form은 GET과 POST만 지원한다</strong> — PUT, PATCH, DELETE는 form으로 직접 전송 불가.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>method</th>
+        <th>Content-Type</th>
+        <th>바디 형태</th>
+        <th>용도</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>GET</td>
+        <td>—</td>
+        <td>쿼리 파라미터로 변환</td>
+        <td>조회 조건 전달</td>
+      </tr>
+      <tr>
+        <td>POST</td>
+        <td><code>application/x-www-form-urlencoded</code></td>
+        <td><code>key=value&key2=value2</code></td>
+        <td>텍스트 데이터 전송</td>
+      </tr>
+      <tr>
+        <td>POST</td>
+        <td><code>multipart/form-data</code></td>
+        <td>파일 + 텍스트 혼합</td>
+        <td>파일 업로드</td>
+      </tr>
+    </tbody>
+  </table>
+
+<pre><code>&lt;!-- application/x-www-form-urlencoded --&gt;
+&lt;form action="/login" method="POST"&gt;
+  &lt;input name="email" type="email"&gt;
+  &lt;input name="password" type="password"&gt;
+  &lt;button type="submit"&gt;로그인&lt;/button&gt;
+&lt;/form&gt;
+
+&lt;!-- multipart/form-data (파일 포함 시 enctype 필수) --&gt;
+&lt;form action="/upload" method="POST" enctype="multipart/form-data"&gt;
+  &lt;input name="file" type="file"&gt;
+  &lt;input name="description" type="text"&gt;
+  &lt;button type="submit"&gt;업로드&lt;/button&gt;
+&lt;/form&gt;</code></pre>
+
+  <h3>유형 4. HTTP API 전송 (JSON)</h3>
+
+  <p>
+    현대 웹 개발에서 가장 흔한 방식이다.
+    서버-서버 통신, 앱(iOS/Android)-서버, JavaScript AJAX(fetch/axios) 모두 이 유형에 해당한다.
+    <strong>Content-Type: application/json</strong>으로 JSON 데이터를 바디에 담아 보낸다.
+    GET, POST, PUT, PATCH, DELETE 모두 사용 가능하다.
+  </p>
+
+<pre><code>// 프론트엔드에서 하던 바로 그 방식
+const response = await fetch('/api/members', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    username: 'hyunwoo',
+    email: 'hw@example.com'
+  })
+});
+const data = await response.json();</code></pre>
+
+  <p>
+    Rails + Grape API 조합에서 클라이언트가 보내는 방식이 바로 이것이다.
+    Grape 컨트롤러에서 <code>params[:username]</code>으로 받는 그 값이
+    클라이언트가 바디에 담아 보낸 JSON이다.
+  </p>
+
+  <h2>요약 비교표</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>전달 방식</th>
+        <th>HTTP 메서드</th>
+        <th>데이터 위치</th>
+        <th>주요 용도</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>쿼리 파라미터</td>
+        <td>GET (주로)</td>
+        <td>URL 뒤</td>
+        <td>검색·필터·정렬 조건</td>
+      </tr>
+      <tr>
+        <td>메시지 바디 (form-urlencoded)</td>
+        <td>POST</td>
+        <td>바디</td>
+        <td>HTML Form 텍스트 전송</td>
+      </tr>
+      <tr>
+        <td>메시지 바디 (multipart)</td>
+        <td>POST</td>
+        <td>바디</td>
+        <td>HTML Form 파일 업로드</td>
+      </tr>
+      <tr>
+        <td>메시지 바디 (JSON)</td>
+        <td>POST/PUT/PATCH</td>
+        <td>바디</td>
+        <td>API 통신, AJAX, 앱-서버</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>조회 조건</strong>은 쿼리 파라미터(Query Parameter) — URL에 드러나도 되는 값만</li>
+    <li><strong>등록·수정·민감 정보</strong>는 메시지 바디(Message Body) — POST/PUT/PATCH</li>
+    <li>HTML Form은 <strong>GET과 POST만</strong> 지원 → 나머지 메서드는 API 호출로</li>
+    <li>실무 API 통신의 표준은 <strong>application/json + 메시지 바디</strong></li>
+    <li>Content-Type 헤더가 서버에게 "바디를 어떻게 해석할지" 알려주는 열쇠다</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 회원 가입 시 비밀번호를 서버로 전달하는 올바른 방법은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. GET /signup?password=secret123 처럼 쿼리 파라미터로 보낸다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. POST 요청의 메시지 바디(JSON)에 담아 보낸다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. URL 경로에 /signup/secret123 처럼 직접 포함시킨다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 브라우저 쿠키에 먼저 저장한 뒤 서버가 읽어 가게 한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. HTML &lt;form&gt; 태그에서 직접 사용할 수 없는 HTTP 메서드는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. GET</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. POST</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. PATCH</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. GET과 POST 모두</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "Content-Type이 없으면 서버는 어떻게 처리하나요?", "multipart/form-data가 내부적으로 어떻게 생겼나요?",
+    "Grape에서 JSON 바디는 어떻게 파싱되나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-16-http-method-properties.html">← 강의 19: HTTP 메서드의 속성</a>
+    <a href="net-18-api-design-example.html">강의 21: HTTP API 설계 예시 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    result.textContent = '다시 생각해보세요.';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 비밀번호가 URL에 노출되면 안 됩니다. 어디에 숨길 수 있을까요?';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: HTML Form이 지원하는 메서드는 딱 두 가지입니다.';
+  }
+}
+</script>
 
 </body>
 </html>

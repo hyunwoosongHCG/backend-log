@@ -16,18 +16,302 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 상태코드 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 상태코드 —
+    잘못한 쪽이 클라이언트(4xx)인지 서버(5xx)인지 정확히 구분하고,
+    Rails의 rescue_from과 axios 인터셉터로 연결하는 법을 배운다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    4xx는 <strong>클라이언트가 고쳐야 해결</strong>되는 오류(잘못된 요청·인증 없음·권한 없음·없는 리소스),
+    5xx는 <strong>서버가 고쳐야 해결</strong>되는 오류 — 같은 요청을 다시 보내면
+    4xx는 또 실패하지만 5xx는 서버 수리 후 성공할 수 있다.
+  </p>
+
+  <h2>4xx — 클라이언트 오류 (Client Error)</h2>
+
+  <p>
+    클라이언트가 잘못된 형식·데이터·인증을 보낸 경우다.
+    서버는 문제 없이 작동 중이고, <strong>클라이언트가 요청을 고쳐야</strong> 해결된다.
+    재시도해도 같은 실패가 반복된다.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>코드</th>
+        <th>이름</th>
+        <th>의미</th>
+        <th>실무 예시</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>400</strong></td>
+        <td>Bad Request</td>
+        <td>요청 형식·데이터가 잘못됨</td>
+        <td>필수 파라미터 누락, 타입 오류</td>
+      </tr>
+      <tr>
+        <td><strong>401</strong></td>
+        <td>Unauthorized</td>
+        <td>인증(Authentication)이 안 됨</td>
+        <td>토큰 없음·만료, 로그인 필요</td>
+      </tr>
+      <tr>
+        <td><strong>403</strong></td>
+        <td>Forbidden</td>
+        <td>인증은 됐으나 권한(Authorization)이 없음</td>
+        <td>일반 회원이 관리자 페이지 접근</td>
+      </tr>
+      <tr>
+        <td><strong>404</strong></td>
+        <td>Not Found</td>
+        <td>리소스를 찾을 수 없음</td>
+        <td>없는 ID 조회, 잘못된 URL</td>
+      </tr>
+      <tr>
+        <td><strong>422</strong></td>
+        <td>Unprocessable Entity</td>
+        <td>형식은 맞지만 유효성 검증 실패</td>
+        <td>이메일 형식 오류, 중복된 값</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>401 vs 403 — 가장 헷갈리는 구분</h3>
+
+  <p>
+    이름이 "Unauthorized(권한 없음)"이지만 401은 사실 <strong>인증(Authentication)</strong> 문제다.
+    "누구인지 모르겠다 → 로그인해라"는 의미다.
+    403은 "누구인지는 알지만, 이 리소스에는 접근 권한이 없다"는 <strong>인가(Authorization)</strong> 문제다.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th></th>
+        <th>401 Unauthorized</th>
+        <th>403 Forbidden</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>문제</td>
+        <td>인증(Authentication) 미완료</td>
+        <td>인가(Authorization) 거부</td>
+      </tr>
+      <tr>
+        <td>상황</td>
+        <td>로그인 안 됨 · 토큰 만료</td>
+        <td>로그인은 됐으나 접근 권한 없음</td>
+      </tr>
+      <tr>
+        <td>해결</td>
+        <td>로그인 페이지로 이동</td>
+        <td>"권한 없음" 메시지 표시</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="analogy">
+    React Router의 <code>PrivateRoute</code>에서
+    로그인 여부를 확인해 <code>/login</code>으로 보내는 것이 401 처리,
+    로그인은 됐지만 admin 여부를 확인해 "접근 거부" 페이지를 보여주는 것이 403 처리다.
+    Pundit이 권한 거부를 던지면 403, JWT가 만료되면 401.
+  </div>
+
+  <h3>400 vs 422 — 데이터 오류의 세분화</h3>
+
+  <p>
+    400은 요청 자체가 서버가 이해할 수 없는 형식일 때,
+    422는 형식은 올바른 JSON/XML이지만 비즈니스 유효성 검사(validation)를 통과 못 했을 때다.
+    Rails에서는 ActiveRecord 유효성 검사 실패를 422로 응답하는 패턴이 일반적이다.
+  </p>
+
+<pre><code># Rails: 422 Unprocessable Entity (유효성 검사 실패)
+def create
+  user = User.new(user_params)
+  if user.save
+    render json: user, status: :created  # 201
+  else
+    render json: { errors: user.errors }, status: :unprocessable_entity  # 422
+  end
+end</code></pre>
+
+  <h2>5xx — 서버 오류 (Server Error)</h2>
+
+  <p>
+    서버 내부에 문제가 생겨 정상 처리를 못 한 경우다.
+    클라이언트 요청이 올바르더라도 발생한다.
+    서버를 수리하면 같은 요청이 성공할 수 있다.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>코드</th>
+        <th>이름</th>
+        <th>의미</th>
+        <th>실무 예시</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>500</strong></td>
+        <td>Internal Server Error</td>
+        <td>서버 내부의 예상치 못한 오류</td>
+        <td>처리되지 않은 예외, nil 역참조</td>
+      </tr>
+      <tr>
+        <td><strong>503</strong></td>
+        <td>Service Unavailable</td>
+        <td>서버가 일시적으로 요청 처리 불가</td>
+        <td>점검 중, 트래픽 과부하</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>500 — 잘못 쓰기 쉬운 코드</h3>
+
+  <p>
+    500은 <strong>정말 서버 로직 오류일 때만</strong> 써야 한다.
+    비즈니스 규칙상 "처리 불가" 상황(잔액 부족, 중복 신청 등)에 500을 쓰면 안 된다.
+    그런 경우는 4xx(주로 422 또는 409 Conflict)가 맞다.
+    500을 모든 오류에 남발하면 모니터링에서 진짜 서버 장애를 발견하기 어려워진다.
+  </p>
+
+<pre><code># 잘못된 예: 비즈니스 오류에 500 사용
+def transfer
+  if balance < amount
+    render json: { error: '잔액 부족' }, status: 500  # ❌ 잘못됨
+  end
+end
+
+# 올바른 예: 비즈니스 오류는 4xx
+def transfer
+  if balance < amount
+    render json: { error: '잔액 부족' }, status: :unprocessable_entity  # 422 ✓
+  end
+end</code></pre>
+
+  <h2>Rails rescue_from — 상태코드 자동 매핑</h2>
+
+  <p>
+    Rails와 Grape에서는 <code>rescue_from</code>으로 예외 클래스를 상태코드와 연결한다.
+    이렇게 하면 컨트롤러마다 <code>begin/rescue</code>를 쓰지 않아도 된다.
+  </p>
+
+<pre><code># Rails: ApplicationController에 전역 예외 처리 등록
+class ApplicationController < ActionController::API
+  rescue_from ActiveRecord::RecordNotFound do |exception|
+    render json: { error: exception.message }, status: :not_found  # 404
+  end
+
+  rescue_from Pundit::NotAuthorizedError do |exception|
+    render json: { error: '접근 권한이 없습니다' }, status: :forbidden  # 403
+  end
+
+  rescue_from ActiveRecord::RecordInvalid do |exception|
+    render json: { errors: exception.record.errors }, status: :unprocessable_entity  # 422
+  end
+end</code></pre>
+
+  <h2>프론트 axios 인터셉터 — 상태코드 분기</h2>
+
+<pre><code>// 프론트: axios 인터셉터로 상태코드별 처리
+axios.interceptors.response.use(
+  (response) => response,  // 2xx → 통과
+  (error) => {
+    const status = error.response?.status;
+
+    if (status === 401) {
+      // 인증 없음 → 로그인 페이지로
+      store.dispatch('logout');
+      router.push('/login');
+    } else if (status === 403) {
+      // 권한 없음 → 토스트 메시지
+      toast.error('접근 권한이 없습니다.');
+    } else if (status === 404) {
+      toast.error('요청한 리소스를 찾을 수 없습니다.');
+    } else if (status === 422) {
+      // 유효성 검사 실패 → 에러 메시지 표시
+      const errors = error.response.data.errors;
+      displayValidationErrors(errors);
+    } else if (status >= 500) {
+      toast.error('서버에 문제가 발생했습니다. 잠시 후 다시 시도해주세요.');
+    }
+
+    return Promise.reject(error);
+  }
+);</code></pre>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>400</strong>: 요청 형식·데이터 오류 (클라이언트가 고쳐야)</li>
+    <li><strong>401</strong>: 인증(Authentication) 없음 → 로그인 유도</li>
+    <li><strong>403</strong>: 인가(Authorization) 거부 → 권한 없음 메시지</li>
+    <li><strong>404</strong>: 리소스 없음 — Rails <code>RecordNotFound</code>와 자연스럽게 매핑</li>
+    <li><strong>422</strong>: 유효성 검사 실패 — ActiveRecord <code>RecordInvalid</code>에 적합</li>
+    <li><strong>500</strong>: 진짜 서버 로직 오류만 — 비즈니스 오류에 남발 금지</li>
+    <li><strong>503</strong>: 서버 일시 불가 — 점검·과부하</li>
+    <li>Rails <code>rescue_from</code> + 프론트 axios 인터셉터로 계층별 처리</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 로그인한 일반 회원이 관리자 전용 API에 접근할 때 서버가 반환해야 할 가장 적합한 상태코드는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 401 — 인증이 되지 않아 접근할 수 없다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 403 — 인증은 됐으나 권한이 없다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 404 — 관리자 리소스가 존재하지 않는다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 500 — 서버에서 처리 불가능한 오류다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. Rails에서 비즈니스 규칙상 "잔액 부족으로 처리 불가"일 때 올바른 상태코드는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 200 OK — 처리는 안 됐지만 요청은 받았다</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. 404 Not Found — 해당 트랜잭션이 없다</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. 422 Unprocessable Entity — 유효성·비즈니스 오류다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 500 Internal Server Error — 서버 오류로 처리됐다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "Pundit::NotAuthorizedError는 401과 403 중 어느 쪽인가요?", "422와 400을 어떤 기준으로 나누나요?", "503에 Retry-After 헤더를 어떻게 추가하나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-22-status-3xx-redirect-2.html">← 강의 25: 3xx 리다이렉션2</a>
+    <a href="net-24-header-overview.html">강의 27: HTTP 헤더 개요 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 로그인(인증)은 완료됐지만 접근 권한(인가)이 없는 상황입니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: 비즈니스 규칙 위반은 서버 오류(5xx)가 아니라 클라이언트가 고쳐야 할 오류(4xx)입니다.';
+  }
+}
+</script>
 
 </body>
 </html>

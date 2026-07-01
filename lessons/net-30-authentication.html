@@ -16,18 +16,117 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 일반 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 일반 — 클라이언트가 인증 정보를 전달하는 Authorization과 서버가 인증 방법을 안내하는 WWW-Authenticate를 파악한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    클라이언트는 <strong>Authorization</strong> 헤더로 "나는 누구다"를 증명하고,
+    서버는 <strong>WWW-Authenticate</strong> 헤더로 "이렇게 증명해라"고 안내한다.
+  </p>
+
+  <h2>Authorization — 인증 정보 전달</h2>
+
+  <p>
+    클라이언트가 서버에 <strong>인증 자격증명(Credentials)</strong>을 전달하는 요청 헤더다.
+    인증 방식마다 값의 형식이 다르다.
+  </p>
+
+<pre><code>Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Basic dXNlcjpwYXNzd29yZA==</code></pre>
+
+  <ul>
+    <li><strong>Bearer</strong>: JWT(JSON Web Token) 기반 인증에서 사용. 현대 API의 표준.</li>
+    <li><strong>Basic</strong>: <code>username:password</code>를 Base64로 인코딩한 값. 오래된 방식이며 HTTPS 없이 쓰면 위험하다.</li>
+  </ul>
+
+  <div class="analogy">
+    프론트에서 Axios나 fetch로 API를 호출할 때 매 요청마다 붙이는 바로 그 헤더다.
+    <code>axios.defaults.headers.common['Authorization'] = `Bearer ${token}`</code>처럼
+    로그인 후 저장한 JWT를 모든 요청에 자동으로 첨부한 경험이 있을 것이다.
+    서버(Rails/Grape)는 이 헤더를 읽어 누가 요청했는지 확인한다.
+    Grape API에서는 <code>headers['Authorization']</code>으로 접근하거나
+    Devise/JWT 미들웨어가 자동으로 파싱한다.
+  </div>
+
+  <h2>WWW-Authenticate — 인증 방법 안내</h2>
+
+  <p>
+    서버가 클라이언트에게 <strong>어떤 방식으로 인증해야 하는지</strong>를 알려주는 응답 헤더다.
+    반드시 <code>401 Unauthorized</code> 응답과 함께 전달된다.
+  </p>
+
+<pre><code>HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer realm="example", error="invalid_token"</code></pre>
+
+  <p>
+    이 헤더를 받은 클라이언트는 "아, Bearer 토큰 방식으로 인증해야 하는구나"를 알 수 있다.
+    브라우저는 이 헤더를 받으면 기본 인증 팝업을 띄우거나, JS 코드가 로그인 페이지로 리다이렉트하는 방식으로 처리한다.
+  </p>
+
+  <h2>인증 흐름 정리</h2>
+
+  <div class="flow">
+    <div class="flow-step">클라이언트가 인증 없이 보호된 리소스 요청</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">서버: <code>401 Unauthorized</code> + <code>WWW-Authenticate: Bearer realm="api"</code></div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">클라이언트가 로그인 후 토큰 획득</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">재요청: <code>Authorization: Bearer eyJhbG...</code></div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">서버: <code>200 OK</code> + 요청한 리소스 반환</div>
+  </div>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>Authorization</strong>: 요청 헤더 — 클라이언트가 인증 자격증명 전달 (Bearer, Basic 등)</li>
+    <li><strong>WWW-Authenticate</strong>: 응답 헤더 — 401과 함께 인증 방법 안내</li>
+    <li>인증 방식(Bearer/Basic 등)마다 <code>Authorization</code> 헤더 값의 형식이 다르다</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 서버가 클라이언트에게 "JWT Bearer 토큰으로 인증하라"고 알려줄 때 사용하는 헤더와 상태코드 조합은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. Authorization 헤더 + 200 OK           </button></li>
+      <li><button onclick="answer(this,'q1',false)">B. Authorization 헤더 + 401 Unauthorized  </button></li>
+      <li><button onclick="answer(this,'q1',true)">C. WWW-Authenticate 헤더 + 401 Unauthorized</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. WWW-Authenticate 헤더 + 403 Forbidden  </button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "Bearer와 Basic의 보안 차이는 무엇인가요?", "Rails에서 JWT 인증은 어떻게 구현하나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <span>강의 33: 인증</span>
+    <a href="net-31-cookie.html">강의 34: 쿠키 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: "서버 → 클라이언트에게 방법을 알려주는" 헤더이고, 아직 인증이 안 됐을 때의 상태코드를 생각해보세요.';
+  }
+}
+</script>
 
 </body>
 </html>

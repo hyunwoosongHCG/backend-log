@@ -16,18 +16,230 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 상태코드 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 상태코드 —
+    PRG 패턴으로 새로고침 중복 제출을 막는 법과, 304 Not Modified로 캐시를 활용하는 법을 배운다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    PRG(Post/Redirect/Get) 패턴은 POST 결과를 GET 페이지로 리다이렉트해
+    <strong>새로고침 시 중복 제출을 원천 차단</strong>하고,
+    304 Not Modified는 "변한 게 없으면 캐시를 써"라는 신호로
+    <strong>불필요한 데이터 전송을 없앤다</strong>.
+  </p>
+
+  <h2>새로고침 중복 제출 문제</h2>
+
+  <p>
+    브라우저는 새로고침(F5)을 누르면 <strong>마지막 HTTP 요청을 재전송</strong>한다.
+    만약 마지막 요청이 <code>POST /orders</code>(주문 생성)였다면,
+    새로고침마다 주문이 또 생성된다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">사용자 → <code>POST /orders</code> (주문 생성)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">서버 → <code>200 OK</code> + 주문 완료 HTML</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">사용자 새로고침 → 브라우저가 <code>POST /orders</code> 재전송 ⚠️</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">서버 → 주문 또 생성됨 (중복!)</div>
+  </div>
+
+  <h2>PRG(Post/Redirect/Get) 패턴</h2>
+
+  <p>
+    POST 처리 후 3xx로 리다이렉트하면, 마지막 요청이 GET이 된다.
+    이후 새로고침해도 GET만 재전송되므로 중복 제출이 일어나지 않는다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">사용자 → <code>POST /orders</code> (주문 생성)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">서버 → <code>302 Found</code> (또는 303) + <code>Location: /orders/123</code></div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">브라우저 → <code>GET /orders/123</code> 자동 요청</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">서버 → <code>200 OK</code> + 주문 상세 HTML</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">사용자 새로고침 → <code>GET /orders/123</code> 재전송 (안전)</div>
+  </div>
+
+  <div class="analogy">
+    React에서 <code>axios.post('/orders')</code> 후 <code>router.push('/orders/123')</code>로 이동하는 패턴이 바로 PRG다.
+    클라이언트 라우팅으로 구현하면 실제로 HTTP 리다이렉션이 일어나지 않지만,
+    "POST 결과를 GET 페이지로 보낸다"는 의도는 동일하다.
+    전통적인 MPA(Multi-Page Application)에서는 서버가 3xx로 PRG를 직접 처리한다.
+  </div>
+
+  <h3>Rails에서 PRG 구현</h3>
+
+<pre><code># Rails MPA 방식: PRG 패턴
+class OrdersController < ApplicationController
+  def create
+    order = Order.create!(order_params)
+    # POST 완료 → GET 상세 페이지로 리다이렉트 (PRG)
+    redirect_to order_path(order), status: :see_other  # 303
+  end
+end
+
+# API 모드(SPA)라면 201 Created로 응답하고,
+# 프론트 JS가 router.push()로 이동한다.</code></pre>
+
+  <p>
+    302와 303 중 어느 것을 써도 대부분 브라우저에서 GET으로 변환되지만,
+    <strong>303 See Other</strong>는 "GET으로 바꾸라"는 의미를 명시적으로 담고 있어
+    PRG 패턴에 의미상 더 정확하다.
+  </p>
+
+  <h2>304 Not Modified — 캐시 재사용</h2>
+
+  <p>
+    304는 리다이렉션 계열(3xx)이지만 "다른 주소로 이동"이 아니라
+    <strong>"리소스가 변경되지 않았으니 캐시를 써"</strong>라는 캐시 목적 코드다.
+  </p>
+
+  <h3>동작 원리</h3>
+
+  <p>
+    브라우저는 서버로부터 리소스를 받을 때 <code>ETag</code>나 <code>Last-Modified</code>를 함께 저장한다.
+    다음 요청 시 <code>If-None-Match</code> 또는 <code>If-Modified-Since</code> 헤더에 이 값을 담아 보낸다.
+    서버가 확인했을 때 리소스가 변경되지 않았으면 <strong>304</strong>를 반환하고
+    응답 바디는 보내지 않는다. 브라우저는 캐시에 저장된 데이터를 그대로 사용한다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">첫 번째 요청 → <code>GET /api/products</code></div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">서버 → <code>200 OK</code> + 바디 + <code>ETag: "abc123"</code></div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">두 번째 요청 → <code>GET /api/products</code> + <code>If-None-Match: "abc123"</code></div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">서버 → 리소스 미변경 확인 → <code>304 Not Modified</code> (바디 없음)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">브라우저 → 캐시 데이터 사용 (네트워크 절약)</div>
+  </div>
+
+  <p>
+    304 응답에는 <strong>메시지 바디가 없다</strong>. 바디를 실어 보내면 캐시 절약이 의미가 없다.
+  </p>
+
+  <h3>Rails에서 조건부 GET</h3>
+
+<pre><code># Rails: 304 Not Modified 자동 처리
+def show
+  @product = Product.find(params[:id])
+  # updated_at 기반으로 304 자동 판단
+  if stale?(@product)
+    render json: @product  # 변경됐으면 200 + 바디
+  end
+  # stale?가 false이면 Rails가 자동으로 304 반환
+end</code></pre>
+
+  <h2>3xx 전체 정리</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>코드</th>
+        <th>종류</th>
+        <th>메서드</th>
+        <th>주요 용도</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>301</strong></td>
+        <td>영구</td>
+        <td>GET으로 변경 가능</td>
+        <td>도메인·경로 영구 이전</td>
+      </tr>
+      <tr>
+        <td><strong>308</strong></td>
+        <td>영구</td>
+        <td>유지</td>
+        <td>메서드 보장하며 영구 이전</td>
+      </tr>
+      <tr>
+        <td><strong>302</strong></td>
+        <td>일시</td>
+        <td>GET으로 변경 가능</td>
+        <td>일반적인 일시 리다이렉트</td>
+      </tr>
+      <tr>
+        <td><strong>307</strong></td>
+        <td>일시</td>
+        <td>유지</td>
+        <td>메서드 보장하며 일시 이동</td>
+      </tr>
+      <tr>
+        <td><strong>303</strong></td>
+        <td>일시</td>
+        <td>GET으로 명시적 변경</td>
+        <td>PRG 패턴</td>
+      </tr>
+      <tr>
+        <td><strong>304</strong></td>
+        <td>캐시</td>
+        <td>-</td>
+        <td>변경 없음, 캐시 사용</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. PRG 패턴에서 POST 이후 303으로 리다이렉트할 때, 새로고침 중복 제출이 방지되는 이유는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 브라우저가 POST 요청의 캐시를 삭제하기 때문이다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 새로고침 시 마지막 요청인 GET만 재전송되기 때문이다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 서버가 POST 중복 요청을 자동으로 거부하기 때문이다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 303은 새로고침 동작 자체를 브라우저에서 막기 때문이다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 304 Not Modified 응답의 특징으로 올바른 것은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 응답 바디에 변경된 부분만 담아 보낸다</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. Location 헤더로 새 주소를 알려주는 리다이렉션이다</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. 응답 바디가 없고 브라우저는 캐시를 그대로 쓴다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 서버가 리소스를 찾지 못했을 때 반환하는 코드다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "SPA(React)에서는 PRG가 필요 없나요?", "ETag는 서버에서 어떻게 생성하나요?", "302와 303 중 뭘 써야 하나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-21-status-3xx-redirect-1.html">← 강의 24: 3xx 리다이렉션1</a>
+    <a href="net-23-status-4xx-5xx.html">강의 26: 4xx 클라이언트 오류, 5xx 서버 오류 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 리다이렉트 후 브라우저의 "마지막 요청"이 무엇인지 생각해보세요.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: 304는 캐시 목적 코드로, 불필요한 데이터 전송을 줄이는 것이 목적입니다.';
+  }
+}
+</script>
 
 </body>
 </html>

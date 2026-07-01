@@ -16,18 +16,187 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 메서드 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 메서드 — API URI 설계의 핵심, 리소스(Resource) 식별을 이해한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    좋은 API URI는 <strong>동작(행위)이 아니라 리소스(자원) 그 자체</strong>를 표현하고,
+    행위는 HTTP 메서드로 구분한다.
+  </p>
+
+  <h2>나쁜 URI vs 좋은 URI</h2>
+
+  <p>
+    처음 API를 설계할 때 흔히 이렇게 만든다:
+  </p>
+
+<pre><code># 나쁜 예 — URI에 동작이 들어있다
+GET  /get-members
+POST /create-member
+POST /modify-member/1
+GET  /delete-member/1</code></pre>
+
+  <p>
+    이게 왜 문제일까? URI는 <strong>리소스(Resource)를 식별하는 주소</strong>다.
+    "회원을 등록한다", "회원을 삭제한다"는 동작(행위)이지 리소스가 아니다.
+    리소스는 <strong>"회원"이라는 개념 자체</strong>다.
+  </p>
+
+  <p>
+    동작을 URI에서 빼고, 행위를 HTTP 메서드로 표현하면:
+  </p>
+
+<pre><code># 좋은 예 — URI는 리소스, 행위는 메서드로
+GET    /members        # 회원 목록 조회
+GET    /members/{id}   # 특정 회원 조회
+POST   /members        # 회원 등록
+PUT    /members/{id}   # 회원 수정 (전체 대체)
+PATCH  /members/{id}   # 회원 수정 (일부 변경)
+DELETE /members/{id}   # 회원 삭제</code></pre>
+
+  <h2>리소스(Resource) 식별이란?</h2>
+
+  <p>
+    URI에서 가장 중요한 것은 <strong>리소스를 식별</strong>하는 것이다.
+  </p>
+
+  <ul>
+    <li><strong>리소스(Resource)</strong>: 회원, 주문, 상품 — "무엇"에 해당하는 개념 그 자체</li>
+    <li><strong>행위(Behavior)</strong>: 조회, 등록, 수정, 삭제 — "어떻게 할 것인가"</li>
+  </ul>
+
+  <p>
+    URI는 리소스만 표현한다. 행위는 HTTP 메서드(GET, POST, PUT, PATCH, DELETE)에 맡긴다.
+  </p>
+
+  <h2>컬렉션(Collection): 왜 복수형인가?</h2>
+
+  <p>
+    <code>/member</code>가 아니라 <code>/members</code>인 이유가 있다.
+    API에서는 계층 구조의 상위 자원을 <strong>컬렉션(Collection)</strong>이라 부르고,
+    복수형을 사용하는 것이 관례다.
+  </p>
+
+<pre><code>/members       ← 회원 전체 컬렉션
+/members/1     ← 컬렉션 중 id=1인 특정 회원</code></pre>
+
+  <h2>컨트롤 URI: 어쩔 수 없는 예외</h2>
+
+  <p>
+    완벽한 RESTful이 안 될 때가 있다. 예를 들어 "주문을 배달 시작 처리"는
+    어떤 리소스, 어떤 메서드로 표현해야 할까?
+    이럴 때는 <strong>컨트롤 URI(Control URI)</strong>를 사용한다 — 동사로 된 URI를 예외적으로 허용한다.
+  </p>
+
+<pre><code>POST /orders/{orderId}/start-delivery   # 배달 시작
+POST /members/{id}/block                # 회원 차단
+POST /payments/{id}/cancel              # 결제 취소</code></pre>
+
+  <p>
+    이는 "리소스 중심 URI" 원칙의 <em>예외</em>다. 어떤 메서드로도 행위를 표현할 수 없을 때,
+    컨트롤 URI로 해결하고 최대한 POST를 쓰는 것이 관례다.
+  </p>
+
+  <div class="analogy">
+    React Router에서 경로를 이렇게 설계하지 않는가: <code>/users</code>, <code>/users/:id</code>, <code>/users/:id/settings</code>.
+    행위를 경로에 담지 않고 컴포넌트가 <em>무엇</em>인지를 표현하는 것과 같다.
+    Rails의 <code>resources :members</code> 한 줄이 만들어주는 7개 라우트도 이 원칙 그대로다 —
+    URI는 리소스, 행위는 HTTP 메서드.
+  </div>
+
+  <h2>Rails resources 라우트와 대조</h2>
+
+  <p>
+    Rails에서 <code>resources :members</code>를 선언하면 자동으로 생성되는 라우트:
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>HTTP 메서드</th>
+        <th>URI</th>
+        <th>Rails 액션</th>
+        <th>의미</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>GET</td><td>/members</td><td>index</td><td>목록 조회</td></tr>
+      <tr><td>GET</td><td>/members/:id</td><td>show</td><td>단건 조회</td></tr>
+      <tr><td>POST</td><td>/members</td><td>create</td><td>등록</td></tr>
+      <tr><td>GET</td><td>/members/new</td><td>new</td><td>등록 폼</td></tr>
+      <tr><td>GET</td><td>/members/:id/edit</td><td>edit</td><td>수정 폼</td></tr>
+      <tr><td>PATCH/PUT</td><td>/members/:id</td><td>update</td><td>수정</td></tr>
+      <tr><td>DELETE</td><td>/members/:id</td><td>destroy</td><td>삭제</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    이 7개 라우트가 REST의 기본 패턴이다. URI는 리소스, 행위는 메서드로 분리되어 있다.
+  </p>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>URI 설계의 핵심 = <strong>리소스(Resource) 식별</strong>. 동작은 URI에 담지 않는다</li>
+    <li>행위는 <strong>HTTP 메서드</strong>(GET/POST/PUT/PATCH/DELETE)로 표현한다</li>
+    <li>상위 자원은 <strong>복수형 컬렉션</strong>으로 표기: <code>/member</code> → <code>/members</code></li>
+    <li>메서드로 표현 불가능한 행위는 <strong>컨트롤 URI</strong>로 예외 처리 (동사 URI + POST)</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 다음 중 RESTful URI 설계 원칙에 가장 맞는 것은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. POST /delete-member/1 로 삭제 처리</button></li>
+      <li><button onclick="answer(this,'q1',false)">B. GET /get-members 로 목록 조회 처리</button></li>
+      <li><button onclick="answer(this,'q1',true)">C. DELETE /members/1 로 회원 삭제 처리</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. POST /members/create 로 회원 등록 처리</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. "주문 배달 시작" 처럼 HTTP 메서드만으로 행위를 표현하기 어려울 때 쓰는 방법은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. GET 메서드에 행위를 쿼리스트링으로 담는다</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. 동사가 포함된 컨트롤 URI를 예외로 허용한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. 새로운 HTTP 메서드를 직접 정의해서 사용한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 단수형 URI로 바꿔서 충돌을 피한다는 걸 선택</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "Rails의 resources가 만드는 7개 라우트 중 new/edit는 왜 있나요?", "컨트롤 URI를 남용하면 어떤 문제가 생기나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <span>강의 16: HTTP API를 만들어보자</span>
+    <a href="net-14-get-post.html">강의 17: GET, POST →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(function(button) { button.disabled = true; });
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: URI에 동사(delete, get, create)가 들어가야 할까요, 아니면 메서드가 행위를 담당해야 할까요?';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: REST 원칙의 예외로 허용되는 패턴이 있습니다. 동사를 URI에 담는 방식입니다.';
+  }
+}
+</script>
 
 </body>
 </html>

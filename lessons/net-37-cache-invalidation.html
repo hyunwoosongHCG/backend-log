@@ -16,18 +16,218 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 캐시 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 캐시 — 절대 캐시되면 안 되는 자원을 확실히 막는 방법을 배운다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    통장 잔고처럼 <strong>반드시 최신값이어야 하는</strong> 응답에는
+    <code>Cache-Control: no-cache, no-store, must-revalidate</code>와
+    <code>Pragma: no-cache</code>를 조합해야 오래된 데이터가 절대 표시되지 않는다.
+  </p>
+
+  <h2>왜 캐시 무효화가 필요한가</h2>
+
+  <p>
+    지금까지 배운 캐시는 "자원을 저장해두고 재사용해 빠르게"가 목적이었다.
+    그런데 캐시가 있으면 안 되는 자원도 있다.
+  </p>
+
+  <ul>
+    <li>통장 잔고 — 1초 전 금액이 표시되면 큰일</li>
+    <li>로그인 세션 정보 — 로그아웃 후에도 이전 응답이 남으면 보안 문제</li>
+    <li>재고 수량, 주문 상태 — 항상 실시간 값이어야 함</li>
+  </ul>
+
+  <p>
+    이런 자원에 아무 캐시 헤더도 안 붙이면 될까?
+    브라우저나 프록시 캐시가 임의로 캐시하는 경우가 있어서 그것만으로는 부족하다.
+    명시적으로 "캐시하지 말라"고 알려줘야 한다.
+  </p>
+
+  <h2>캐시 무효화 완전 처방</h2>
+
+<pre><code>Cache-Control: no-cache, no-store, must-revalidate
+Pragma: no-cache</code></pre>
+
+  <p>
+    네 가지를 모두 쓰는 이유를 하나씩 살펴본다.
+  </p>
+
+  <h3>no-store — 저장 자체를 금지</h3>
+
+  <p>
+    응답을 캐시 저장소에 절대 저장하지 말라는 지시다.
+    메모리 캐시, 디스크 캐시 모두 포함된다.
+    이것이 가장 강력한 지시어지만, 단독으로는 하위 호환이 불완전하다.
+  </p>
+
+  <h3>no-cache — 저장돼 있어도 반드시 검증</h3>
+
+  <p>
+    만약 어떤 이유로 캐시가 저장됐더라도, 사용 전 반드시 Origin 서버에 검증하라는 지시다.
+    <code>no-store</code>와 조합하면 저장도 안 되고, 혹시 저장됐더라도 못 쓴다.
+  </p>
+
+  <h3>must-revalidate — Origin 장애 시에도 오래된 캐시 차단</h3>
+
+  <p>
+    이것이 핵심이다.
+    <code>no-cache</code>만 있을 때 Origin 서버가 일시 장애라면
+    프록시가 오래된 캐시를 <code>200 OK</code>로 내보낼 수 있다.
+    <code>must-revalidate</code>는 그 경우 반드시 <code>504 Gateway Timeout</code>을 강제한다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">클라이언트: 잔고 조회 요청</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">프록시: Origin 서버에 검증 시도 → 하지만 Origin 장애!</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>no-cache만일 때</strong>: 프록시가 오래된 캐시를 200으로 반환 → 잘못된 잔고 표시
+    </div>
+    <div class="flow-arrow">↓ 또는</div>
+    <div class="flow-step">
+      <strong>must-revalidate 있을 때</strong>: 504 Gateway Timeout → 오류는 나지만 오래된 값은 절대 표시 안 됨
+    </div>
+  </div>
+
+  <h3>Pragma: no-cache — HTTP 1.0 하위 호환</h3>
+
+  <p>
+    <code>Cache-Control</code>은 HTTP 1.1에서 도입됐다.
+    HTTP 1.0만 이해하는 구형 프록시 서버는 이 헤더를 무시할 수 있다.
+    <code>Pragma: no-cache</code>는 HTTP 1.0 시대의 캐시 금지 지시어다.
+    현대 환경에서 사실상 거의 필요 없지만, 완전한 무효화를 위해 함께 보내는 것이 표준 관행이다.
+  </p>
+
+  <h2>캐시 전략 전체 맵</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>자원 종류</th>
+        <th>권장 Cache-Control</th>
+        <th>이유</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>정적 파일 (해시 파일명)</td>
+        <td><code>public, max-age=31536000, immutable</code></td>
+        <td>파일명이 바뀌면 URL이 바뀌므로 무효화는 URL이 담당</td>
+      </tr>
+      <tr>
+        <td>index.html (SPA 진입점)</td>
+        <td><code>no-cache</code></td>
+        <td>항상 최신 JS·CSS 파일 목록을 가져와야 함</td>
+      </tr>
+      <tr>
+        <td>API 응답 (공개 데이터)</td>
+        <td><code>public, max-age=60</code></td>
+        <td>수십 초 단위 캐시 허용</td>
+      </tr>
+      <tr>
+        <td>API 응답 (개인 데이터)</td>
+        <td><code>private, max-age=60</code></td>
+        <td>프록시에 저장 금지</td>
+      </tr>
+      <tr>
+        <td>민감 데이터 (잔고, 세션 등)</td>
+        <td><code>no-cache, no-store, must-revalidate</code></td>
+        <td>절대 캐시 금지</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="analogy">
+    Rails에서 민감한 API 응답에 캐시를 막으려면 컨트롤러에서 이렇게 쓴다.
+
+<pre><code># app/controllers/accounts_controller.rb
+def balance
+  response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+  response.headers['Pragma'] = 'no-cache'
+  render json: { balance: current_user.balance }
+end</code></pre>
+
+    반대로 정적 자원에는 <code>public/assets/</code>에서 자동으로 긴 max-age가 붙는다.
+    Rails의 <code>config.public_file_server.headers</code>에서 이 동작을 제어할 수 있다.
+    프론트에서 fetch API로 API를 호출할 때 Network 탭에서
+    응답 헤더의 <code>Cache-Control</code> 값을 확인하면 서버가 어떤 캐시 전략을 쓰는지 바로 알 수 있다.
+  </div>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><code>no-store</code>: 캐시 저장 자체 금지</li>
+    <li><code>no-cache</code>: 저장은 하더라도 사용 전 반드시 Origin 검증</li>
+    <li><code>must-revalidate</code>: Origin 장애 시에도 오래된 캐시 반환 금지, 504 강제</li>
+    <li><code>Pragma: no-cache</code>: HTTP 1.0 구형 프록시 하위 호환</li>
+    <li>민감 데이터에는 네 가지 조합을 함께 써야 완전한 무효화가 보장된다</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 민감한 개인 데이터 응답에 <code>no-store</code>만 쓰고 <code>must-revalidate</code>를 생략하면 어떤 문제가 생길 수 있나?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 브라우저가 캐시를 저장해 개인정보가 유출될 수 있다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. Origin 서버 장애 시 프록시가 오래된 캐시를 200으로 반환할 수 있다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. HTTP 1.0 환경에서 캐시가 생성되어 잘못된 값이 표시될 수 있다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 응답 속도가 빨라져 보안 취약점이 노출될 수 있다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. <code>Cache-Control: no-cache, no-store, must-revalidate</code>에서 <code>Pragma: no-cache</code>까지 함께 쓰는 이유는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. Pragma가 있으면 Cache-Control 헤더의 효과가 두 배가 된다</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. 최신 브라우저는 Cache-Control을 무시하므로 Pragma가 필수다</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. HTTP 1.0 시대의 구형 프록시 서버는 Cache-Control을 모르기 때문에 하위 호환을 위해 함께 쓴다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. HTTPS 연결에서는 Cache-Control이 무시되어 Pragma로 대신해야 한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "no-store와 no-cache를 같이 쓰면 어떤 순서로 동작하나요?", "Rails에서 캐시 무효화를 자동으로 설정하는 방법이 있나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-36-proxy-cache.html">← 강의 39: 프록시 캐시</a>
+    <span>강의 40: 캐시 무효화</span>
+  </div>
+
+  <div style="margin-top: 2rem; padding: 1.5rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);">
+    <p style="margin: 0; font-weight: 600;">네트워크 트랙(HTTP 강의)을 모두 마쳤다.</p>
+    <p style="margin: 0.5rem 0 0;">
+      인터넷 통신의 원리부터 시작해 IP·TCP·UDP·HTTP 메서드·상태 코드·헤더·캐시까지,
+      프론트엔드 개발자가 브라우저 뒤에서 벌어지는 일을 이해하는 데 필요한 네트워크 기초를 모두 다뤘다.
+      여기서 배운 내용은 Rails 컨트롤러 응답 설계, API 캐시 전략, 디버깅 시 Network 탭 읽기에 바로 적용할 수 있다.
+    </p>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: must-revalidate가 없을 때 Origin 서버가 다운되면 프록시가 어떻게 행동할까요?';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: Pragma는 HTTP 버전과 관련이 있습니다 — Cache-Control이 도입된 HTTP 버전이 언제인지 생각해보세요.';
+  }
+}
+</script>
 
 </body>
 </html>

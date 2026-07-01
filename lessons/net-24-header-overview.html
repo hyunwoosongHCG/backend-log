@@ -16,18 +16,149 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 일반 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 일반 — HTTP 메시지에서 헤더가 무엇이고 어떤 역할을 하는지 전체 구조를 파악한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    HTTP 헤더(Header)는 <strong>전송에 필요한 모든 부가 정보</strong>를 담는 곳이다.
+    메시지 본문(body)에는 실제 데이터를, 헤더에는 그 데이터를 어떻게 처리할지에 대한
+    <strong>설명(메타데이터)</strong>을 담는다.
+  </p>
+
+  <h2>헤더 필드 형식</h2>
+
+  <p>HTTP 헤더 한 줄의 생김새는 단순하다.</p>
+
+<pre><code>field-name ":" OWS field-value OWS</code></pre>
+
+  <p>
+    <code>OWS</code>는 Optional White Space — 공백이 있어도 되고 없어도 된다는 뜻이다.
+    <code>field-name</code>은 대소문자를 구분하지 않는다.
+  </p>
+
+  <p>실제 HTTP 요청/응답에서 볼 수 있는 헤더 예시다.</p>
+
+<pre><code>Content-Type: text/html;charset=UTF-8
+Content-Length: 3423
+Authorization: Bearer eyJhbGc...
+Accept-Language: ko-KR,ko;q=0.9</code></pre>
+
+  <h2>헤더의 분류</h2>
+
+  <p>
+    HTTP 명세에 정의된 수십 가지 표준 헤더가 있고,
+    각각의 역할로 분류하면 크게 네 가지다.
+  </p>
+
+  <ul>
+    <li><strong>General 헤더</strong>: 요청·응답 양쪽에서 쓸 수 있는 헤더 (예: <code>Date</code>)</li>
+    <li><strong>Request 헤더</strong>: 요청에만 쓰이는 헤더 (예: <code>User-Agent</code>, <code>Accept</code>)</li>
+    <li><strong>Response 헤더</strong>: 응답에만 쓰이는 헤더 (예: <code>Server</code>, <code>WWW-Authenticate</code>)</li>
+    <li><strong>Representation 헤더</strong>: 본문 데이터의 표현 방식을 설명 (예: <code>Content-Type</code>, <code>Content-Length</code>)</li>
+  </ul>
+
+  <h2>임의 헤더도 추가할 수 있다</h2>
+
+  <p>
+    표준 헤더 외에도 <strong>커스텀 헤더</strong>를 마음대로 추가할 수 있다.
+    실무에서는 서비스마다 고유한 추적 헤더나 버전 헤더를 쓰는 경우가 많다.
+  </p>
+
+<pre><code>X-Request-Id: a1b2c3d4
+X-Service-Version: 2.0
+HELLO_WORLD: catsbi</code></pre>
+
+  <p>
+    관례적으로 커스텀 헤더 앞에 <code>X-</code>를 붙이던 시절이 있었지만,
+    RFC 6648(2012)부터 해당 관례는 공식적으로 폐기됐다.
+    현재는 의미 있는 이름을 쓰면 된다.
+  </p>
+
+  <div class="analogy">
+    React <code>fetch()</code>에서 두 번째 인자로 넘기는 <code>headers</code> 객체가 바로 이것이다.
+    <code>{ headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ...' } }</code>
+    본문 데이터가 <strong>무엇인지, 누가 보냈는지</strong>를 서버에 알려주는 역할을 한다.
+    헤더가 없으면 서버는 본문을 받아도 어떻게 처리해야 할지 알 수 없다.
+  </div>
+
+  <h2>RFC 역사: 엔티티 헤더 → 표현 헤더</h2>
+
+  <p>
+    예전 명세(RFC 2616, 1999)에서는 <strong>엔티티 헤더(Entity Header)</strong>와
+    <strong>엔티티 본문(Entity Body)</strong>이라는 용어를 썼다.
+    2014년 RFC 7230~7235로 개정되면서 이 용어가
+    <strong>표현 헤더(Representation Header)</strong>와
+    <strong>표현 데이터(Representation Data)</strong>로 바뀌었다.
+  </p>
+
+  <p>
+    오래된 문서나 블로그에서 "엔티티 헤더"라는 말을 보게 되면 같은 개념이라고 보면 된다.
+    다음 강의부터 표현 헤더를 하나씩 살펴본다.
+  </p>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>헤더 = <strong>메타데이터</strong>. 본문을 어떻게 처리할지 서버·클라에게 알려준다</li>
+    <li>형식: <code>field-name: field-value</code> (공백 허용, 대소문자 무관)</li>
+    <li>표준 헤더 외에 <strong>커스텀 헤더</strong>를 자유롭게 추가할 수 있다</li>
+    <li>RFC 2616의 "엔티티" → RFC 7230+의 <strong>"표현(Representation)"</strong>으로 용어 변경</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. HTTP 헤더의 역할로 가장 적절한 설명은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 실제 응답 데이터(HTML·JSON)를 담는 영역이다   </button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 전송에 필요한 부가 정보(메타데이터)를 담는 영역이다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 오직 요청에만 존재하며 응답에는 없다           </button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 표준 헤더만 사용 가능하고 커스텀 추가는 불가하다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 다음 중 올바른 HTTP 헤더 형식은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. Content-Type = application/json                </button></li>
+      <li><button onclick="answer(this,'q2',false)">B. [Content-Type] application/json               </button></li>
+      <li><button onclick="answer(this,'q2',true)">C. Content-Type: application/json                  </button></li>
+      <li><button onclick="answer(this,'q2',false)">D. Content-Type &gt; application/json            </button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "헤더와 바디는 HTTP 패킷에서 어디서 구분되나요?", "모든 요청에 헤더가 반드시 있나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <span>강의 27: HTTP 헤더 개요</span>
+    <a href="net-25-representation.html">강의 28: 표현 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 헤더는 본문 데이터 자체가 아니라 본문에 대한 설명을 담습니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: HTTP 헤더는 필드명과 값을 특정 구분자로 연결합니다.';
+  }
+}
+</script>
 
 </body>
 </html>

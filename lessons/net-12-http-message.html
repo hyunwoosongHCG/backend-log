@@ -16,18 +16,208 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 기본 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 기본 — 요청과 응답 메시지의 구조를 낱낱이 이해한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    HTTP 메시지는 <strong>start-line / header / 빈 줄 / body</strong>의 4-파트 구조다.
+    프론트에서 매일 보던 DevTools Network 탭의 Headers·Payload·Response 탭이
+    바로 이 구조를 눈에 보이게 펼쳐놓은 것이다.
+  </p>
+
+  <h2>HTTP 메시지의 전체 구조</h2>
+
+  <p>HTTP 메시지에는 두 종류가 있다: <strong>요청(Request)</strong>과 <strong>응답(Response)</strong>.</p>
+
+  <pre><code>// 공통 구조
+start-line      ← 요청: 메서드·경로·버전  /  응답: 버전·상태코드·설명
+header-field    ← 부가 정보 (여러 줄 가능)
+                ← 빈 줄 (CRLF) — 헤더와 바디를 구분하는 경계선
+message-body    ← 실제 데이터 (없을 수도 있음)</code></pre>
+
+  <h2>1. Start-Line (시작 줄)</h2>
+
+  <h3>요청 메시지의 시작 줄 — Request-Line</h3>
+
+  <p>형식: <code>[메서드] [요청 대상] [HTTP 버전] CRLF</code></p>
+
+  <pre><code>GET /search?q=hello&hl=ko HTTP/1.1
+POST /api/users HTTP/1.1
+DELETE /api/posts/42 HTTP/1.1</code></pre>
+
+  <ul>
+    <li><strong>메서드(Method)</strong>: GET·POST·PUT·PATCH·DELETE 등 서버에 할 행동</li>
+    <li><strong>요청 대상(Request-Target)</strong>: 절대 경로 + 쿼리스트링. 예: <code>/search?q=hello&hl=ko</code></li>
+    <li><strong>HTTP 버전(HTTP-Version)</strong>: <code>HTTP/1.1</code>, <code>HTTP/2</code></li>
+  </ul>
+
+  <h3>응답 메시지의 시작 줄 — Status-Line</h3>
+
+  <p>형식: <code>[HTTP 버전] [상태 코드] [이유 문구] CRLF</code></p>
+
+  <pre><code>HTTP/1.1 200 OK
+HTTP/1.1 404 Not Found
+HTTP/1.1 500 Internal Server Error</code></pre>
+
+  <ul>
+    <li><strong>HTTP 버전</strong>: 서버가 지원하는 버전</li>
+    <li><strong>상태 코드(Status-Code)</strong>: 3자리 숫자. 요청 성공/실패/리다이렉트 등</li>
+    <li><strong>이유 문구(Reason-Phrase)</strong>: 상태 코드를 사람이 읽기 쉽게 설명한 문자열</li>
+  </ul>
+
+  <div class="analogy">
+    DevTools Network 탭에서 요청 하나를 클릭하면 보이는 것들이 바로 이 구조다.
+    "General" 섹션의 <code>Request URL</code>·<code>Request Method</code>·<code>Status Code</code>가
+    start-line에 해당하고, "Request Headers" / "Response Headers"가 header에 해당하고,
+    "Request Payload" / "Response" 탭이 body에 해당한다.
+    이미 매일 보고 있었다 — 이제 그 이름을 알게 된 것이다.
+  </div>
+
+  <h2>2. HTTP 헤더 (Header)</h2>
+
+  <p>형식: <code>[필드 이름]: [필드 값]</code></p>
+
+  <pre><code>// 요청 헤더 예시
+Host: www.google.com
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Accept: application/json, text/plain
+
+// 응답 헤더 예시
+Content-Type: application/json; charset=utf-8
+Content-Length: 3423
+Cache-Control: max-age=3600</code></pre>
+
+  <p>
+    헤더에는 <strong>전송에 필요한 모든 부가 정보</strong>가 담긴다.
+    바디 내용의 종류(Content-Type), 크기(Content-Length), 압축 방식(Content-Encoding),
+    인증 정보(Authorization), 캐시 정책(Cache-Control), 브라우저 정보(User-Agent) 등.
+  </p>
+
+  <p>
+    HTTP 표준이 정의한 수십 가지 헤더 외에도,
+    임의의 헤더를 추가할 수 있다.
+  </p>
+
+  <pre><code>// 커스텀 헤더도 가능
+X-Custom-Header: my-value
+X-Request-Id: abc-123</code></pre>
+
+  <h2>3. 빈 줄 (Empty Line / CRLF)</h2>
+
+  <p>
+    헤더와 바디 사이에 반드시 <strong>빈 줄(CRLF, Carriage Return + Line Feed)</strong>이 있어야 한다.
+    이 빈 줄이 "헤더 끝, 바디 시작"을 알리는 경계선이다.
+    빈 줄이 없으면 서버(또는 클라이언트)가 어디부터 바디인지 알 수 없다.
+  </p>
+
+  <h2>4. HTTP Message Body (메시지 바디)</h2>
+
+  <p>
+    실제 전송하려는 <strong>데이터</strong>가 들어간다.
+    byte로 표현할 수 있는 모든 것이 가능하다: HTML·JSON·이미지·영상·파일.
+  </p>
+
+  <pre><code>// JSON 응답 바디 예시
+{
+  "id": 1,
+  "name": "홍길동",
+  "email": "hong@example.com"
+}
+
+// HTML 응답 바디 예시
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+  &lt;head&gt;&lt;title&gt;홈&lt;/title&gt;&lt;/head&gt;
+  &lt;body&gt;안녕하세요&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+  <p>
+    GET 요청처럼 데이터를 보내지 않는 경우 바디가 비어 있어도 된다.
+    반면 POST·PUT·PATCH 요청은 보통 바디에 데이터를 담는다.
+  </p>
+
+  <h2>요청과 응답 메시지 전체 예시</h2>
+
+  <pre><code>// HTTP 요청 메시지
+GET /search?q=hello HTTP/1.1         ← start-line (Request-Line)
+Host: www.google.com                 ← header
+Accept: text/html                    ← header
+                                     ← 빈 줄 (CRLF)
+                                     ← body 없음 (GET은 보통 없음)
+
+// HTTP 응답 메시지
+HTTP/1.1 200 OK                      ← start-line (Status-Line)
+Content-Type: text/html; charset=utf-8  ← header
+Content-Length: 3423                 ← header
+                                     ← 빈 줄 (CRLF)
+&lt;!DOCTYPE html&gt;...                   ← body (실제 HTML 내용)</code></pre>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>HTTP 메시지 구조: <strong>start-line → header → 빈 줄 → body</strong></li>
+    <li>요청 start-line: <code>메서드 경로 HTTP버전</code> (예: <code>GET /users HTTP/1.1</code>)</li>
+    <li>응답 start-line: <code>HTTP버전 상태코드 이유문구</code> (예: <code>HTTP/1.1 200 OK</code>)</li>
+    <li>헤더: 전송에 필요한 부가 정보 전부 (Content-Type, Authorization, Cache-Control 등)</li>
+    <li>빈 줄: 헤더와 바디의 <strong>경계선</strong>, 반드시 필요</li>
+    <li>바디: byte로 표현 가능한 모든 실제 데이터</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. HTTP 메시지에서 헤더와 바디를 구분하는 것은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. Content-Length 헤더 값으로 구분한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">B. 바디 시작 부분에 특수 문자를 넣는다</button></li>
+      <li><button onclick="answer(this,'q1',true)">C. 헤더 다음에 오는 빈 줄(CRLF)이 경계선이다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. Content-Type 헤더가 바디 시작 위치를 알려준다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. <code>HTTP/1.1 404 Not Found</code>에서 "Not Found"의 역할은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 서버가 오류 원인을 분석하는 코드다</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. 클라이언트가 파싱해서 오류 처리에 사용한다</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. 상태 코드를 사람이 읽기 쉽게 설명한 이유 문구다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 다음 요청 URL을 알려주는 힌트 문자열이다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "Content-Type이 없으면 어떻게 되나요?", "GET 요청에도 body를 넣을 수 있나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-11-connectionless.html">← 강의 14: 비 연결성</a>
+    <a href="net-13-http-api-intro.html">강의 16: HTTP API를 만들어보자 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(function(button) { button.disabled = true; });
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: HTTP 명세는 헤더 끝을 표시하는 특별한 빈 줄(CRLF)을 정의합니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: 실제 분기 처리에 쓰는 것은 숫자 코드(404)이고, 문자열은 사람을 위한 설명입니다.';
+  }
+}
+</script>
 
 </body>
 </html>

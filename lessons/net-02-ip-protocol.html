@@ -16,18 +16,182 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · 인터넷 네트워크 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · 인터넷 네트워크 — IP가 무엇이고, 왜 한계가 있으며, 그 한계를 어떻게 극복하는지 이해한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    IP(Internet Protocol)는 인터넷에서 내 컴퓨터의 <strong>논리적 주소</strong>이고,
+    데이터를 <strong>패킷(Packet)</strong> 단위로 목적지까지 전달하는 규칙이다.
+    그러나 IP만으로는 <strong>비연결성·비신뢰성·포트 구분 불가</strong>라는 세 가지 한계가 있어서,
+    그 위에 TCP가 올라가야 실용적인 통신이 된다.
+  </p>
+
+  <h2>IP란 무엇인가</h2>
+
+  <p>
+    앞 강의에서 TCP/IP 4계층의 <strong>③ 인터넷 계층</strong>이 나왔다.
+    IP는 바로 그 계층의 핵심 프로토콜이다.
+  </p>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>네트워크 주소</strong> + <strong>호스트 주소</strong>로 구성 — 전자는 같은 네트워크 구성원이 공유, 후자는 그 안에서 유일한 식별자</li>
+    <li>실제 표현: 32비트 2진수 (IPv4). 예: <code>192.168.0.103</code> = <code>11000000.10101000.00000000.01100111</code></li>
+    <li>약 2<sup>32</sup>(약 43억) 개 생성 가능 — 이미 대부분 소진 → <strong>IPv6</strong>로 대체 진행 중</li>
+  </ul>
+
+  <div class="analogy">
+    배포된 Rails 서버 URL <code>https://api.example.com</code>을 환경변수로 들고 다니는 것처럼,
+    IP 주소는 인터넷 세계에서 그 컴퓨터를 찾아가기 위한 <strong>논리적 주소(로케이터)</strong>다.
+    물리적 위치(건물·랙)가 아니라 "이 네트워크에서 나는 이 번호"라는 약속.
+  </div>
+
+  <h2>패킷(Packet): 데이터를 전달하는 단위</h2>
+
+  <p>
+    IP는 데이터를 <strong>패킷(Packet)</strong> 단위로 쪼개서 전달한다.
+    큰 파일을 한 덩어리로 보내지 않고 여러 패킷으로 나누는 이유는,
+    중간 노드가 처리하기 쉽고 경로를 유연하게 선택할 수 있기 때문이다.
+  </p>
+
+  <p>하나의 패킷 구성:</p>
+
+  <table style="width:100%;border-collapse:collapse;margin:1rem 0;font-size:0.9rem;">
+    <thead>
+      <tr style="background:var(--surface2,#1e1e2e);text-align:left;">
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">구성 요소</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">내용</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">Payload</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">실제 전송할 데이터 한 블록</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">주소지 정보</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">발신지 IP 주소 + 목적지 IP 주소</td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;font-weight:bold;">관리 정보 (Header)</td>
+        <td style="padding:0.5rem 0.75rem;">TTL(수명), 버전, 체크섬 등 전달에 필요한 메타데이터</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="flow">
+    <div class="flow-step">클라이언트 — 패킷 생성 (Payload + 출발 IP + 목적 IP)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">인터넷 노드 A — 목적 IP를 보고 다음 노드 B로 전달 (라우팅)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">인터넷 노드 B → … → 노드 N (hop by hop)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">서버 — 패킷 수신, Payload 꺼냄</div>
+  </div>
+
+  <h2>IP의 한계 3가지</h2>
+
+  <p>
+    IP만으로는 실용적인 통신을 하기에 부족하다. 세 가지 한계가 있다.
+  </p>
+
+  <h3>① 비연결성 (Connectionless)</h3>
+  <p>
+    IP는 패킷을 보내기 전에 "상대가 받을 수 있는 상태인지" 확인하지 않는다.
+    상대 서버가 꺼져 있거나 서비스 불가 상태여도 그냥 전송한다.
+    편지를 상대방이 집에 있든 없든 우편함에 넣고 가는 것과 같다.
+  </p>
+
+  <h3>② 비신뢰성 (Unreliable)</h3>
+  <p>
+    중간 노드에서 패킷이 유실될 수 있고(라우터 과부하 등), 도착 순서도 보장되지 않는다.
+    큰 파일을 패킷 1·2·3으로 나눠 보냈는데 3 → 1 → 2 순서로 도착하거나,
+    2번 패킷이 사라질 수 있다.
+  </p>
+
+  <h3>③ 포트 구분 불가 (Port Ambiguity)</h3>
+  <p>
+    같은 IP 주소를 가진 서버에 HTTP 서버, WebSocket 서버, DB 등 여러 앱이 동시에 떠 있을 수 있다.
+    IP만으로는 "이 패킷이 어느 앱으로 가야 하는지" 구분할 수 없다.
+    → 이 문제는 <strong>PORT</strong>(강의 7)가 해결한다.
+  </p>
+
+  <div class="analogy">
+    프론트에서 <code>fetch()</code>가 네트워크 에러를 던질 때 재시도 로직(<code>retry</code>)을 직접 구현해야 했던 이유가 여기 있다.
+    IP 자체는 "보냈다"만 알지, "잘 받았다"를 보장하지 않는다.
+    TCP가 바로 이 "잘 받았는지 확인"을 IP 위에 추가하는 계층이다.
+  </div>
+
+  <h2>한계를 극복하는 방법: TCP/UDP</h2>
+
+  <p>
+    IP의 한계(비신뢰성·비연결성)를 보완하기 위해 <strong>트랜스포트 계층</strong>에
+    <strong>TCP</strong> 또는 <strong>UDP</strong>를 올린다.
+    자세한 내용은 다음 강의에서 다룬다.
+  </p>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>IP = 인터넷에서 컴퓨터를 찾는 <strong>논리적 주소</strong> (32비트, IPv4 → IPv6 전환 중)</li>
+    <li>데이터 전달 단위 = <strong>패킷</strong> (Payload + 주소지 정보 + 관리 정보)</li>
+    <li>IP의 한계: <strong>비연결성</strong>(수신 여부 미확인), <strong>비신뢰성</strong>(유실·순서 미보장), <strong>포트 구분 불가</strong></li>
+    <li>이 한계를 보완하기 위해 TCP가 IP 위에 올라간다 → 다음 강의</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. IPv4 주소를 올바르게 설명한 것은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 128비트 2진수로 표현되며 무한히 생성 가능하다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 32비트 2진수이며 약 43억 개 생성 가능하고 대부분 소진됐다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 컴퓨터 물리적 위치(건물·방 번호)를 나타내는 주소다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 도메인 이름과 동일하며 사람이 읽기 편하게 만들었다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. IP의 한계로 인해 발생하는 문제가 아닌 것은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 상대방이 오프라인이어도 패킷을 그냥 보내버린다</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. 패킷이 중간에 유실되거나 순서가 바뀔 수 있다</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. 같은 IP 내 여러 앱을 구분하지 못해 속도가 느려진다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 같은 IP 서버의 어느 앱으로 보낼지 알 수 없다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "IPv4가 다 소진됐으면 지금 어떻게 쓰고 있나요?"(→ NAT), "패킷이 유실되면 어떻게 알 수 있나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <span>강의 5: IP(인터넷 프로토콜)</span>
+    <a href="net-03-tcp-udp.html">강의 6: TCP, UDP →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(function(button) { button.disabled = true; });
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: IPv4는 32비트이고, IPv6가 128비트입니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: IP의 한계는 비연결성·비신뢰성·포트 구분 불가이며, 속도는 IP의 한계가 아닙니다.';
+  }
+}
+</script>
 
 </body>
 </html>

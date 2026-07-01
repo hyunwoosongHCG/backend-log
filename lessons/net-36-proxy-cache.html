@@ -16,18 +16,173 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 캐시 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 캐시 — 브라우저와 Origin 서버 사이에 중간 캐시 서버를 두는 이유와 동작을 이해한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    프록시 캐시(Proxy Cache) 서버는 Origin(원본) 서버와 클라이언트 사이에 위치해서
+    <strong>여러 클라이언트가 공유할 수 있는 캐시</strong>를 제공해 응답 시간을 단축하는 중간 서버다.
+  </p>
+
+  <h2>왜 프록시 캐시가 필요한가</h2>
+
+  <p>
+    한국 사용자가 미국에 있는 서버에서 같은 이미지를 수천 명이 각자 요청한다고 하자.
+    브라우저 캐시는 <strong>각자의 PC에만</strong> 저장되기 때문에, 다른 사람이 이미 받은 파일이라도
+    내 PC에는 없으면 나는 다시 미국 서버까지 요청해야 한다.
+  </p>
+
+  <p>
+    프록시 캐시 서버를 한국에 두면 다음과 같이 달라진다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">클라이언트 → 한국 프록시 캐시 서버: <code>GET /banner.png</code></div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      [최초 — 프록시 캐시에 없음]<br>
+      프록시 → 미국 Origin 서버: <code>GET /banner.png</code>
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">Origin → 프록시: <code>200 OK</code> + 이미지 (느림)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">프록시: 이미지를 프록시 캐시에 저장, 클라이언트에게 전달</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      [두 번째 클라이언트]<br>
+      클라이언트 → 프록시: <code>GET /banner.png</code>
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">프록시: 캐시에 있음 → 미국 서버에 가지 않고 바로 응답 (빠름)</div>
+  </div>
+
+  <p>
+    인기 있는 자원일수록 프록시 캐시 히트율이 높아 응답이 빨라진다.
+    유튜브·넷플릭스 같은 서비스가 전 세계에 CDN(Content Delivery Network, 사실상 프록시 캐시)을 두는 이유다.
+  </p>
+
+  <h2>private 캐시 vs public 캐시</h2>
+
+  <p>
+    캐시는 누가 접근할 수 있는지에 따라 두 종류로 나뉜다.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>구분</th>
+        <th>저장 위치</th>
+        <th>접근 범위</th>
+        <th>예시</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>private 캐시</strong></td>
+        <td>브라우저 로컬</td>
+        <td>해당 사용자만</td>
+        <td>브라우저 디스크·메모리 캐시</td>
+      </tr>
+      <tr>
+        <td><strong>public 캐시</strong></td>
+        <td>프록시·CDN 서버</td>
+        <td>여러 사용자 공유</td>
+        <td>CDN, 회사 내부 프록시</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    <code>Cache-Control: public</code>은 프록시·CDN이 이 응답을 캐시해도 된다는 허가다.
+    <code>Cache-Control: private</code>은 브라우저 캐시에만 저장하고 프록시에는 저장하지 말라는 지시다.
+    개인 데이터(로그인 후 마이페이지, 장바구니 등)에는 반드시 <code>private</code>을 써야 한다.
+  </p>
+
+  <h2>Cache-Control: no-cache vs must-revalidate — 프록시 관점</h2>
+
+  <p>
+    이 두 지시어의 차이가 프록시 캐시 맥락에서 가장 뚜렷하게 드러난다(강의 38에서 이미 확인).
+    프록시 캐시가 <strong>Origin 서버와 통신이 끊긴 상황</strong>에서:
+  </p>
+
+  <ul>
+    <li><code>no-cache</code>만 있을 때: 프록시가 임의로 오래된 캐시를 <code>200 OK</code>로 줄 수 있다.</li>
+    <li><code>must-revalidate</code>가 있을 때: 프록시는 반드시 <code>504 Gateway Timeout</code>을 반환해야 한다.</li>
+  </ul>
+
+  <div class="analogy">
+    프론트 개발자에게 CDN은 익숙한 단어다.
+    Vercel, Cloudflare, AWS CloudFront 모두 프록시 캐시 서버다.
+    <code>next.config.js</code>나 응답 헤더에 <code>Cache-Control</code>을 설정할 때
+    "이 헤더가 CDN(public 캐시)에도 영향을 주는구나"라고 이해하면 설정의 의미가 명확해진다.
+    Rails에서 <code>expires_in 1.hour, public: true</code>를 쓰면
+    <code>Cache-Control: public, max-age=3600</code>이 붙어 CDN에도 캐시된다.
+  </div>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>프록시 캐시는 Origin 서버와 클라이언트 사이의 <strong>중간 캐시 서버</strong>다</li>
+    <li>여러 클라이언트가 같은 자원을 공유 → 인기 자원일수록 효과가 크다</li>
+    <li><code>Cache-Control: public</code>: 프록시·CDN 저장 허용</li>
+    <li><code>Cache-Control: private</code>: 브라우저 캐시에만 저장, 프록시에는 저장 금지</li>
+    <li>CDN은 전 세계에 분산된 대규모 프록시 캐시 네트워크다</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 로그인한 사용자의 마이페이지 응답에 올바른 캐시 설정은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. <code>Cache-Control: public, max-age=3600</code></button></li>
+      <li><button onclick="answer(this,'q1',true)">B. <code>Cache-Control: private, max-age=300</code></button></li>
+      <li><button onclick="answer(this,'q1',false)">C. <code>Cache-Control: s-maxage=3600</code></button></li>
+      <li><button onclick="answer(this,'q1',false)">D. <code>Cache-Control: proxy-revalidate</code></button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 프록시 캐시 서버가 응답 시간을 단축하는 원리는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. Origin 서버보다 더 빠른 CPU를 사용해 응답을 더 빨리 생성한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. 클라이언트와 전용 고속 회선으로 직접 연결돼 있다</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. 클라이언트에게 가까운 곳에서 이미 받아둔 자원을 바로 전달해 Origin까지 가지 않아도 된다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 여러 클라이언트의 요청을 묶어 Origin 서버에 한 번에 보내 응답을 압축한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "CDN이 프록시 캐시라면 무효화는 어떻게 하나요?", "Rails에서 public 캐시를 설정하는 방법이 있나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-35-cache-conditional-headers.html">← 강의 38: 캐시와 조건부 요청 헤더</a>
+    <a href="net-37-cache-invalidation.html">강의 40: 캐시 무효화 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 마이페이지는 그 사용자만 볼 수 있는 개인 데이터 — 프록시에 저장되면 다른 사람에게 보일 수 있어요.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: 프록시 캐시의 핵심은 "어디에 있냐"입니다 — Origin보다 클라이언트와 가까운 곳에 자원을 미리 저장해둔다는 점을 생각해보세요.';
+  }
+}
+</script>
 
 </body>
 </html>

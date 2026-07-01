@@ -16,18 +16,163 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · 인터넷 네트워크 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · 인터넷 네트워크 — 도메인 이름이 IP 주소로 바뀌는 DNS 조회 과정을 이해한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    DNS(Domain Name System)는 <strong>도메인 이름 → IP 주소</strong>를 매칭해주는 전화번호부다.
+    IP 주소는 외우기 어렵고 바뀔 수 있으므로, 사람이 기억하기 쉬운 이름으로 IP를 찾아주는
+    <strong>분산형 주소록 서비스</strong>가 필요하다.
+  </p>
+
+  <h2>왜 DNS가 필요한가</h2>
+
+  <p>IP 주소를 직접 쓰면 두 가지 문제가 생긴다.</p>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>
+      <strong>외우기 어렵다</strong>:
+      <code>142.250.196.46</code>보다 <code>google.com</code>이 훨씬 기억하기 쉽다.
+      서비스가 늘어날수록 IP를 직접 관리하는 건 불가능에 가깝다.
+    </li>
+    <li>
+      <strong>IP가 바뀔 수 있다</strong>:
+      서버를 교체하거나 클라우드를 이전하면 IP가 달라진다.
+      IP를 직접 쓰고 있었다면 모든 클라이언트의 설정을 바꿔야 한다.
+      DNS에 등록된 매핑만 업데이트하면 도메인 이름은 그대로 유지된다.
+    </li>
+  </ul>
+
+  <div class="analogy">
+    프론트에서 API 서버 주소를 하드코딩하지 않고 환경변수로 빼두는 것과 같다.
+    <code>VITE_API_URL=https://api.example.com</code>처럼 "이름 → 실제 주소" 매핑을 한 곳에서 관리하면,
+    서버 주소가 바뀌어도 코드 전체를 고칠 필요가 없다. DNS는 인터넷 전체를 대상으로 하는 그 환경변수 서버다.
+  </div>
+
+  <h2>DNS의 동작 원리</h2>
+
+  <p>
+    DNS는 <strong>Key(도메인 이름) / Value(IP 주소)</strong> 쌍을 저장하는 분산 데이터베이스다.
+    <code>google.com → 142.250.196.46</code> 같은 레코드가 전 세계 DNS 서버에 분산 저장돼 있다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">
+      <strong>1. 브라우저에 도메인 입력</strong><br>
+      사용자가 <code>https://google.com</code>을 입력
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>2. DNS 서버에 질의</strong><br>
+      브라우저(또는 OS)가 DNS 서버에 <code>"google.com의 IP가 뭐야?"</code>를 물어봄
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>3. DNS 서버가 IP 응답</strong><br>
+      DNS 서버가 매칭되는 IP 주소 <code>142.250.196.46</code>를 응답
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>4. IP로 접속</strong><br>
+      브라우저가 받은 IP로 실제 HTTP 요청을 보냄
+    </div>
+  </div>
+
+  <h2>실무에서 DNS와 마주치는 순간들</h2>
+
+  <h3>1. 서버 배포 시 도메인 연결</h3>
+  <p>
+    Rails 앱을 AWS EC2에 배포하면 IP 주소(<code>3.34.xx.xx</code>)가 생긴다.
+    이 IP를 DNS 설정에서 도메인(<code>api.myapp.com</code>)과 연결(A 레코드 등록)하면,
+    이후 클라이언트는 도메인으로 접속할 수 있다.
+  </p>
+
+  <h3>2. 환경별 도메인 분리</h3>
+  <p>
+    <code>api.myapp.com</code>은 프로덕션 서버 IP,
+    <code>api-staging.myapp.com</code>은 스테이징 서버 IP로 각각 등록하면,
+    코드 변경 없이 환경을 분리할 수 있다.
+  </p>
+
+  <h3>3. 서버 이전 시 도메인 유지</h3>
+  <p>
+    서버 IP가 바뀌어도 DNS 레코드만 새 IP로 업데이트하면,
+    클라이언트 코드 수정 없이 트래픽이 새 서버로 이동한다.
+    단, DNS 변경이 전 세계에 전파되는 데 시간이 걸린다(TTL 만료까지, 보통 수십 분~수 시간).
+  </p>
+
+  <div class="analogy">
+    Git에서 브랜치 이름(<code>main</code>)이 특정 커밋 해시를 가리키듯,
+    DNS 도메인(<code>google.com</code>)은 특정 IP를 가리킨다.
+    브랜치가 새 커밋으로 이동해도 이름은 그대로이듯,
+    서버 IP가 바뀌어도 도메인 이름은 그대로다.
+    DNS 레코드 업데이트 = 브랜치 포인터 이동.
+  </div>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>DNS = 도메인 이름 → IP 주소를 매칭하는 <strong>분산 주소록 서비스</strong></li>
+    <li>필요한 이유: IP는 <strong>외우기 어렵고 변경될 수 있음</strong> → 도메인으로 추상화</li>
+    <li>동작: 브라우저 → DNS 질의 → IP 응답 → 그 IP로 HTTP 접속</li>
+    <li>실무: 서버 배포 시 A 레코드 등록, 서버 이전 시 레코드 업데이트로 도메인 유지</li>
+    <li>DNS 변경은 전파에 시간이 걸린다 (TTL — Time To Live)</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. DNS가 필요한 이유를 가장 잘 설명한 것은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 패킷 순서를 보장하기 위한 시퀀스 번호가 필요해서</button></li>
+      <li><button onclick="answer(this,'q1',false)">B. IPv4 주소 32비트의 공간이 부족해서 대체 주소 체계로</button></li>
+      <li><button onclick="answer(this,'q1',true)">C. IP는 외우기 어렵고 변경될 수 있어 도메인으로 추상화가 필요해서</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 비연결성 문제를 해결하기 위한 연결 확인 서버가 필요해서</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. Rails 앱을 AWS EC2에 배포한 후 도메인을 연결하려 한다. 올바른 순서는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 도메인을 먼저 구매 → Rails 코드에 도메인 하드코딩 → 서버 재배포</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. EC2 IP를 모든 클라이언트 코드에 직접 입력 → 서버 이전 때마다 반복</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. EC2 배포 → IP 확인 → DNS에 도메인·IP A 레코드 등록 → 전파 대기</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. DNS 서버에 도메인 등록 → EC2에 도메인 설치 → IP 자동 할당</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "DNS 서버는 누가 운영하나요?", "TTL이 뭔가요?", "CNAME 레코드는 A 레코드와 어떻게 다른가요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <span>강의 8: DNS</span>
+    <a href="net-06-uri.html">강의 9: URI →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(function(button) { button.disabled = true; });
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: IP는 숫자라 외우기 어렵고, 서버 이전 시 바뀔 수 있습니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: DNS에 IP를 A 레코드로 등록하고, 전파가 완료될 때까지 기다려야 합니다.';
+  }
+}
+</script>
 
 </body>
 </html>

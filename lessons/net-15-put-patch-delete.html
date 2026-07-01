@@ -16,18 +16,201 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 메서드 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 메서드 — PUT이 "전체 대체"인 이유, 그리고 PATCH가 따로 존재하는 이유를 이해한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    PUT은 리소스를 <strong>완전히 덮어쓰고</strong>, PATCH는 <strong>필요한 필드만 바꾸며</strong>,
+    DELETE는 리소스를 <strong>제거한다</strong> — 세 메서드 모두 클라이언트가 URI를 직접 지정한다.
+  </p>
+
+  <h2>PUT — 리소스를 완전히 대체한다</h2>
+
+  <p>
+    PUT은 <strong>클라이언트가 리소스 URI를 알고 있을 때</strong> 쓴다.
+    해당 URI에 리소스가 있으면 <em>대체(Replace)</em>하고, 없으면 <em>생성(Create)</em>한다.
+  </p>
+
+<pre><code># 회원 1번의 전체 정보를 PUT으로 대체
+PUT /members/1 HTTP/1.1
+Content-Type: application/json
+
+{
+  "name": "김철수",
+  "email": "kim@example.com",
+  "age": 30
+}</code></pre>
+
+  <h3>PUT의 핵심 위험: 필드 누락 = 삭제</h3>
+
+  <p>
+    PUT은 요청 바디의 내용으로 리소스를 <strong>통째로 덮어쓴다</strong>.
+    일부 필드만 보내면 나머지는 사라진다.
+  </p>
+
+<pre><code># 현재 서버의 회원 1번 상태
+{ "name": "김철수", "email": "kim@example.com", "age": 30 }
+
+# age만 수정하려고 PUT 전송 — email을 빼먹었다
+PUT /members/1
+{ "name": "김철수", "age": 31 }
+
+# 결과: email이 사라진다!
+{ "name": "김철수", "age": 31 }   ← email 필드 소멸</code></pre>
+
+  <p>
+    이것이 PUT과 PATCH의 결정적 차이다. PUT은 "부분 수정"이 아니라 "완전 교체"다.
+  </p>
+
+  <h3>POST와의 차이: 클라이언트가 URI를 지정</h3>
+
+  <p>
+    POST로 리소스를 만들 때는 서버가 ID를 결정한다 (<code>POST /members</code>).
+    PUT은 클라이언트가 <strong>정확한 URI를 알고 지정</strong>한다 (<code>PUT /members/1</code>).
+  </p>
+
+  <h2>PATCH — 일부 필드만 변경한다</h2>
+
+  <p>
+    PATCH는 리소스를 <strong>부분적으로</strong> 수정한다.
+    변경하고 싶은 필드만 보내면 나머지는 그대로 유지된다.
+  </p>
+
+<pre><code># age만 수정 — email은 건드리지 않는다
+PATCH /members/1 HTTP/1.1
+Content-Type: application/json
+
+{ "age": 31 }
+
+# 결과: age만 바뀌고 나머지는 유지
+{ "name": "김철수", "email": "kim@example.com", "age": 31 }</code></pre>
+
+  <p>
+    실무에서 수정 API는 대부분 PATCH를 사용한다.
+    전체 객체를 다시 보내는 것보다 변경된 필드만 보내는 것이 효율적이고 안전하기 때문이다.
+  </p>
+
+  <h2>DELETE — 리소스를 삭제한다</h2>
+
+  <p>
+    DELETE는 가장 단순하다. URI로 리소스를 지정하고, 서버가 해당 리소스를 제거한다.
+    요청 바디는 거의 사용하지 않는다.
+  </p>
+
+<pre><code># 회원 1번 삭제
+DELETE /members/1 HTTP/1.1
+Host: api.example.com
+
+# 응답: 204 No Content (삭제 성공, 반환할 바디 없음)
+HTTP/1.1 204 No Content</code></pre>
+
+  <h2>세 메서드 비교</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>메서드</th>
+        <th>역할</th>
+        <th>URI 지정</th>
+        <th>리소스 없을 때</th>
+        <th>멱등</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>PUT</td>
+        <td>전체 대체(Replace)</td>
+        <td>클라이언트 지정</td>
+        <td>새로 생성</td>
+        <td>멱등</td>
+      </tr>
+      <tr>
+        <td>PATCH</td>
+        <td>부분 변경(Partial Update)</td>
+        <td>클라이언트 지정</td>
+        <td>구현마다 다름</td>
+        <td>구현마다 다름</td>
+      </tr>
+      <tr>
+        <td>DELETE</td>
+        <td>삭제(Remove)</td>
+        <td>클라이언트 지정</td>
+        <td>404 또는 무시</td>
+        <td>멱등</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="analogy">
+    React 폼에서 "수정" 버튼을 눌렀을 때 변경된 필드만 서버에 보내는 패턴 — 그게 PATCH다.
+    PUT은 폼의 모든 필드를 항상 포함해서 보내는 것이다.
+    실무에서 Rails의 <code>update</code> 액션은 PATCH와 PUT을 둘 다 받지만,
+    <code>form_with</code>가 기본으로 PATCH를 사용하는 이유가 바로 "부분 수정이 더 안전하기 때문"이다.
+  </div>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>PUT = <strong>완전 대체</strong>. 필드 누락 = 해당 필드 삭제. 클라이언트가 URI 지정</li>
+    <li>PATCH = <strong>부분 수정</strong>. 보낸 필드만 바뀜. 실무에서 수정 API의 기본</li>
+    <li>DELETE = <strong>리소스 제거</strong>. 바디 없이 URI만으로 식별해 삭제</li>
+    <li>PUT과 DELETE는 <strong>멱등(Idempotent)</strong> — 여러 번 호출해도 결과 동일</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 회원 정보 중 나이(age)만 수정하는 API를 설계할 때 가장 적절한 메서드는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. PUT — 리소스를 완전히 대체하므로 항상 안전</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. PATCH — 변경 필드만 전송해 부분 수정한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. POST — 수정도 새 데이터를 서버에 보내는 것</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. GET — 조회 후 변경이므로 GET부터 시작한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. PUT 요청에서 일부 필드를 빠뜨리고 전송하면 어떻게 되는가?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 서버가 자동으로 기존 값을 유지해준다고 가정</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. 400 Bad Request 에러가 반드시 발생한다고 봄</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. 빠진 필드가 null 혹은 삭제되어 덮어씌워진다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 서버가 PATCH로 자동 전환해 부분 수정해준다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "Rails에서 PUT과 PATCH를 둘 다 라우트에 등록하는 이유는요?", "DELETE 후 다시 DELETE 요청을 보내면 어떻게 되나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-14-get-post.html">← 강의 17: GET, POST</a>
+    <a href="net-16-method-properties.html">강의 19: HTTP 메서드의 속성 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(function(button) { button.disabled = true; });
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 나이 하나만 바꾸고 싶은데 PUT을 쓰면 다른 필드가 어떻게 될지 생각해보세요.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: PUT은 리소스를 "대체"합니다. 전송한 내용 그대로 덮어씁니다.';
+  }
+}
+</script>
 
 </body>
 </html>

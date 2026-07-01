@@ -16,18 +16,206 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 메서드 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 메서드 — GET과 POST의 "진짜 차이"를 백엔드 관점으로 이해한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    GET은 <strong>조회 전용</strong>이라 서버 상태를 바꾸지 않고,
+    POST는 <strong>"서버가 처리해 줘"</strong>라는 요청이라 등록부터 프로세스 실행까지 모두 담당한다.
+  </p>
+
+  <h2>GET — 리소스를 조회한다</h2>
+
+  <p>
+    GET은 서버에서 리소스를 <strong>읽어(Read) 오는 것</strong>이다.
+    서버 상태를 변경하지 않는다.
+  </p>
+
+  <h3>데이터를 어떻게 전달하는가?</h3>
+
+  <p>
+    GET 요청에서 서버에 전달할 데이터는 <strong>쿼리 스트링(Query String)</strong>으로 보낸다.
+    요청 바디(Body)에 데이터를 담는 것이 HTTP 명세상 가능하긴 하지만,
+    지원하지 않는 서버·프록시가 많아 <strong>실무에서는 쓰지 않는다</strong>.
+  </p>
+
+<pre><code># 검색어와 언어를 쿼리 스트링으로 전달
+GET /search?q=hello&amp;hl=ko HTTP/1.1
+Host: www.example.com</code></pre>
+
+  <p>
+    쿼리 스트링은 URL에 노출되기 때문에 비밀번호 같은 민감한 정보는 GET으로 보내면 안 된다.
+  </p>
+
+  <h3>GET 요청 전체 모습</h3>
+
+<pre><code>GET /members/1 HTTP/1.1
+Host: api.example.com
+Accept: application/json</code></pre>
+
+  <p>
+    바디 없이 헤더만으로 요청한다. 응답에서 서버가 <code>200 OK</code>와 함께 JSON을 돌려준다.
+  </p>
+
+  <h2>POST — 서버가 처리하게 한다</h2>
+
+  <p>
+    POST는 단순히 "데이터를 만들어 줘"가 아니다.
+    더 넓은 의미로 <strong>"메시지 바디의 데이터를 서버가 처리하도록 요청"</strong>하는 것이다.
+  </p>
+
+  <h3>POST의 두 가지 역할</h3>
+
+  <p><strong>1) 새 리소스 생성 (Registration)</strong></p>
+  <p>
+    서버가 아직 식별하지 않은 새 리소스를 만든다.
+    클라이언트는 URI를 지정하지 않고, 서버가 ID를 결정해 반환한다.
+  </p>
+
+<pre><code># 요청: 회원 등록 — ID는 클라이언트가 지정하지 않는다
+POST /members HTTP/1.1
+Content-Type: application/json
+
+{
+  "name": "김철수",
+  "email": "kim@example.com"
+}
+
+# 응답: 서버가 생성한 URI를 Location 헤더로 알려준다
+HTTP/1.1 201 Created
+Location: /members/100</code></pre>
+
+  <p><strong>2) 프로세스 처리 (Process Execution)</strong></p>
+  <p>
+    단순한 생성을 넘어 어떤 <em>처리 흐름</em>을 시작할 때도 POST를 쓴다.
+    새 리소스가 만들어지지 않을 수도 있다.
+  </p>
+
+<pre><code># 주문의 배달을 시작시키는 POST — 새 리소스를 만드는 게 아니라 프로세스를 실행한다
+POST /orders/55/start-delivery HTTP/1.1</code></pre>
+
+  <h3>POST는 만능 메서드</h3>
+
+  <p>
+    다른 메서드(GET, PUT, PATCH, DELETE)로 처리하기 애매한 경우는 모두 POST로 해결한다.
+    조회라도 JSON 바디가 꼭 필요하다면 POST를 쓰기도 한다.
+  </p>
+
+  <h2>GET vs POST — 핵심 차이 비교</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>구분</th>
+        <th>GET</th>
+        <th>POST</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>목적</td>
+        <td>리소스 조회(Read)</td>
+        <td>처리 요청(Create / Execute)</td>
+      </tr>
+      <tr>
+        <td>데이터 위치</td>
+        <td>쿼리 스트링(URL)</td>
+        <td>메시지 바디(Body)</td>
+      </tr>
+      <tr>
+        <td>서버 상태 변경</td>
+        <td>변경 없음</td>
+        <td>변경 있음</td>
+      </tr>
+      <tr>
+        <td>멱등(Idempotent)</td>
+        <td>멱등 (같은 요청 = 같은 결과)</td>
+        <td>비멱등 (반복 시 중복 발생 가능)</td>
+      </tr>
+      <tr>
+        <td>캐시</td>
+        <td>가능 (브라우저·CDN 캐시)</td>
+        <td>원칙상 가능하나 실무상 안 함</td>
+      </tr>
+      <tr>
+        <td>응답 상태코드</td>
+        <td>200 OK</td>
+        <td>201 Created / 200 OK</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="analogy">
+    React에서 <code>fetch('GET')</code>는 화면에 데이터를 뿌리는 용도, <code>fetch('POST')</code>는 폼을 제출하는 용도로만 써왔을 것이다.
+    백엔드 관점의 차이는 <strong>멱등성</strong>이다 — GET은 100번 호출해도 서버 상태가 달라지지 않지만,
+    POST로 "회원 등록"을 3번 호출하면 회원이 3명 생긴다.
+    이 차이가 <strong>재시도 안전성(retry safety)</strong>에 직결된다 — 네트워크 에러 후 자동 재시도를 할 때 GET은 안전하고 POST는 위험하다.
+  </div>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>GET = 조회 전용. 데이터는 <strong>쿼리 스트링</strong>으로. 바디 사용은 지양</li>
+    <li>POST = 처리 요청. 데이터는 <strong>메시지 바디</strong>로. 등록·프로세스 실행 모두 담당</li>
+    <li>POST는 서버가 <strong>ID를 결정</strong>한다 (클라이언트가 URI를 지정하지 않음)</li>
+    <li>다른 메서드로 표현 어려우면 <strong>POST로</strong> 해결한다</li>
+    <li>GET은 멱등·캐시 가능, POST는 <strong>비멱등·재시도 위험</strong></li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 회원 가입 폼을 제출할 때 POST를 쓰는 가장 근본적인 이유는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. URL에 데이터가 노출되지 않아 보안에 유리해서</button></li>
+      <li><button onclick="answer(this,'q1',false)">B. GET보다 데이터 전송 속도가 빠르기 때문에서</button></li>
+      <li><button onclick="answer(this,'q1',true)">C. 서버 상태를 변경(새 리소스 생성)하는 요청이기 때문</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. HTML form 태그가 GET을 지원하지 않기 때문에서</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 같은 GET 요청을 10번 반복해도 결과가 동일한 성질을 무엇이라 하는가?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 안전(Safe) — 리소스를 전혀 조회 안 한다는 뜻</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. 멱등(Idempotent) — 반복 호출해도 결과가 같다</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. 캐시 가능(Cacheable) — 응답을 저장할 수 있다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 단방향(Unidirectional) — 응답이 없다는 의미다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "POST로 조회 API를 만드는 경우가 실무에 있나요?", "201 Created와 200 OK는 언제 각각 씁니까?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-13-http-api-intro.html">← 강의 16: HTTP API를 만들어보자</a>
+    <a href="net-15-put-patch-delete.html">강의 18: PUT, PATCH, DELETE →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(function(button) { button.disabled = true; });
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 보안이나 속도 문제가 아닙니다. GET과 POST의 근본 차이는 서버 상태를 바꾸느냐 아니냐입니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: "반복해도 결과가 같다"는 수학적 성질을 뜻하는 용어입니다.';
+  }
+}
+</script>
 
 </body>
 </html>

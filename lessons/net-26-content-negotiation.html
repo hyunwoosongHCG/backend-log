@@ -16,18 +16,153 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 일반 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 일반 — 클라이언트가 선호 표현을 서버에 알리는 협상 헤더와 우선순위(Quality Values) 방식을 이해한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    콘텐츠 협상(Content Negotiation)은 클라이언트가 <strong>"이런 형식·언어로 받고 싶다"</strong>고
+    서버에 미리 알려주면, 서버가 지원 범위 내에서 가장 적합한 표현을 골라 응답하는 메커니즘이다.
+  </p>
+
+  <h2>협상 헤더의 종류</h2>
+
+  <p>협상 헤더는 <strong>요청에서만</strong> 사용된다.</p>
+
+  <ul>
+    <li><code>Accept</code>: 클라이언트가 원하는 미디어 타입 (예: <code>text/html</code>, <code>application/json</code>)</li>
+    <li><code>Accept-Charset</code>: 클라이언트가 원하는 문자 인코딩 (예: <code>utf-8</code>)</li>
+    <li><code>Accept-Encoding</code>: 클라이언트가 처리할 수 있는 압축 방식 (예: <code>gzip</code>, <code>deflate</code>)</li>
+    <li><code>Accept-Language</code>: 클라이언트가 원하는 자연 언어 (예: <code>ko-KR</code>, <code>en-US</code>)</li>
+  </ul>
+
+  <h2>우선순위: Quality Values (q)</h2>
+
+  <p>
+    선호하는 것이 여러 개일 때는 <code>q</code> 값으로 우선순위를 지정한다.
+    <code>q</code>는 0~1 사이의 소수이며, <strong>1에 가까울수록 우선순위가 높다</strong>.
+    <code>q=1</code>은 생략 가능하다.
+  </p>
+
+<pre><code>Accept-Language: ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>언어</th><th>q 값</th><th>우선순위</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>ko-KR</code></td><td>1 (생략)</td><td>1순위</td></tr>
+      <tr><td><code>ko</code></td><td>0.9</td><td>2순위</td></tr>
+      <tr><td><code>en-US</code></td><td>0.8</td><td>3순위</td></tr>
+      <tr><td><code>en</code></td><td>0.7</td><td>4순위</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    서버가 한국어(<code>ko-KR</code>)를 지원하지 않더라도 영어(<code>en</code>)로라도 응답한다.
+    q 값이 없으면 서버가 자신이 편한 언어로 응답해버린다.
+  </p>
+
+  <h2>구체성이 우선순위를 결정한다</h2>
+
+  <p>
+    같은 헤더 안에서 <strong>더 구체적인 값이 더 높은 우선순위</strong>를 가진다.
+  </p>
+
+<pre><code>Accept: text/*, text/plain, text/plain;format=flowed, */*</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>값</th><th>구체성</th><th>우선순위</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>text/plain;format=flowed</code></td><td>가장 구체적</td><td>1순위</td></tr>
+      <tr><td><code>text/plain</code></td><td>서브타입까지 명시</td><td>2순위</td></tr>
+      <tr><td><code>text/*</code></td><td>타입만 명시</td><td>3순위</td></tr>
+      <tr><td><code>*/*</code></td><td>모두 수용</td><td>4순위</td></tr>
+    </tbody>
+  </table>
+
+  <h2>실제 동작 흐름</h2>
+
+  <div class="flow">
+    <div class="flow-step">클라이언트 요청: <code>Accept-Language: ko-KR,ko;q=0.9,en-US;q=0.8</code></div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">서버가 지원 언어 목록과 대조 → 가장 높은 q인 <code>ko-KR</code> 먼저 시도</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">ko-KR 미지원 → ko(q=0.9) 지원 여부 확인</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">ko 지원 → <code>Content-Language: ko</code>로 응답</div>
+  </div>
+
+  <div class="analogy">
+    i18n(국제화) 라이브러리를 쓸 때 브라우저가 자동으로 <code>Accept-Language</code>를 보내고,
+    서버나 CDN이 이를 읽어 알맞은 언어 버전의 페이지를 내려주는 것이 바로 콘텐츠 협상이다.
+    Next.js의 <code>i18n</code> 라우팅도 내부적으로 이 헤더를 참고한다.
+  </div>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>협상 헤더(<code>Accept</code>, <code>Accept-Language</code> 등)는 <strong>요청에서만</strong> 사용</li>
+    <li><code>q</code> 값(0~1)으로 우선순위를 표현, <strong>높을수록 우선</strong>, q=1은 생략 가능</li>
+    <li><strong>더 구체적인 표현</strong>이 더 높은 우선순위를 가진다</li>
+    <li>서버는 지원 범위 내 가장 높은 우선순위의 표현으로 응답한다</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. <code>Accept-Language: ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7</code>에서 가장 우선순위가 높은 언어는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. en (q=0.7이므로 제일 낮음)              </button></li>
+      <li><button onclick="answer(this,'q1',false)">B. en-US (q=0.8로 중간 순위)               </button></li>
+      <li><button onclick="answer(this,'q1',false)">C. ko (q=0.9로 두 번째 순위)               </button></li>
+      <li><button onclick="answer(this,'q1',true)">D. ko-KR (q 생략 = 1로 가장 높음)           </button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. <code>Accept: text/*, text/plain, */*</code>에서 가장 우선순위가 높은 값은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. */* (가장 앞에 나오므로)                </button></li>
+      <li><button onclick="answer(this,'q2',false)">B. text/* (와일드카드 포함 형식)           </button></li>
+      <li><button onclick="answer(this,'q2',true)">C. text/plain (가장 구체적이므로)           </button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 모두 동일한 우선순위를 가진다           </button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "서버가 협상 헤더를 무시하면 어떻게 되나요?", "Rails에서 Accept 헤더를 어떻게 읽나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-25-representation.html">← 강의 28: 표현</a>
+    <a href="net-27-transfer-methods.html">강의 30: 전송 방식 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: q 값이 생략되면 기본값이 1입니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: 콘텐츠 협상에서는 더 구체적인 표현일수록 우선순위가 높습니다.';
+  }
+}
+</script>
 
 </body>
 </html>

@@ -16,18 +16,257 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · 인터넷 네트워크 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · 인터넷 네트워크 — IP의 한계를 TCP가 어떻게 극복하는지, UDP는 언제 쓰는지 이해한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    TCP(Transmission Control Protocol)는 IP 위에 올라타서 <strong>연결 확인 → 전달 보증 → 순서 보장</strong>을 추가한 신뢰성 있는 프로토콜이고,
+    UDP(User Datagram Protocol)는 그 보장을 모두 포기하는 대신 <strong>빠른 속도</strong>를 얻은 경량 프로토콜이다.
+    현재 대부분의 웹 통신은 TCP를 사용한다.
+  </p>
+
+  <h2>왜 TCP/UDP가 필요한가</h2>
+
+  <p>
+    앞 강의에서 IP의 세 가지 한계를 배웠다: 비연결성, 비신뢰성, 포트 구분 불가.
+    TCP/UDP는 애플리케이션 계층의 데이터(payload)에 <strong>TCP/UDP 정보를 추가(캡슐화)</strong>해서
+    이 한계를 보완하는 <strong>트랜스포트 계층</strong> 프로토콜이다.
+  </p>
+
+  <div class="analogy">
+    IP를 "주소만 적힌 택배 봉투"라 하면, TCP는 "수령 확인 서명 + 분실 시 재발송 보장 + 순서 번호가 붙은 등기 택배"다.
+    반면 UDP는 "주소는 있지만 수령 확인도 순서도 없는 일반 엽서" — 대신 수수료가 저렴하고 빠르다.
+  </div>
+
+  <h2>TCP (전송 제어 프로토콜)</h2>
+
+  <h3>TCP의 특징</h3>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>연결 지향</strong> — 데이터 전송 전 3-way handshake로 양측 연결을 먼저 확인</li>
+    <li><strong>데이터 전달 보증</strong> — 수신 측이 "받았다(ACK)"를 응답, 없으면 재전송</li>
+    <li><strong>순서 보장</strong> — 패킷이 순서가 틀리면 재전송 요청</li>
+    <li><strong>신뢰 가능</strong> — 위 세 가지 덕분에 현재 대부분의 웹 통신이 TCP 사용</li>
+  </ul>
+
+  <h3>3-way handshake (3방향 악수)</h3>
+
+  <p>
+    TCP는 데이터를 보내기 전, 반드시 이 3단계 과정으로 <strong>가상 연결</strong>을 확립한다.
+    실제 물리 전용선이 생기는 게 아니라 "내가 보내면 네가 받을 수 있는지 확인" 수준의 약속이다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">
+      <strong>1. SYN (접속 요청)</strong><br>
+      클라이언트 → 서버: "나 연결하고 싶어, 들려?"
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>2. SYN + ACK (요청 수락 + 역방향 요청)</strong><br>
+      서버 → 클라이언트: "들려! 나도 연결할게, 너도 들려?"
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>3. ACK (역방향 수락)</strong><br>
+      클라이언트 → 서버: "들려! 이제 양측 연결 확인됨"<br>
+      <em>(최근 구현에서는 이 ACK와 함께 데이터를 같이 전송하기도 함)</em>
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>4. 데이터 전송</strong><br>
+      양측 연결이 확인됐으므로 실제 데이터 전송 시작
+    </div>
+  </div>
+
+  <p>
+    참고: 3-way handshake는 클라이언트와 서버 <em>양측의 연결</em>만 확인한다.
+    중간 노드(라우터 등)가 잘 연결돼 있는지는 알 수 없고 알 필요도 없다 —
+    양측이 "보내고 받는다"는 결론만 중요하다.
+  </p>
+
+  <div class="analogy">
+    React에서 <code>useEffect</code> 안에서 API를 호출하기 전 "컴포넌트가 마운트됐는지 확인"하는 패턴처럼,
+    TCP는 데이터를 보내기 전에 "상대방이 받을 준비가 됐는지 먼저 확인"한다.
+    Promise가 resolve되기 전까지 데이터가 없는 것처럼, TCP handshake가 완료되기 전까지는 데이터 전송이 시작되지 않는다.
+  </div>
+
+  <h3>TCP가 IP의 한계를 해결하는 방법</h3>
+
+  <table style="width:100%;border-collapse:collapse;margin:1rem 0;font-size:0.9rem;">
+    <thead>
+      <tr style="background:var(--surface2,#1e1e2e);text-align:left;">
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">IP 한계</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">TCP 해결 방법</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">비연결성 — 상대 상태 미확인</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">3-way handshake로 연결 먼저 확인</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">비신뢰성 — 유실·순서 미보장</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">ACK 응답 + 순서 번호로 전달 보증·순서 보장</td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;">포트 구분 불가</td>
+        <td style="padding:0.5rem 0.75rem;">TCP 헤더에 출발 포트 · 목적 포트를 포함</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>UDP (사용자 데이터그램 프로토콜)</h2>
+
+  <h3>UDP의 특징</h3>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>연결 지향 아님</strong> — handshake 없이 바로 전송</li>
+    <li><strong>전달 보증 없음</strong> — 패킷 유실돼도 재전송 요청 없음</li>
+    <li><strong>순서 보장 없음</strong> — 도착 순서가 뒤섞여도 그대로</li>
+    <li><strong>기능이 적어 빠름</strong> — IP에 PORT·체크섬(Checksum) 정도만 추가</li>
+    <li>부족한 기능은 <strong>애플리케이션 레이어에서 직접 구현</strong></li>
+  </ul>
+
+  <p>
+    체크섬(Checksum)은 전송 자료의 <strong>무결성 검사</strong>용 값이다 — 데이터가 깨졌는지 확인하지만,
+    깨졌다고 재전송하지는 않는다.
+  </p>
+
+  <h3>언제 UDP를 쓰나</h3>
+
+  <p>
+    신뢰성보다 <strong>속도가 더 중요한 상황</strong>에 쓴다.
+    실시간 화상통화나 게임에서 한 프레임이 유실되는 것보다 화면이 굳는 게 더 나쁘다.
+    최근에는 HTTP/3(QUIC 프로토콜)이 UDP 기반으로 TCP보다 빠른 재전송을 직접 구현하는 방식을 채택했다.
+  </p>
+
+  <table style="width:100%;border-collapse:collapse;margin:1rem 0;font-size:0.9rem;">
+    <thead>
+      <tr style="background:var(--surface2,#1e1e2e);text-align:left;">
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">사용 사례</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">이유</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">실시간 화상통화 (Zoom, WebRTC)</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">약간의 화질 저하보다 지연이 더 나쁨</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">온라인 게임 (위치·입력 정보)</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">오래된 위치 정보는 재전송해도 의미 없음</td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;">DNS 질의</td>
+        <td style="padding:0.5rem 0.75rem;">짧은 요청·응답, 빠른 처리 우선</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>TCP vs UDP 비교</h2>
+
+  <table style="width:100%;border-collapse:collapse;margin:1rem 0;font-size:0.9rem;">
+    <thead>
+      <tr style="background:var(--surface2,#1e1e2e);text-align:left;">
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"></th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">TCP</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">UDP</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">연결 확인</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">O (3-way handshake)</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">X</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">전달 보증</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">O (ACK + 재전송)</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">X</td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">순서 보장</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">O</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">X</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">속도</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">상대적으로 느림</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">빠름</td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;font-weight:bold;">신뢰성</td>
+        <td style="padding:0.5rem 0.75rem;">높음</td>
+        <td style="padding:0.5rem 0.75rem;">앱이 직접 구현</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>TCP = <strong>연결 지향·전달 보증·순서 보장</strong>. IP의 한계를 보완하는 신뢰성 프로토콜</li>
+    <li>3-way handshake: <strong>SYN → SYN+ACK → ACK</strong> → 가상 연결 확립 후 전송</li>
+    <li>UDP = <strong>기능 최소화·빠른 속도</strong>. 실시간성이 중요하거나 앱이 신뢰성을 직접 구현할 때</li>
+    <li>현재 대부분의 HTTP 웹 통신은 <strong>TCP 기반</strong></li>
+    <li>HTTP/3은 UDP 기반 QUIC으로 TCP의 지연을 줄이는 방향으로 발전 중</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. TCP 3-way handshake의 올바른 순서는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. ACK → SYN → SYN+ACK</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. SYN → SYN+ACK → ACK</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. SYN+ACK → SYN → ACK</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. SYN → ACK → SYN+ACK</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. UDP를 TCP보다 선호하는 상황으로 가장 적합한 것은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 인터넷 뱅킹 — 금액 데이터 전송의 정확성이 최우선인 상황</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. 파일 다운로드 — 파일이 완전히 도착해야 사용 가능한 상황</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. 실시간 게임 — 오래된 위치 정보보다 최신 정보 속도가 중요한 상황</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 이메일 전송 — 메일 내용이 빠짐없이 도착해야 하는 상황</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "handshake 중에 서버가 꺼지면 어떻게 되나요?", "HTTP/3이 UDP를 쓴다는 게 어떤 의미인가요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <span>강의 6: TCP, UDP</span>
+    <a href="net-04-port.html">강의 7: PORT →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(function(button) { button.disabled = true; });
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 클라이언트가 먼저 SYN을 보내고, 서버가 SYN+ACK로 응답합니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: UDP는 신뢰성보다 속도가 중요한 실시간 상황에 적합합니다.';
+  }
+}
+</script>
 
 </body>
 </html>

@@ -16,18 +16,189 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 상태코드 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 상태코드 —
+    서버가 요청을 어떻게 처리했는지 숫자 세 자리로 알려주는 "결과 코드" 전체 지도를 그린다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    HTTP 상태코드(Status Code)는 클라이언트가 보낸 요청을 서버가 얼마나 성공적으로 처리했는지
+    <strong>세 자리 숫자</strong>로 알려주는 약속이다 —
+    앞자리 한 글자만 봐도 결과의 종류(성공·실패·리다이렉션)를 즉시 알 수 있다.
+  </p>
+
+  <h2>왜 필요한가</h2>
+
+  <p>
+    프론트 코드에서 <code>axios.get('/api/users')</code>를 호출하면
+    서버는 응답 메시지를 돌려준다. 그런데 그 응답이 성공인지, 실패인지, 다른 주소로 가야 하는지
+    어떻게 알 수 있을까? 바디(body) 안에 <code>"ok": false</code>를 심어서?
+    그러면 모든 팀이 서로 다른 규칙을 쓰게 된다.
+  </p>
+  <p>
+    HTTP는 이 문제를 <strong>표준 상태코드</strong>로 해결한다.
+    브라우저, axios, Rails — 모두가 같은 숫자 약속을 쓰기 때문에
+    별도 약속 없이도 "성공이냐 실패냐"를 즉시 구분할 수 있다.
+  </p>
+
+  <div class="analogy">
+    <code>Promise</code>가 fulfilled / rejected 두 상태로 비동기 결과를 알려주듯,
+    HTTP 상태코드는 <strong>세 자리 숫자</strong>로 요청 결과를 분류한다.
+    axios가 2xx이면 <code>.then()</code>, 4xx·5xx이면 <code>.catch()</code>로 보내는 이유가 바로 이 규칙 때문이다.
+  </div>
+
+  <h2>1xx~5xx 대분류</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>범위</th>
+        <th>이름</th>
+        <th>의미</th>
+        <th>실무 빈도</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>1xx</strong></td>
+        <td>Informational (정보)</td>
+        <td>요청을 수신했고 처리 중</td>
+        <td>거의 안 씀</td>
+      </tr>
+      <tr>
+        <td><strong>2xx</strong></td>
+        <td>Successful (성공)</td>
+        <td>요청을 정상 처리함</td>
+        <td>매우 자주</td>
+      </tr>
+      <tr>
+        <td><strong>3xx</strong></td>
+        <td>Redirection (리다이렉션)</td>
+        <td>완료하려면 추가 동작 필요</td>
+        <td>자주</td>
+      </tr>
+      <tr>
+        <td><strong>4xx</strong></td>
+        <td>Client Error (클라이언트 오류)</td>
+        <td>클라이언트가 잘못된 요청을 보냄</td>
+        <td>자주</td>
+      </tr>
+      <tr>
+        <td><strong>5xx</strong></td>
+        <td>Server Error (서버 오류)</td>
+        <td>서버가 정상 처리를 못 함</td>
+        <td>간헐적</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>앞자리 한 글자 규칙</h2>
+
+  <p>
+    3자리 코드의 <strong>백의 자리(첫 번째 숫자)</strong>가 분류를 결정한다.
+    예를 들어 <code>201</code>은 2xx이므로 "성공",
+    <code>404</code>는 4xx이므로 "클라이언트 오류"다.
+  </p>
+  <p>
+    덕분에 표준에 없는 새 코드를 서버가 내보내더라도
+    클라이언트는 첫 자리만 보고 "일단 어느 범주인지"를 알 수 있다.
+    예: 299라는 코드를 모른다면 → "2xx니까 성공 계열"로 처리.
+  </p>
+
+  <h2>1xx — 거의 안 쓴다</h2>
+
+  <p>
+    <code>100 Continue</code> 같은 코드가 있지만, 실무에서 직접 다루는 일은 드물다.
+    HTTP/1.1 이전 시절 흔적에 가깝다고 이해하면 충분하다.
+  </p>
+
+  <h2>실무 연결 — axios 인터셉터</h2>
+
+  <p>
+    axios는 상태코드를 기준으로 <code>Promise</code>를 resolve/reject한다.
+    보통 프로젝트 초기에 전역 인터셉터를 이렇게 설정한다.
+  </p>
+
+<pre><code>// 프론트: axios 인터셉터 예시
+axios.interceptors.response.use(
+  (response) => response,          // 2xx → 그대로 반환
+  (error) => {
+    const status = error.response?.status;
+    if (status === 401) router.push('/login');   // 인증 없음
+    if (status === 403) toast.error('권한 없음'); // 인가 실패
+    if (status === 404) toast.error('없는 리소스');
+    if (status >= 500) toast.error('서버 오류');
+    return Promise.reject(error);
+  }
+);</code></pre>
+
+  <p>
+    Rails/Grape 쪽에서는 <code>rescue_from</code>으로 예외를 상태코드와 연결한다.
+    이 연결 방식은 4xx·5xx 레슨에서 자세히 다룬다.
+  </p>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>상태코드는 요청 결과를 세 자리 숫자로 표현하는 <strong>HTTP 표준 약속</strong></li>
+    <li>백의 자리 1개만으로 <strong>1xx~5xx 다섯 범주</strong> 즉시 구분 가능</li>
+    <li>axios가 2xx면 resolve, 그 외면 reject하는 이유가 바로 이 규칙</li>
+    <li>1xx는 거의 안 씀, 2xx/3xx/4xx/5xx가 실무 핵심</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. HTTP 상태코드 <code>404</code>는 어느 대분류에 속하는가?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 2xx — 요청이 정상 처리되었음을 뜻한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">B. 3xx — 리다이렉션이 필요함을 뜻한다</button></li>
+      <li><button onclick="answer(this,'q1',true)">C. 4xx — 클라이언트 측 오류임을 뜻한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 5xx — 서버 내부 오류임을 뜻한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 서버가 표준에 없는 <code>299</code>라는 상태코드를 응답했다. 클라이언트가 이 코드를 어떻게 처리해야 하는가?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 모르는 코드이므로 무조건 오류로 처리한다</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. 2xx 계열이므로 성공으로 처리할 수 있다</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. 백의 자리가 2가 아닌 9이므로 서버 오류다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 세 자리가 아니므로 유효하지 않은 코드다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "1xx가 실제로 쓰이는 경우가 있나요?", "axios가 아닌 fetch API는 상태코드를 어떻게 처리하나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <span>강의 22: HTTP 상태코드 소개</span>
+    <a href="net-20-status-2xx.html">강의 23: 2xx 성공 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 백의 자리 숫자 하나로 범주를 결정합니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: 모르는 코드는 백의 자리를 기준으로 해당 범주처럼 처리합니다.';
+  }
+}
+</script>
 
 </body>
 </html>

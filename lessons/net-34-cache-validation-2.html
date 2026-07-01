@@ -16,18 +16,213 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 캐시 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 캐시 — 날짜가 아닌 버전 태그(ETag)로 캐시를 더 정확하게 검증하는 방법을 배운다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    <code>ETag(Entity Tag)</code>는 서버가 자원에 붙이는 <strong>버전 식별자</strong>다.
+    브라우저는 만료 후 재요청 시 <code>If-None-Match</code>에 ETag를 담아 보내고,
+    서버가 같으면 <code>304</code>, 다르면 <code>200 + 새 자원</code>을 반환한다.
+  </p>
+
+  <h2>왜 ETag인가 — Last-Modified의 한계</h2>
+
+  <p>
+    이전 강의(검증 헤더와 조건부 요청1)에서 본 <code>Last-Modified / If-Modified-Since</code>는
+    날짜 비교 방식이라 두 가지 한계가 있었다.
+  </p>
+
+  <ul>
+    <li><strong>1초 이하 변경 미감지</strong>: 1초 안에 파일이 수정되면 날짜가 같아 변경을 놓친다.</li>
+    <li><strong>수정 후 원복 미감지</strong>: 내용을 바꿨다가 되돌려도 날짜가 달라 불필요하게 재전송한다.</li>
+  </ul>
+
+  <p>
+    <strong>ETag</strong>는 날짜 대신 서버가 자원의 <strong>내용 기반으로 생성한 임의 문자열</strong>이다.
+    내용이 같으면 ETag가 같고, 내용이 다르면 ETag가 다르다.
+    날짜 정밀도 문제가 없고, 수정-원복도 정확히 감지한다.
+  </p>
+
+  <h2>ETag / If-None-Match 흐름</h2>
+
+  <div class="flow">
+    <div class="flow-step">
+      <strong>[최초 요청]</strong> 브라우저 → 서버: <code>GET /logo.png</code>
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      서버 → 브라우저: <code>200 OK</code><br>
+      <code>Cache-Control: max-age=60</code><br>
+      <code>ETag: "v1.3-abc123"</code><br>
+      + 바디(이미지 전체)
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      브라우저: 이미지 + ETag 값을 캐시에 저장
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>[60초 이내]</strong> 캐시 유효 → 서버에 묻지 않고 캐시 사용
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>[60초 경과 — 캐시 만료]</strong> 브라우저 → 서버:<br>
+      <code>GET /logo.png</code><br>
+      <code>If-None-Match: "v1.3-abc123"</code>
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      서버: 현재 자원의 ETag와 <code>If-None-Match</code> 값을 비교
+    </div>
+    <div class="flow-arrow">↓ (동일 — 변경 없음)</div>
+    <div class="flow-step">
+      서버 → 브라우저: <code>304 Not Modified</code> (바디 없음)<br>
+      <code>Cache-Control: max-age=60</code><br>
+      <code>ETag: "v1.3-abc123"</code>
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      브라우저: 304 수신 → 캐시 자원 재사용, 유효기간 갱신
+    </div>
+  </div>
+
+  <h3>ETag가 다를 때 (자원이 변경된 경우)</h3>
+
+  <div class="flow">
+    <div class="flow-step">
+      서버: ETag가 다르다 → <code>200 OK</code><br>
+      <code>ETag: "v1.4-def456"</code> (새 버전)<br>
+      + 바디(새 이미지)
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      브라우저: 새 자원 + 새 ETag로 캐시 갱신
+    </div>
+  </div>
+
+  <h2>ETag는 블랙박스</h2>
+
+  <p>
+    ETag 값의 생성 방식은 <strong>서버가 알아서 결정</strong>한다.
+    파일 내용의 해시값, 버전 번호, 타임스탬프 + 크기 조합 등 어떤 방식이든 상관없다.
+    클라이언트(브라우저)는 ETag 값이 <em>무슨 뜻인지 해석하지 않는다</em> — 그냥 받아서 저장하고, 재요청 시 그대로 돌려줄 뿐이다.
+  </p>
+
+  <p>
+    이 때문에 캐시 로직의 복잡성이 <strong>서버 안에 숨겨진다(블랙박스)</strong>.
+    클라이언트는 메커니즘을 몰라도 올바르게 동작한다.
+  </p>
+
+  <h2>Last-Modified vs ETag 비교</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>항목</th>
+        <th>Last-Modified / If-Modified-Since</th>
+        <th>ETag / If-None-Match</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>비교 기준</td>
+        <td>날짜(시각)</td>
+        <td>서버가 부여한 문자열 태그</td>
+      </tr>
+      <tr>
+        <td>1초 이하 변경</td>
+        <td>감지 못할 수 있음</td>
+        <td>정확히 감지</td>
+      </tr>
+      <tr>
+        <td>수정 후 원복</td>
+        <td>날짜 바뀌어 불필요 재전송</td>
+        <td>내용 같으면 ETag 같아 304</td>
+      </tr>
+      <tr>
+        <td>서버 제어</td>
+        <td>수정 날짜 기반 — 파일 시스템 의존</td>
+        <td>ETag 생성 로직을 서버가 완전히 제어</td>
+      </tr>
+      <tr>
+        <td>우선순위</td>
+        <td>ETag가 있으면 ETag를 우선 사용</td>
+        <td>사실상 현대 표준</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="analogy">
+    React에서 컴포넌트 props를 비교할 때 날짜가 아니라 값 자체를 비교한다(memo, useMemo).
+    ETag도 그와 같다 — 언제 수정했냐가 아니라 "지금 내용이 같냐"를 비교한다.
+    빌드 시 파일명에 붙는 해시(<code>main.a3f9c2.js</code>)가 ETag와 유사한 역할을 한다 —
+    내용이 달라지면 해시가 달라지고, 브라우저는 새 파일로 인식한다.
+  </div>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>ETag는 서버가 자원에 부여하는 <strong>버전 식별 문자열</strong>이다</li>
+    <li>만료 후 재요청 시 브라우저는 <code>If-None-Match</code>에 ETag를 담아 보낸다</li>
+    <li>서버가 비교해 같으면 <code>304</code>(바디 없음), 다르면 <code>200</code> + 새 자원을 반환한다</li>
+    <li>ETag 생성 방식은 서버가 결정 — 클라이언트는 값을 해석하지 않는다(블랙박스)</li>
+    <li>날짜 기반 Last-Modified보다 정밀하며 현대 캐시의 표준 방식이다</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. ETag / If-None-Match가 Last-Modified / If-Modified-Since보다 우수한 이유는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 응답 헤더 크기가 더 작아서 네트워크 비용이 절감된다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 날짜가 아닌 내용 기반이라 1초 이하 변경과 수정-원복을 정확히 감지한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 서버가 아닌 브라우저가 직접 캐시 유효성을 판단하기 때문이다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. HTTPS 환경에서만 동작하기 때문에 보안이 더 강하다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 브라우저가 <code>If-None-Match</code>를 보냈을 때 서버의 ETag가 같다면?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 새 ETag를 생성해 <code>200 OK</code>로 새 자원을 전송한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. 캐시를 삭제하고 처음부터 다시 요청하라는 <code>410 Gone</code>을 반환한다</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. 자원이 변하지 않았으므로 <code>304 Not Modified</code>(바디 없음)를 반환한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 서버가 클라이언트 캐시를 직접 삭제하고 <code>200</code>으로 다시 보낸다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "ETag는 실제로 어떤 값을 쓰나요?", "Rails에서 ETag를 어떻게 생성하나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-33-cache-validation-1.html">← 강의 36: 검증 헤더와 조건부 요청1</a>
+    <a href="net-35-cache-conditional-headers.html">강의 38: 캐시와 조건부 요청 헤더 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: "1초 이하 변경"과 "수정 후 원복" 두 가지 한계를 생각해보세요.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: ETag가 같다 = 자원이 변하지 않았다 — 그러면 바디를 다시 보낼 필요가 있을까요?';
+  }
+}
+</script>
 
 </body>
 </html>

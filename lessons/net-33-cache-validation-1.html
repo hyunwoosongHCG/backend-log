@@ -16,18 +16,183 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 캐시 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 캐시 — 캐시가 만료됐을 때 자원이 그대로라면 다시 안 받는 방법을 배운다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    캐시 유효 시간이 지났더라도 서버의 자원이 <strong>변하지 않았다면</strong>,
+    <code>Last-Modified</code> / <code>If-Modified-Since</code> 헤더로 서버에 확인하고
+    <strong>304 Not Modified</strong>를 받아 캐시를 그대로 재활용한다.
+  </p>
+
+  <h2>문제: 만료됐는데 자원이 그대로라면?</h2>
+
+  <p>
+    강의 35에서 본 것처럼 캐시가 만료되면 서버에 재요청한다.
+    그런데 서버의 이미지 파일이 60초 사이에 전혀 바뀌지 않았다면,
+    완전히 동일한 파일을 또 전송하는 것은 낭비다.
+  </p>
+
+  <p>
+    이를 해결하는 것이 <strong>검증 헤더(Validation Header)</strong>와
+    <strong>조건부 요청(Conditional Request)</strong>이다.
+    서버에게 "내가 가진 것이 최신이 맞나요? 다르면 새로 주세요."라고 묻는 방식이다.
+  </p>
+
+  <h2>Last-Modified / If-Modified-Since</h2>
+
+  <p>
+    날짜 기반 검증 방식이다.
+    서버는 자원의 <strong>최종 수정 시각</strong>을 <code>Last-Modified</code> 헤더로 알려주고,
+    브라우저는 재요청 시 그 날짜를 <code>If-Modified-Since</code>에 담아 보낸다.
+  </p>
+
+  <h3>전체 흐름</h3>
+
+  <div class="flow">
+    <div class="flow-step">
+      <strong>[최초 요청]</strong> 브라우저 → 서버: <code>GET /logo.png</code>
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      서버 → 브라우저: <code>200 OK</code><br>
+      <code>Cache-Control: max-age=60</code><br>
+      <code>Last-Modified: Tue, 01 Jul 2026 10:00:00 GMT</code><br>
+      + 바디(이미지 전체)
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      브라우저: 이미지 + Last-Modified 날짜를 캐시에 저장
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>[60초 이내]</strong> 재요청 → 서버에 묻지 않고 캐시에서 바로 사용
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>[60초 경과 — 캐시 만료]</strong> 브라우저 → 서버:<br>
+      <code>GET /logo.png</code><br>
+      <code>If-Modified-Since: Tue, 01 Jul 2026 10:00:00 GMT</code>
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      서버: "내 파일의 최종 수정일이 그 날짜 이후인가?"를 비교
+    </div>
+    <div class="flow-arrow">↓ (변경 없음)</div>
+    <div class="flow-step">
+      서버 → 브라우저: <code>304 Not Modified</code> (바디 없음)<br>
+      <code>Cache-Control: max-age=60</code>
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      브라우저: 304 수신 → 캐시의 자원을 그대로 사용, 유효기간만 갱신
+    </div>
+  </div>
+
+  <h3>변경됐을 때</h3>
+
+  <div class="flow">
+    <div class="flow-step">
+      서버: "파일이 If-Modified-Since 이후에 수정됐다" → <code>200 OK</code> + 새 바디<br>
+      <code>Last-Modified: Tue, 01 Jul 2026 11:30:00 GMT</code> (갱신)
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      브라우저: 새 파일로 캐시 갱신
+    </div>
+  </div>
+
+  <h2>304 Not Modified의 의미</h2>
+
+  <p>
+    <code>304</code>는 "요청한 자원은 변경되지 않았으니, 네가 가진 캐시를 써도 된다"는 신호다.
+    바디(Body)가 없다 — 헤더만 오기 때문에 전송량이 극히 적다.
+    자원 크기에 상관없이 헤더 몇 백 바이트만 주고받으면 된다.
+  </p>
+
+  <h2>Last-Modified / If-Modified-Since의 한계</h2>
+
+  <ul>
+    <li><strong>1초 단위 정밀도</strong>: 1초 이내에 여러 번 수정된 경우 변경을 감지하지 못할 수 있다.</li>
+    <li><strong>수정 후 원복</strong>: 파일을 수정했다가 원래대로 되돌려도 날짜는 바뀌어 불필요하게 재전송한다.</li>
+    <li><strong>날짜 비교의 한계</strong>: 서버 로직이 수정 날짜를 정확히 관리해야 한다.</li>
+  </ul>
+
+  <p>
+    이 한계를 보완하는 방식이 다음 강의(검증 헤더와 조건부 요청2)의 <strong>ETag / If-None-Match</strong>다.
+  </p>
+
+  <div class="analogy">
+    프론트 개발자라면 Chrome DevTools → Network 탭에서 <code>304 Not Modified</code>를 본 적이 있을 것이다.
+    그게 바로 이 흐름의 결과다.
+    크기가 0B 또는 "from disk cache"로 표시되며, 서버 왕복은 했지만 바디는 받지 않았다는 뜻이다.
+    <code>If-Modified-Since</code>를 요청 헤더에서 직접 확인할 수도 있다.
+  </div>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>캐시 만료 후 재요청 시 <code>If-Modified-Since</code>에 기존 날짜를 담아 보낸다</li>
+    <li>서버가 비교해서 변경 없으면 <code>304 Not Modified</code>(바디 없음)를 반환한다</li>
+    <li>브라우저는 304를 받으면 캐시 자원 그대로 사용, 유효기간만 갱신한다</li>
+    <li>변경됐으면 서버가 <code>200 OK</code> + 새 바디 + 새 <code>Last-Modified</code>를 반환한다</li>
+    <li>날짜 기반이라 1초 이하 변경과 수정-원복 케이스는 감지하지 못하는 한계가 있다</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 브라우저가 캐시 만료 후 서버에 보내는 조건부 요청 헤더는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. <code>Cache-Control: revalidate</code></button></li>
+      <li><button onclick="answer(this,'q1',true)">B. <code>If-Modified-Since</code>에 이전 Last-Modified 날짜를 담아 보낸다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. <code>Expires</code>에 현재 시간을 담아 보낸다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. <code>Cache-Age</code>에 경과 시간(초)을 담아 보낸다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 서버가 <code>304 Not Modified</code>를 반환할 때 특징은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 응답 바디에 변경된 부분만 담아 보낸다</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. 헤더 없이 상태 코드만 전송한다</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. 응답 바디가 없고, 브라우저는 캐시 자원을 그대로 재사용한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 캐시를 삭제하고 처음부터 다시 받으라는 신호다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "304를 받으면 캐시 유효기간은 어떻게 되나요?", "Last-Modified의 날짜 형식은 누가 정하나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-32-cache-basics.html">← 강의 35: 캐시 기본 동작</a>
+    <a href="net-34-cache-validation-2.html">강의 37: 검증 헤더와 조건부 요청2 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 서버가 최초 응답 시 "마지막으로 수정한 날짜"를 알려줬습니다 — 그 날짜를 재요청에 어떻게 쓸까요?';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: 304는 "자원이 변하지 않았다"는 의미 — 그러면 바디를 다시 보낼 필요가 있을까요?';
+  }
+}
+</script>
 
 </body>
 </html>

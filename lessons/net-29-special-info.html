@@ -16,18 +16,176 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 일반 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 일반 — 가상 호스팅·리다이렉션·메서드 제한·재시도 대기 등 요청/응답의 특수 상황을 제어하는 헤더 4종을 파악한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    <strong>Host, Location, Allow, Retry-After</strong>는 "어느 도메인으로 가야 하나", "리다이렉트는 어디로", "허용 메서드는 무엇", "언제 다시 시도하나"처럼
+    <em>특수 상황을 처리하기 위한 헤더</em>다.
+  </p>
+
+  <h2>Host — 요청한 호스트(도메인) 헤더</h2>
+
+  <p>
+    클라이언트가 요청을 보낼 때 <strong>어떤 도메인을 대상으로 하는지</strong>를 명시하는 헤더다.
+    HTTP/1.1부터 <strong>필수(required) 헤더</strong>로 지정됐다.
+  </p>
+
+<pre><code>GET /search HTTP/1.1
+Host: www.google.com</code></pre>
+
+  <h3>왜 필수인가 — 가상 호스팅(Virtual Hosting)</h3>
+
+  <p>
+    현대 서버 인프라에서는 <strong>하나의 IP 주소에 여러 도메인을 올리는 것이 일반적</strong>이다.
+    예를 들어 같은 IP(<code>192.168.0.1</code>)에 <code>aaa.com</code>과 <code>bbb.com</code>이 함께 있을 수 있다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">클라이언트가 <code>aaa.com</code> 접속 시도</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">DNS 조회 → IP <code>192.168.0.1</code> 확인</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">TCP 연결 → HTTP 요청 전송</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">서버는 <code>Host: aaa.com</code> 헤더를 보고 어느 사이트로 라우팅할지 결정</div>
+  </div>
+
+  <p>
+    Host 헤더가 없으면 서버는 이 요청이 <code>aaa.com</code>을 원하는지 <code>bbb.com</code>을 원하는지 알 수 없다.
+    그래서 필수 헤더다.
+  </p>
+
+  <div class="analogy">
+    React 앱을 Vercel에 배포할 때 같은 Vercel 서버에 수천 개의 프로젝트가 올라가 있지만,
+    각 도메인으로 접속하면 자신의 프로젝트만 보인다.
+    Vercel이 <code>Host</code> 헤더를 읽어 어느 프로젝트를 서빙할지 분기하기 때문이다.
+    Rails에서도 <code>request.host</code>로 이 값을 읽을 수 있다.
+  </div>
+
+  <h2>Location — 리다이렉션 주소</h2>
+
+  <p>
+    응답 헤더로 사용하며, 두 가지 상황에서 쓰인다.
+  </p>
+
+  <ul>
+    <li>
+      <strong>3xx 리다이렉션</strong>: 브라우저가 이 헤더의 URL로 자동 이동한다.
+<pre><code>HTTP/1.1 301 Moved Permanently
+Location: https://www.new-site.com/</code></pre>
+    </li>
+    <li>
+      <strong>201 Created</strong>: 새로 생성된 리소스의 URI를 알려준다.
+<pre><code>HTTP/1.1 201 Created
+Location: /posts/42</code></pre>
+    </li>
+  </ul>
+
+  <div class="analogy">
+    Rails에서 리소스를 생성한 뒤 상세 페이지로 이동시키는 패턴이다.
+    <code>redirect_to @post</code>를 쓰면 Rails가 자동으로 <code>Location: /posts/42</code> 헤더를 담아 302 응답을 보내고,
+    브라우저가 그 주소로 이동한다.
+    프론트에서 <code>router.push('/posts/42')</code>를 호출하는 것과 결과는 같지만, 서버가 브라우저에게 "여기로 가라"고 지시하는 방식이다.
+  </div>
+
+  <h2>Allow — 허용 HTTP 메서드</h2>
+
+  <p>
+    서버가 <strong>허용하는 HTTP 메서드 목록</strong>을 응답 헤더로 전달한다.
+    <code>405 Method Not Allowed</code> 응답과 함께 사용한다.
+  </p>
+
+<pre><code>HTTP/1.1 405 Method Not Allowed
+Allow: GET, POST, DELETE</code></pre>
+
+  <p>
+    클라이언트가 <code>PUT /posts/1</code>을 요청했는데 서버가 PUT을 지원하지 않는다면,
+    <code>405</code>와 함께 위 헤더를 보내 "이 엔드포인트는 GET, POST, DELETE만 된다"고 알려준다.
+  </p>
+
+  <h2>Retry-After — 다음 요청까지 대기 시간</h2>
+
+  <p>
+    서버가 잠시 사용 불가(503)거나 요청이 너무 많은(429) 경우,
+    <strong>얼마 후에 다시 시도하면 되는지</strong>를 알려주는 응답 헤더다.
+    날짜 형식과 초(second) 형식 두 가지를 쓸 수 있다.
+  </p>
+
+<pre><code>HTTP/1.1 503 Service Unavailable
+Retry-After: Fri, 31 Dec 1999 23:59:59 GMT   ← 날짜 형식
+
+HTTP/1.1 503 Service Unavailable
+Retry-After: 120                               ← 120초 후에 재시도</code></pre>
+
+  <p>
+    이론상 있는 헤더지만, <strong>실무에서는 사용이 드물다</strong>.
+    서버 복구 시점을 정확히 예측하기 어렵고, 잘못된 값을 주면 클라이언트가 너무 이르거나 너무 늦게 재시도하기 때문이다.
+  </p>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>Host</strong>: 요청 헤더, <em>필수</em> — 어느 도메인 대상인지 명시 (가상 호스팅 핵심)</li>
+    <li><strong>Location</strong>: 응답 헤더 — 3xx 리다이렉트 주소 또는 201 Created 리소스 URI</li>
+    <li><strong>Allow</strong>: 응답 헤더 — 405와 함께 허용 메서드 목록 전달</li>
+    <li><strong>Retry-After</strong>: 응답 헤더 — 503/429와 함께 재시도 가능 시점 안내 (실무 사용 드묾)</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. HTTP/1.1에서 Host 헤더가 필수인 핵심 이유는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 서버의 소프트웨어 버전을 식별하기 위해서         </button></li>
+      <li><button onclick="answer(this,'q1',false)">B. 요청 본문(body)의 크기를 알려주기 위해서        </button></li>
+      <li><button onclick="answer(this,'q1',true)">C. 한 IP에 여러 도메인이 있을 때 대상 도메인 식별   </button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 클라이언트의 운영체제 정보를 전달하기 위해서    </button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 서버가 새 리소스를 생성한 뒤 201 응답과 함께 사용하는 헤더는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. Host                        </button></li>
+      <li><button onclick="answer(this,'q2',true)">B. Location                     </button></li>
+      <li><button onclick="answer(this,'q2',false)">C. Allow                       </button></li>
+      <li><button onclick="answer(this,'q2',false)">D. Retry-After                 </button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "Rails에서 Host 헤더를 어떻게 활용하나요?", "201 Location과 3xx Location의 차이를 더 설명해줘" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <span>강의 32: 특별한 정보</span>
+    <a href="net-30-authentication.html">강의 33: 인증 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 하나의 IP 주소에 aaa.com과 bbb.com이 함께 있다면 서버는 어떻게 구분할까요?';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: 새로 만들어진 리소스의 주소(URI)를 클라이언트에게 알려줘야 합니다.';
+  }
+}
+</script>
 
 </body>
 </html>

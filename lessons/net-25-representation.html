@@ -16,18 +16,152 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 일반 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 일반 — Content-Type·Content-Encoding·Content-Language·Content-Length 네 가지 표현 헤더의 역할을 이해한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    <strong>표현 헤더(Representation Header)</strong>는 HTTP 본문(body)에 담긴 데이터가
+    <strong>어떤 형식·인코딩·언어·길이</strong>인지 수신측에 알려주는 헤더다.
+    서버와 클라이언트는 이 헤더 없이는 본문을 어떻게 해석해야 할지 알 수 없다.
+  </p>
+
+  <h2>왜 "표현(Representation)"인가</h2>
+
+  <p>
+    같은 데이터라도 보내는 형식은 다를 수 있다.
+    회원 정보 하나를 <code>application/json</code>으로도 보낼 수 있고,
+    <code>application/xml</code>로도 보낼 수 있다.
+    <strong>동일한 리소스를 여러 가지 방식으로 "표현"</strong>할 수 있기 때문에
+    RFC 7230+에서는 이것을 "표현(Representation)"이라 부른다.
+  </p>
+
+  <h2>Content-Type: 표현 데이터의 형식</h2>
+
+  <p>본문이 어떤 미디어 타입(Media Type)인지 알려준다. <code>타입/서브타입</code> 형식이다.</p>
+
+<pre><code>Content-Type: text/html;charset=UTF-8
+Content-Type: application/json
+Content-Type: image/png</code></pre>
+
+  <ul>
+    <li><code>text/html;charset=UTF-8</code> — HTML 문서, UTF-8 인코딩</li>
+    <li><code>application/json</code> — JSON 데이터 (기본 인코딩 UTF-8)</li>
+    <li><code>image/png</code> — PNG 이미지</li>
+  </ul>
+
+  <p>
+    브라우저는 이 값을 보고 렌더링 방법을 결정한다.
+    HTML 파일을 <code>application/json</code>으로 보내면 브라우저는 렌더링하지 않고
+    JSON 텍스트 그대로 출력해버린다.
+  </p>
+
+  <h2>Content-Encoding: 표현 데이터의 인코딩</h2>
+
+  <p>
+    보내는 쪽이 본문을 압축한 경우, 어떤 방식으로 압축했는지 알려준다.
+    받는 쪽은 이 헤더를 보고 압축을 해제한다.
+  </p>
+
+<pre><code>Content-Encoding: gzip
+Content-Encoding: deflate
+Content-Encoding: identity</code></pre>
+
+  <ul>
+    <li><code>gzip</code> — 가장 많이 쓰이는 압축 방식</li>
+    <li><code>deflate</code> — zlib 포맷 압축</li>
+    <li><code>identity</code> — 압축하지 않음 (기본값)</li>
+  </ul>
+
+  <h2>Content-Language: 표현 데이터의 자연 언어</h2>
+
+  <p>본문이 어떤 언어로 작성됐는지 알려준다.</p>
+
+<pre><code>Content-Language: ko
+Content-Language: en
+Content-Language: en-US</code></pre>
+
+  <h2>Content-Length: 표현 데이터의 길이</h2>
+
+  <p>
+    본문의 크기를 바이트 단위로 알려준다.
+    <strong>주의</strong>: <code>Transfer-Encoding: chunked</code>를 사용하면
+    본문을 조각(chunk)으로 나눠 보내기 때문에 전체 길이를 미리 알 수 없다.
+    이 경우에는 <code>Content-Length</code>를 함께 쓰면 안 된다.
+  </p>
+
+<pre><code>Content-Length: 3423</code></pre>
+
+  <div class="analogy">
+    React에서 <code>fetch()</code>로 POST 요청을 보낼 때 이렇게 쓴다.
+    <code>{ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }</code>
+    <code>Content-Type: application/json</code>이 없으면 Rails 서버는 body를 JSON으로 파싱하지 않고
+    plain text로 처리해버린다. 서버가 어떻게 읽을지 "설명"해주는 것이 바로 표현 헤더다.
+  </div>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><code>Content-Type</code>: 본문의 <strong>미디어 타입</strong> (무엇인가)</li>
+    <li><code>Content-Encoding</code>: 본문의 <strong>압축 방식</strong> (어떻게 압축했나)</li>
+    <li><code>Content-Language</code>: 본문의 <strong>자연 언어</strong> (어떤 언어로 쓰여 있나)</li>
+    <li><code>Content-Length</code>: 본문의 <strong>크기</strong> (몇 바이트인가)</li>
+    <li>이 네 헤더가 없으면 수신측은 본문을 어떻게 해석할지 알 수 없다</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 서버가 JSON을 응답할 때 포함해야 하는 헤더와 값으로 올바른 것은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. Content-Encoding: application/json     </button></li>
+      <li><button onclick="answer(this,'q1',true)">B. Content-Type: application/json           </button></li>
+      <li><button onclick="answer(this,'q1',false)">C. Content-Language: application/json     </button></li>
+      <li><button onclick="answer(this,'q1',false)">D. Content-Length: application/json       </button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. Content-Length를 함께 사용하면 안 되는 헤더는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. Content-Type: text/html               </button></li>
+      <li><button onclick="answer(this,'q2',false)">B. Content-Language: ko                  </button></li>
+      <li><button onclick="answer(this,'q2',false)">C. Content-Encoding: gzip                </button></li>
+      <li><button onclick="answer(this,'q2',true)">D. Transfer-Encoding: chunked             </button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "gzip 압축은 어느 쪽에서 하나요?", "Content-Type 없이 보내면 서버에서 어떻게 되나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-24-header-overview.html">← 강의 27: HTTP 헤더 개요</a>
+    <a href="net-26-content-negotiation.html">강의 29: 콘텐츠 협상 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 본문의 형식(미디어 타입)을 알려주는 헤더는 무엇일까요?';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: 본문을 조각조각 나눠 보낼 때는 전체 길이를 미리 알 수 없습니다.';
+  }
+}
+</script>
 
 </body>
 </html>

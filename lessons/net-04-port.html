@@ -16,18 +16,196 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · 인터넷 네트워크 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · 인터넷 네트워크 — IP 주소만으로는 구분할 수 없는 "같은 컴퓨터 안 여러 앱"을 PORT가 어떻게 식별하는지 이해한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    IP가 인터넷에서 <strong>내 컴퓨터(아파트 동)</strong>를 찾아주는 주소라면,
+    PORT는 그 컴퓨터 안의 <strong>특정 애플리케이션(호수)</strong>을 식별하는 번호다.
+    같은 컴퓨터에서 여러 서버가 동시에 돌아갈 때, PORT가 각 앱의 문을 구분한다.
+  </p>
+
+  <h2>왜 PORT가 필요한가</h2>
+
+  <p>
+    앞 강의에서 IP의 세 번째 한계를 기억하는가?
+    "같은 IP 서버에 여러 앱이 있으면 어느 앱으로 패킷을 보낼지 모른다"는 문제였다.
+  </p>
+
+  <p>
+    실제로 서버 한 대에는 여러 서비스가 동시에 돌아가는 경우가 많다.
+    Rails 앱 서버, MySQL DB 서버, Redis 등 모두 같은 머신에 있을 수 있다.
+    목적지 IP만 알아서는 "Rails로 보낼지, DB로 보낼지" 구분이 불가능하다.
+    이걸 해결하는 것이 <strong>PORT</strong>다.
+  </p>
+
+  <div class="analogy">
+    개발할 때 <code>localhost:3000</code>은 React 개발 서버,
+    <code>localhost:8080</code>은 Rails API 서버,
+    <code>localhost:3306</code>은 MySQL이다.
+    IP(<code>localhost</code> = <code>127.0.0.1</code>)는 같지만, 뒤의 번호 — 그것이 PORT다.
+    PORT가 없었다면 같은 머신의 세 서버를 동시에 띄울 수 없었을 것이다.
+  </div>
+
+  <h2>PORT 번호 규칙</h2>
+
+  <p>
+    PORT 번호는 <strong>0 ~ 65535</strong>까지 할당할 수 있다. (16비트 정수)
+  </p>
+
+  <table style="width:100%;border-collapse:collapse;margin:1rem 0;font-size:0.9rem;">
+    <thead>
+      <tr style="background:var(--surface2,#1e1e2e);text-align:left;">
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">범위</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">이름</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">설명</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">0 ~ 1023</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">Well-known PORT</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">국제 표준으로 이미 용도가 정해진 번호 — 임의로 쓰면 안 됨</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">1024 ~ 49151</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">Registered PORT</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">업체·단체가 등록해 쓰는 번호 (예: MySQL 3306, Redis 6379)</td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;font-weight:bold;">49152 ~ 65535</td>
+        <td style="padding:0.5rem 0.75rem;">Dynamic PORT</td>
+        <td style="padding:0.5rem 0.75rem;">OS가 클라이언트 소켓에 임시로 할당하는 번호</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Well-known PORT 주요 번호</h3>
+
+  <table style="width:100%;border-collapse:collapse;margin:1rem 0;font-size:0.9rem;">
+    <thead>
+      <tr style="background:var(--surface2,#1e1e2e);text-align:left;">
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">PORT</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">프로토콜</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">용도</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">20, 21</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">FTP</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">파일 전송 프로토콜</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">23</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">TELNET</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">원격 접속 (암호화 없음, 현재 거의 미사용)</td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">80</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">HTTP</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">웹 통신 (비암호화). <code>http://example.com</code> = <code>example.com:80</code></td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">443</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">HTTPS</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">암호화된 웹 통신. <code>https://example.com</code> = <code>example.com:443</code></td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;font-weight:bold;">22</td>
+        <td style="padding:0.5rem 0.75rem;">SSH</td>
+        <td style="padding:0.5rem 0.75rem;">암호화된 원격 접속 (서버 배포 시 사용)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    브라우저에서 <code>https://example.com</code>을 입력하면 PORT를 명시하지 않아도
+    브라우저가 자동으로 <code>443</code>을 붙인다. 즉, <code>https://example.com:443</code>과 동일하다.
+    프론트에서 <code>http://localhost:3000</code>처럼 항상 PORT를 명시했던 이유는
+    Well-known PORT가 아닌 번호를 쓰기 때문이다.
+  </p>
+
+  <h2>IP + PORT = 소켓 주소</h2>
+
+  <p>
+    IP와 PORT를 합치면 인터넷에서 <strong>특정 컴퓨터의 특정 앱</strong>을 정확하게 가리킬 수 있다.
+    이 조합을 <strong>소켓 주소(Socket Address)</strong>라 한다.
+  </p>
+
+<pre><code>192.168.0.103:3000   // IP:PORT — 이 컴퓨터(192.168.0.103)의 3000번 앱
+142.250.196.46:443   // Google 서버의 HTTPS 서비스</code></pre>
+
+  <p>
+    TCP 패킷 헤더에는 <strong>출발 PORT + 목적지 PORT</strong>가 모두 담긴다.
+    서버는 목적지 PORT를 보고 "이 패킷은 Rails(3000)로, 저 패킷은 MySQL(3306)로" 라우팅한다.
+  </p>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>PORT = 한 컴퓨터(IP) 안에서 <strong>특정 앱을 구분하는 번호</strong></li>
+    <li>비유: IP = 아파트 동 번호, PORT = 호수</li>
+    <li>범위: <strong>0~65535</strong>. 0~1023은 Well-known(표준 예약)</li>
+    <li>주요 번호: HTTP=80, HTTPS=443, FTP=20/21, SSH=22</li>
+    <li>IP + PORT = <strong>소켓 주소</strong> — 인터넷에서 특정 앱을 정확하게 가리킴</li>
+    <li>평소 <code>localhost:3000</code>이 바로 이 개념을 쓰고 있던 것</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. PORT가 필요한 이유로 가장 정확한 것은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. IP 주소만으로는 대륙 간 라우팅 경로를 정할 수 없어서</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 같은 IP 컴퓨터에 여러 앱이 있을 때 목적지 앱을 구분해야 해서</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 패킷 순서를 보장하기 위한 번호가 필요해서</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. IPv4 주소 부족 문제를 해결하기 위한 보조 주소로 사용되어서</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. <code>https://api.example.com</code>에 접속할 때 브라우저가 자동으로 사용하는 PORT 번호는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 80 — HTTP의 Well-known PORT 번호</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. 443 — HTTPS의 Well-known PORT 번호</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. 3000 — 개발용 로컬 서버 기본 PORT 번호</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 8080 — API 서버 일반 관례 PORT 번호</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "80번 포트를 쓰면 URL에 :80을 안 써도 되는 건가요?", "같은 포트를 두 앱이 동시에 쓸 수 있나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <span>강의 7: PORT</span>
+    <a href="net-05-dns.html">강의 8: DNS →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(function(button) { button.disabled = true; });
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: IP는 컴퓨터(아파트 동)를, PORT는 그 안의 앱(호수)을 가리킵니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: https://는 HTTPS 프로토콜이고, HTTPS의 Well-known PORT는 443입니다.';
+  }
+}
+</script>
 
 </body>
 </html>

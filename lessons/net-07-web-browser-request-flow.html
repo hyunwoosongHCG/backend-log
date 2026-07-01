@@ -16,18 +16,225 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · URI·요청 흐름 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · URI·요청 흐름 — URL 하나를 입력했을 때 브라우저부터 서버까지 어떤 단계를 거쳐 응답이 돌아오는지 전체 흐름을 꿰뚫는다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    URL 하나가 입력되면 브라우저는 <strong>DNS 조회 → TCP 연결 → HTTP 요청 생성 → 패킷 전송 → 응답 수신 → 렌더링</strong>
+    순서로 동작하며, 이전 강의에서 배운 IP·TCP·HTTP가 이 흐름 안에서 모두 맞물린다.
+  </p>
+
+  <h2>DevTools Network 탭의 한 줄, 그 뒤에서 벌어지는 일</h2>
+
+  <p>
+    Chrome DevTools의 Network 탭을 열면 요청 한 줄이 보인다.
+    그 한 줄이 완료되기까지 브라우저는 물밑에서 여섯 단계를 순서대로 밟는다.
+  </p>
+
+  <div class="analogy">
+    Network 탭에서 보이는 <strong>Timing 컬럼</strong>이 바로 이 흐름을 시각화한 것이다.
+    "DNS Lookup", "Initial connection", "Request sent", "Waiting (TTFB)", "Content Download" —
+    이 이름들이 아래에서 배울 각 단계의 이름이다.
+    앞으로 성능 이슈를 디버깅할 때 어느 단계가 느린지 바로 읽힐 것이다.
+  </div>
+
+  <h2>전체 흐름 — 6단계</h2>
+
+  <div class="flow">
+    <div class="flow-step">1. URL 파싱 — 브라우저가 scheme·host·path·query를 분리</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">2. DNS 조회 — 도메인을 IP 주소로 변환</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">3. TCP 3-way handshake — 서버와 연결 수립 (HTTPS면 TLS handshake 추가)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">4. HTTP 요청 메시지 생성 · 전송 — TCP/IP 패킷에 실어 전달</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">5. 서버가 HTTP 응답 메시지 반환</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">6. 브라우저가 응답(HTML·JSON 등)을 받아 렌더링</div>
+  </div>
+
+  <h2>각 단계 상세</h2>
+
+  <h3>1단계. URL 파싱</h3>
+  <p>
+    브라우저는 먼저 URL 문자열을 쪼갠다.
+    앞 강의(URI)에서 배운 <code>scheme://host[:port]/path?query#fragment</code> 구조다.
+    fragment(<code>#</code>)는 이 시점에 떼어낸다 — 서버로 보내지 않는다.
+  </p>
+
+  <h3>2단계. DNS(Domain Name System) 조회</h3>
+  <p>
+    <code>google.com</code>이라는 이름은 실제로 서버의 논리 주소가 아니다.
+    브라우저는 DNS 서버에 "이 도메인의 IP 주소가 뭐예요?"라고 물어본다.
+    DNS는 <code>142.250.196.78</code> 같은 IP 주소를 돌려준다.
+    이미 캐시된 결과가 있으면 이 단계를 건너뛴다 — Network 탭에서 "DNS Lookup: 0ms"로 보이는 이유다.
+  </p>
+
+  <h3>3단계. TCP 3-way handshake</h3>
+  <p>
+    IP 주소와 포트를 알았으니 실제 연결을 맺는다.
+    HTTP는 <code>80</code>번 포트, HTTPS는 <code>443</code>번 포트를 쓴다.
+    TCP는 3번의 메시지 교환으로 연결을 수립한다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">클라이언트 → 서버: SYN (연결 요청)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">서버 → 클라이언트: SYN-ACK (요청 수락 + 확인)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">클라이언트 → 서버: ACK (확인 완료, 연결 수립)</div>
+  </div>
+
+  <p>
+    HTTPS라면 TCP 연결 이후 <strong>TLS handshake</strong>가 추가로 이루어진다.
+    암호화 방식을 협상하고, 인증서를 검증하는 과정이다.
+    이 때문에 HTTPS 첫 연결은 HTTP보다 약간 더 느리다.
+  </p>
+
+  <h3>4단계. HTTP 요청 메시지 생성 · 전송</h3>
+  <p>
+    연결이 맺어지면 브라우저는 <strong>HTTP 요청 메시지</strong>를 만든다.
+    메시지는 크게 세 부분이다: 요청 라인(start-line), 헤더(headers), 바디(body).
+  </p>
+
+<pre><code>GET /search?q=hello&hl=ko HTTP/1.1
+Host: google.com
+User-Agent: Mozilla/5.0 ...
+Accept: text/html,application/xhtml+xml
+Accept-Language: ko-KR,ko;q=0.9
+(빈 줄 — 헤더 끝 신호)
+(GET은 body 없음)</code></pre>
+
+  <p>
+    이 메시지를 TCP 세그먼트에 담고, 그것을 IP 패킷에 담고,
+    그것을 이더넷 프레임에 담아 전송한다 — 앞 강의에서 본 캡슐화(Encapsulation) 과정이다.
+    패킷은 라우터를 hop by hop 거쳐 목적지 서버에 도달한다.
+  </p>
+
+  <div class="analogy">
+    <code>fetch('/api/members', { method: 'GET', headers: { Authorization: 'Bearer ...' } })</code>를 쓸 때,
+    브라우저가 자동으로 Host, User-Agent, Accept 헤더를 붙여 이 형식의 메시지를 만든다.
+    Network 탭 → 요청 선택 → "Headers" 탭에서 실제로 전송된 요청 헤더를 볼 수 있다.
+  </div>
+
+  <h3>5단계. 서버가 HTTP 응답 메시지 반환</h3>
+  <p>
+    서버(Rails 앱이라면 Puma + Rails)가 요청을 받아 처리하고 응답을 돌려준다.
+    응답 메시지도 세 부분이다: 상태 라인(status-line), 헤더, 바디.
+  </p>
+
+<pre><code>HTTP/1.1 200 OK
+Content-Type: text/html; charset=UTF-8
+Content-Length: 12345
+(빈 줄)
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;...&lt;/html&gt;</code></pre>
+
+  <p>
+    상태 코드(200 OK, 404 Not Found, 500 Internal Server Error 등)가 이 상태 라인에 담긴다.
+    Network 탭의 "Status" 컬럼이 바로 이 값이다.
+  </p>
+
+  <h3>6단계. 렌더링</h3>
+  <p>
+    브라우저가 응답 바디를 받는다.
+    <code>Content-Type: text/html</code>이면 HTML 파싱 → DOM 생성 → 렌더링.
+    <code>Content-Type: application/json</code>이면 JavaScript가 데이터를 받아 처리한다.
+    HTML 안에 <code>&lt;script&gt;</code>, <code>&lt;link&gt;</code>, <code>&lt;img&gt;</code> 태그가 있으면
+    각 자원을 위해 위 흐름이 다시 반복된다.
+  </p>
+
+  <h2>한 번에 이어보기 — 예시: <code>https://google.com/search?q=hello</code></h2>
+
+  <div class="flow">
+    <div class="flow-step">① 브라우저: URL 파싱 → scheme=https, host=google.com, path=/search, query=q=hello</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">② DNS: google.com → 142.250.196.78</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">③ TCP: 142.250.196.78:443 으로 3-way handshake + TLS handshake</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">④ HTTP 요청: GET /search?q=hello HTTP/1.1 → 패킷으로 전송</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">⑤ 서버 응답: HTTP/1.1 200 OK + HTML body</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">⑥ 브라우저: HTML 파싱 → 검색 결과 페이지 렌더링</div>
+  </div>
+
+  <h2>이전 강의와의 연결</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>인터넷 통신(강의 4)</strong> — ④에서 패킷이 라우터를 hop by hop 거치는 과정</li>
+    <li><strong>IP(강의 5)</strong> — ②의 DNS 조회로 얻은 IP 주소가 패킷의 목적지</li>
+    <li><strong>TCP(강의 6)</strong> — ③의 3-way handshake, 신뢰성 있는 전송 보장</li>
+    <li><strong>URI(강의 9)</strong> — ①의 URL 파싱 구조 전체</li>
+  </ul>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>URL 입력 → DNS 조회 → TCP 연결 → HTTP 요청 → HTTP 응답 → 렌더링</li>
+    <li>HTTPS는 TCP 연결 후 TLS handshake 단계가 추가된다</li>
+    <li>fragment(<code>#</code>)는 DNS도, TCP도, 서버도 보지 않는다 — 브라우저 전용</li>
+    <li>Network 탭의 Timing 정보가 이 흐름의 각 단계 시간을 보여준다</li>
+    <li>HTML 안 리소스(JS·CSS·이미지) 수만큼 이 흐름이 반복된다</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 브라우저가 URL을 입력받은 직후 수행하는 작업 순서로 올바른 것은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. HTTP 요청 전송 → DNS 조회 → TCP 연결</button></li>
+      <li><button onclick="answer(this,'q1',false)">B. TCP 연결 → DNS 조회 → HTTP 요청 전송</button></li>
+      <li><button onclick="answer(this,'q1',true)">C. DNS 조회 → TCP 연결 → HTTP 요청 전송</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. DNS 조회 → HTTP 요청 전송 → TCP 연결</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. HTTPS 요청이 HTTP보다 첫 연결이 느린 이유는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. DNS 조회를 두 번 해야 하기 때문이다</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. 패킷 크기가 항상 더 크기 때문이다</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. TCP 연결 후 TLS handshake 단계가 추가되기 때문이다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 서버가 응답하기 전 인증을 거치기 때문이다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "TLS handshake가 정확히 어떻게 이루어지나요?", "HTTP/2나 HTTP/3에서는 흐름이 어떻게 달라지나요?", "DNS 캐시는 어디에 저장되나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <span>강의 10: 웹 브라우저 요청 흐름</span>
+    <a href="net-08-everything-is-http.html">강의 11: 모든 것이 HTTP →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    result.textContent = '다시 생각해보세요.';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: IP 주소를 모르면 연결할 수 없고, 연결이 없으면 메시지를 보낼 수 없습니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: HTTPS는 암호화를 위해 TCP 연결 이후 추가 협상 단계가 있습니다.';
+  }
+}
+</script>
 
 </body>
 </html>

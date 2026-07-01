@@ -16,18 +16,342 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 메서드 활용 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 메서드 활용 —
+    리소스 관리 방식(컬렉션·스토어·문서·컨트롤러)을 파악하고 실무 URI 설계 판단력을 기른다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    HTTP API 설계는 <strong>"리소스 URI는 명사, 행위는 HTTP 메서드"</strong>가 원칙이며,
+    리소스를 누가 관리하느냐(서버 vs 클라이언트)에 따라
+    <strong>컬렉션(Collection)</strong>과 <strong>스토어(Store)</strong>로 나뉜다.
+    이 두 패턴으로 해결이 안 될 때 <strong>컨트롤 URI(Control URI)</strong>를 쓴다.
+  </p>
+
+  <h2>리소스 설계의 원칙: 명사로 URI, 행위는 메서드로</h2>
+
+  <p>
+    URI를 설계할 때 가장 중요한 규칙은 <strong>리소스(Resource)와 행위(Action)를 분리</strong>하는 것이다.
+    리소스는 URI(경로)로 표현하고, 행위는 HTTP 메서드(GET/POST/PUT/PATCH/DELETE)로 표현한다.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>나쁜 예 (행위가 URI에)</th>
+        <th>좋은 예 (행위는 메서드로)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>POST /createMember</code></td>
+        <td><code>POST /members</code></td>
+      </tr>
+      <tr>
+        <td><code>GET /getMember/1</code></td>
+        <td><code>GET /members/1</code></td>
+      </tr>
+      <tr>
+        <td><code>POST /deleteMember/1</code></td>
+        <td><code>DELETE /members/1</code></td>
+      </tr>
+      <tr>
+        <td><code>GET /memberList</code></td>
+        <td><code>GET /members</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="analogy">
+    React 컴포넌트로 치면: 컴포넌트 이름(리소스)과 props로 받는 동작(행위)을 분리하는 것과 같다.
+    <code>&lt;UserCard onDelete={...} /&gt;</code>에서 "UserCard"는 리소스(명사),
+    "onDelete"는 행위(동사). URI 설계도 똑같이 <code>/users/1</code>은 리소스,
+    <code>DELETE</code>는 행위다.
+  </div>
+
+  <h2>리소스 관리 방식 4가지 (아키텍처 패턴)</h2>
+
+  <h3>1. 문서(Document) — 단일 개념</h3>
+
+  <p>
+    파일 하나, 객체 인스턴스 하나, DB의 행(row) 하나처럼 <strong>단일 개념</strong>을 나타낸다.
+    컬렉션의 하위 리소스가 문서다.
+  </p>
+
+<pre><code>GET  /members/1        # 회원 1번 조회
+GET  /files/star.jpg   # 파일 하나 조회</code></pre>
+
+  <h3>2. 컬렉션(Collection) — POST 기반, 서버가 URI 관리</h3>
+
+  <p>
+    <strong>서버가 리소스 URI를 생성하고 관리</strong>하는 방식이다.
+    클라이언트는 "등록해줘"만 요청하고, 서버가 새로 생성된 리소스의 식별자(id)를 결정한다.
+    <strong>회원 관리 API</strong>가 대표적인 예다.
+  </p>
+
+<pre><code># 클라이언트: 어디에 저장될지 모름, 그냥 요청만
+POST /members
+{ "username": "hyunwoo", "email": "hw@example.com" }
+
+# 서버: 직접 id를 생성하고 URI를 만들어 응답
+HTTP/1.1 201 Created
+Location: /members/100    ← 서버가 /members/100 을 만들었다고 알려줌</code></pre>
+
+  <p>
+    서버가 auto-increment id(DB의 AUTO_INCREMENT)로 식별자를 만든다.
+    클라이언트는 생성된 URI를 모르다가 <code>201 Created + Location</code> 헤더로 알게 된다.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>동작</th>
+        <th>메서드</th>
+        <th>URI</th>
+        <th>설명</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>목록 조회</td>
+        <td>GET</td>
+        <td><code>/members</code></td>
+        <td>회원 목록</td>
+      </tr>
+      <tr>
+        <td>등록</td>
+        <td>POST</td>
+        <td><code>/members</code></td>
+        <td>새 회원 생성, URI는 서버가 결정</td>
+      </tr>
+      <tr>
+        <td>단건 조회</td>
+        <td>GET</td>
+        <td><code>/members/{id}</code></td>
+        <td>특정 회원 조회</td>
+      </tr>
+      <tr>
+        <td>수정</td>
+        <td>PATCH</td>
+        <td><code>/members/{id}</code></td>
+        <td>회원 정보 부분 수정</td>
+      </tr>
+      <tr>
+        <td>삭제</td>
+        <td>DELETE</td>
+        <td><code>/members/{id}</code></td>
+        <td>회원 삭제</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>3. 스토어(Store) — PUT 기반, 클라이언트가 URI 관리</h3>
+
+  <p>
+    <strong>클라이언트가 리소스 URI를 알고 직접 관리</strong>하는 방식이다.
+    PUT을 주로 사용한다 — 없으면 생성, 있으면 덮어쓴다.
+    <strong>파일 관리 시스템</strong>이 대표적인 예다. 파일 이름은 클라이언트가 직접 지정한다.
+  </p>
+
+<pre><code># 클라이언트: 파일 이름(star.jpg)을 클라이언트가 직접 알고 지정
+PUT /files/star.jpg
+[파일 바이너리 데이터]
+
+# 없으면 생성(201 Created), 있으면 덮어쓰기(200 OK)
+HTTP/1.1 201 Created</code></pre>
+
+  <table>
+    <thead>
+      <tr>
+        <th>동작</th>
+        <th>메서드</th>
+        <th>URI</th>
+        <th>설명</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>목록 조회</td>
+        <td>GET</td>
+        <td><code>/files</code></td>
+        <td>파일 목록</td>
+      </tr>
+      <tr>
+        <td>단건 조회</td>
+        <td>GET</td>
+        <td><code>/files/{filename}</code></td>
+        <td>특정 파일 조회</td>
+      </tr>
+      <tr>
+        <td>등록/수정</td>
+        <td>PUT</td>
+        <td><code>/files/{filename}</code></td>
+        <td>클라이언트가 URI(파일명)를 직접 지정</td>
+      </tr>
+      <tr>
+        <td>삭제</td>
+        <td>DELETE</td>
+        <td><code>/files/{filename}</code></td>
+        <td>파일 삭제</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="analogy">
+    컬렉션 vs 스토어의 핵심 질문: <strong>"id(식별자)를 누가 만드나?"</strong><br>
+    컬렉션 = 서버가 만든다 (DB auto-increment, UUID 생성 등).
+    React 앱에서 회원 가입 후 서버가 돌려준 <code>{ id: 100 }</code>을 받아서 쓰는 게 이것.<br>
+    스토어 = 클라이언트가 이미 알고 지정한다.
+    파일 업로드할 때 파일명(<code>star.jpg</code>)은 내가 정해서 서버에 PUT하는 것.
+  </div>
+
+  <h3>4. 컨트롤러/컨트롤 URI(Controller / Control URI) — 동사 사용</h3>
+
+  <p>
+    문서·컬렉션·스토어만으로는 표현하기 어려운 <strong>추가 프로세스(비즈니스 로직)</strong>를 실행할 때 쓴다.
+    HTTP 메서드로 행위를 표현하기 어려울 때 예외적으로 URI에 <strong>동사(행위)</strong>를 사용한다.
+  </p>
+
+  <p>
+    특히 <strong>HTML Form은 GET과 POST만 지원</strong>하기 때문에,
+    PUT/PATCH/DELETE 같은 행위를 Form으로 전송해야 할 때 컨트롤 URI를 설계한다.
+  </p>
+
+<pre><code># 문서/컬렉션 패턴으로 표현하기 어려운 행위들
+POST /members/{id}/resign     # 회원 탈퇴 처리 (단순 DELETE가 아닌 탈퇴 프로세스)
+POST /members/{id}/activate   # 회원 활성화
+POST /orders/{id}/cancel      # 주문 취소 (취소 로직 실행)
+POST /orders/{id}/ship        # 배송 시작
+
+# HTML Form 제약 때문에 사용하는 컨트롤 URI
+GET  /members/{id}/edit        # 수정 폼 조회
+POST /members/{id}/delete      # Form으로 DELETE를 못 보내니 POST로
+POST /members/{id}/update      # Form으로 PATCH를 못 보내니 POST로</code></pre>
+
+  <p>
+    컨트롤 URI는 <strong>최대한 억제</strong>하고, 정말 HTTP 메서드로 해결이 안 될 때만 쓴다.
+    Rails의 <code>resources</code> 라우팅과 Grape API 설계에서 <code>member do</code>로 추가하는
+    커스텀 액션이 바로 이 컨트롤 URI에 해당한다.
+  </p>
+
+  <h2>컬렉션 vs 스토어 한눈 비교</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th></th>
+        <th>컬렉션 (Collection)</th>
+        <th>스토어 (Store)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>주요 메서드</td>
+        <td>POST로 등록</td>
+        <td>PUT으로 등록/수정</td>
+      </tr>
+      <tr>
+        <td>URI 결정 주체</td>
+        <td>서버</td>
+        <td>클라이언트</td>
+      </tr>
+      <tr>
+        <td>대표 예시</td>
+        <td>회원 관리 API</td>
+        <td>파일 저장소</td>
+      </tr>
+      <tr>
+        <td>등록 응답</td>
+        <td>201 + Location 헤더</td>
+        <td>201 or 200</td>
+      </tr>
+      <tr>
+        <td>실무 빈도</td>
+        <td>매우 높음 (대부분의 API)</td>
+        <td>상대적으로 낮음</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>실무 설계 판단 흐름</h2>
+
+  <div class="flow">
+    <div class="flow-step">이 API가 리소스를 다루는가?</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">URI는 명사로 → /members, /orders, /files</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">id를 누가 생성하나? 서버 → 컬렉션(POST) / 클라이언트 → 스토어(PUT)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">메서드로 행위 표현이 안 되나? → 컨트롤 URI (최후 수단)</div>
+  </div>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>URI는 명사(리소스)</strong>, 행위는 <strong>HTTP 메서드</strong>로 표현</li>
+    <li><strong>컬렉션(Collection)</strong>: POST 기반, 서버가 URI 생성 → 대부분의 REST API</li>
+    <li><strong>스토어(Store)</strong>: PUT 기반, 클라이언트가 URI 지정 → 파일 업로드 등</li>
+    <li><strong>문서(Document)</strong>: 단일 리소스 (컬렉션 하위의 /members/1 같은 형태)</li>
+    <li><strong>컨트롤 URI</strong>: 동사 포함 URI — Form 제약이나 복잡한 프로세스에서만 사용</li>
+    <li>Rails <code>resources</code> 라우팅이 컬렉션 패턴을 자동으로 구현해준다</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. POST /members 요청으로 회원을 등록할 때, 새로 생성된 회원의 URI(/members/100)를 결정하는 것은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 클라이언트가 요청 바디에 원하는 id를 담아 보내면 그대로 사용</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 서버가 직접 id를 생성하고 Location 헤더로 클라이언트에 알려준다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 브라우저가 요청 순서에 따라 자동으로 번호를 매긴다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 클라이언트와 서버가 협상해서 양측이 동의한 id를 사용한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. HTML Form에서 주문 취소 기능을 구현할 때 올바른 설계는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. &lt;form method="DELETE"&gt; 로 DELETE /orders/{id} 전송</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. &lt;form method="PATCH"&gt; 로 PATCH /orders/{id} 전송</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. &lt;form method="POST"&gt; 로 POST /orders/{id}/cancel 전송</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. &lt;form method="GET"&gt; 로 GET /orders/{id}?action=cancel 전송</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "Rails routes.rb의 resources가 컬렉션 패턴을 어떻게 구현하나요?",
+    "Grape에서 컨트롤 URI는 어떻게 정의하나요?",
+    "201 Created 응답에서 Location 헤더를 실제로 어떻게 설정하나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-17-client-to-server-data.html">← 강의 20: 클라이언트에서 서버로 데이터 전송</a>
+    <a href="net-19-status-code-intro.html">강의 22: HTTP 상태코드 소개 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    result.textContent = '다시 생각해보세요.';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 컬렉션 패턴에서는 누가 id를 생성하는지 떠올려보세요.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: HTML Form이 지원하는 메서드는 GET과 POST뿐입니다.';
+  }
+}
+</script>
 
 </body>
 </html>

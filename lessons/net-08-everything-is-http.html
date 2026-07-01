@@ -16,18 +16,166 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 기본 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 기본 — HTTP가 단순한 웹 브라우저용 프로토콜이 아님을 이해한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    오늘날 인터넷에서 주고받는 <strong>거의 모든 데이터는 HTTP 위에서 흐른다</strong>.
+    HTML 문서뿐 아니라 이미지·영상·JSON·파일·심지어 서버 간 통신까지,
+    HTTP는 현대 인터넷의 <strong>공용어(lingua franca)</strong>가 됐다.
+  </p>
+
+  <h2>HTTP(HyperText Transfer Protocol)의 역사</h2>
+
+  <p>
+    HTTP는 이름 그대로 처음에는 <strong>하이퍼텍스트(HyperText)</strong>, 즉
+    HTML 문서를 링크로 연결해 전달하기 위해 만들어졌다.
+    팀 버너스리(Tim Berners-Lee)가 1989년 CERN에서 제안한 이 규격은
+    "서로 다른 컴퓨터의 문서끼리 링크로 이어지게 하자"는 단순한 아이디어에서 출발했다.
+  </p>
+
+  <p>
+    그런데 시간이 지나면서 HTTP는 문서 전달 그 이상으로 확장됐다.
+    지금은 아래 모든 것이 HTTP를 통해 오간다.
+  </p>
+
+  <ul>
+    <li>HTML, TEXT — 웹 페이지와 일반 텍스트</li>
+    <li>IMAGE, 오디오, 영상 — 미디어 파일</li>
+    <li>파일 — 업로드·다운로드</li>
+    <li>JSON, XML — API 응답 (프론트가 매일 쓰는 바로 그것)</li>
+    <li>서버 → 서버 통신 — 마이크로서비스, 내부 API 호출</li>
+  </ul>
+
+  <div class="analogy">
+    프론트에서 <code>fetch()</code>나 <code>axios.get()</code>으로 서버를 호출할 때,
+    그 안에서 흐르는 것이 전부 HTTP다.
+    JSON을 주고받든, 이미지를 다운로드하든, 파일을 올리든 — 전부 같은 프로토콜.
+    "HTTP = 웹 페이지 다운로드"라는 좁은 이미지를 버리고
+    <strong>"인터넷의 공용 운반 컨테이너"</strong>로 다시 이해하면 된다.
+  </div>
+
+  <h2>HTTP 버전별 기반 프로토콜</h2>
+
+  <p>
+    HTTP는 버전마다 아래 전송 계층(Transport Layer)이 다르다.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>버전</th>
+        <th>기반 프로토콜</th>
+        <th>특징</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>HTTP/1.1</td>
+        <td>TCP</td>
+        <td>현재 가장 널리 쓰임. 요청·응답 순서 보장</td>
+      </tr>
+      <tr>
+        <td>HTTP/2</td>
+        <td>TCP</td>
+        <td>한 연결에서 여러 요청을 동시에(멀티플렉싱). 성능 향상</td>
+      </tr>
+      <tr>
+        <td>HTTP/3</td>
+        <td>UDP (QUIC)</td>
+        <td>UDP를 애플리케이션 레벨에서 재설계. 더 빠른 연결 수립</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>TCP와 UDP — 딱 한 줄씩</h3>
+
+  <p>
+    <strong>TCP(Transmission Control Protocol)</strong>:
+    데이터가 순서대로, 빠짐없이 도착했는지 확인하는 "신뢰형" 프로토콜.
+    3-way handshake(SYN → SYN-ACK → ACK)로 연결을 맺고 나서야 데이터를 보낸다.
+    안전하지만 그만큼 연결 수립에 시간이 든다.
+  </p>
+
+  <p>
+    <strong>UDP(User Datagram Protocol)</strong>:
+    확인 없이 일단 던지는 "빠른 전송형" 프로토콜.
+    신뢰성은 낮지만 속도가 빠르다.
+    HTTP/3는 UDP 위에 <strong>QUIC</strong>이라는 레이어를 올려
+    "빠른 연결 + 신뢰성"을 모두 애플리케이션 단에서 직접 구현했다.
+  </p>
+
+  <h3>현재 현실</h3>
+
+  <p>
+    아직은 <strong>HTTP/1.1</strong>이 주류지만, HTTP/2와 HTTP/3 비중이 꾸준히 늘고 있다.
+    Chrome DevTools의 Network 탭 "Protocol" 컬럼을 보면 <code>h2</code>(HTTP/2),
+    <code>h3</code>(HTTP/3)를 실제로 확인할 수 있다.
+  </p>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>HTTP = HTML 전용이 아니라 <strong>인터넷의 범용 운반 수단</strong></li>
+    <li>JSON API 응답, 이미지, 파일, 서버 간 통신 — <strong>모두 HTTP</strong></li>
+    <li>HTTP/1.1·2는 TCP 기반, HTTP/3는 UDP(QUIC) 기반</li>
+    <li>현재는 HTTP/1.1이 주류, HTTP/2·3 점유율 증가 중</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 오늘날 HTTP로 전송할 수 없는 데이터 유형은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. JSON API 응답 데이터</button></li>
+      <li><button onclick="answer(this,'q1',false)">B. 서버 간 내부 API 호출</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 영상·이미지 미디어 파일</button></li>
+      <li><button onclick="answer(this,'q1',true)">D. HTTP로 못 보내는 유형은 없다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. HTTP/3가 HTTP/1.1·2와 다른 결정적 차이는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. JSON만 전송하도록 특화된 버전이다</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. TCP 대신 UDP(QUIC) 위에서 동작한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. 암호화를 지원하지 않아 더 빠르다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 서버 간 통신에서만 사용하는 버전이다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "QUIC이 TCP보다 왜 빠른가요?", "DevTools에서 HTTP/2인지 어떻게 구분하나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <span>강의 11: 모든 것이 HTTP</span>
+    <a href="net-09-client-server.html">강의 12: 클라이언트 서버 구조 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(function(button) { button.disabled = true; });
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: HTTP는 byte로 표현 가능한 모든 것을 전송할 수 있습니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: HTTP/3의 핵심은 전송 계층 프로토콜의 변화입니다.';
+  }
+}
+</script>
 
 </body>
 </html>

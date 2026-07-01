@@ -16,18 +16,237 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · URI·요청 흐름 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · URI·요청 흐름 — URL 한 줄의 구조를 분해해 "어떤 서버의 어떤 자원인지"를 정확히 읽고 쓸 수 있게 된다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    URI(Uniform Resource Identifier)는 인터넷 상의 <strong>자원을 식별하는 통일된 방법</strong>이며,
+    우리가 매일 쓰는 URL은 그 방법 중 "위치(Location)로 자원을 찾는" 형태다.
+  </p>
+
+  <h2>URI · URL · URN — 세 개념의 관계</h2>
+
+  <p>
+    이 세 용어는 혼용되는 경우가 많지만, 포함 관계가 명확하다.
+  </p>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>URI (Uniform Resource Identifier)</strong> — 자원을 식별하는 상위 개념. URL과 URN을 모두 포함한다.</li>
+    <li><strong>URL (Uniform Resource Locator)</strong> — 자원의 <em>위치(Location)</em>로 식별. 가장 흔하게 쓰는 형태.</li>
+    <li><strong>URN (Uniform Resource Name)</strong> — 자원에 <em>이름(Name)</em>을 부여해 식별. 위치가 바뀌어도 이름은 유지된다는 장점이 있지만, 실무에서는 거의 쓰이지 않는다.</li>
+  </ul>
+
+  <p>
+    위치는 변할 수 있다 — 서버가 이전되거나 경로가 바뀌면 URL이 깨진다.
+    URN은 그 문제를 해결하려 했지만, 인터넷 표준으로 자리잡지 못했다.
+    결과적으로 오늘날 "URI"를 말하면 사실상 "URL"을 뜻하는 경우가 대부분이다.
+  </p>
+
+  <div class="analogy">
+    React에서 컴포넌트를 찾는 방법이 두 가지라고 상상해보자.
+    하나는 "파일 경로(<code>src/components/Button.tsx</code>)"로 찾는 것(→ URL),
+    다른 하나는 "컴포넌트 이름(<code>Button</code>)"으로 찾는 것(→ URN).
+    실무에서는 파일 경로(URL 방식)를 쓰지, 이름만으로 찾는 방식(URN)은 거의 안 쓴다.
+  </div>
+
+  <h2>URL 구조 완전 분해</h2>
+
+  <p>예시 URL 하나를 기준으로 각 파트를 분해한다.</p>
+
+<pre><code>https://google.com/search?q=hello&hl=ko</code></pre>
+
+  <p>전체 형식(Format)은 다음과 같다.</p>
+
+<pre><code>scheme://[userinfo@]host[:port][/path][?query][#fragment]</code></pre>
+
+  <h3>scheme — 어떤 방법으로 접근할지</h3>
+  <p>
+    주로 <strong>프로토콜(protocol)</strong>을 지정한다.
+    <code>http</code>, <code>https</code>, <code>ftp</code> 등이 있으며,
+    <code>https</code>는 <code>http</code>에 보안 계층(TLS/SSL)을 더한 것이다.
+  </p>
+
+  <h3>userinfo — 사용자 인증 정보</h3>
+  <p>
+    형식: <code>user:password@</code>.
+    URL에 사용자 정보를 직접 포함하는 것은 보안상 좋지 않아 <strong>거의 쓰이지 않는다.</strong>
+    GitLab이나 SSH 접속 시 드물게 볼 수 있는 정도다.
+  </p>
+
+  <h3>host — 어느 컴퓨터로 보낼지</h3>
+  <p>
+    도메인명(<code>google.com</code>) 또는 IP 주소(<code>192.168.0.1</code>)를 쓴다.
+    DNS가 도메인을 IP로 변환해준다 — 이전 강의(IP 프로토콜)에서 배운 내용과 이어진다.
+  </p>
+
+  <h3>port — 그 컴퓨터의 어떤 앱으로 보낼지</h3>
+  <p>
+    IP가 컴퓨터의 논리 주소라면, 포트(port)는 <strong>그 컴퓨터에서 실행 중인 앱의 주소</strong>다.
+    <code>http</code>의 기본 포트는 <code>80</code>, <code>https</code>는 <code>443</code>이다.
+    기본 포트는 URL에서 생략할 수 있다 — <code>https://google.com:443</code>과 <code>https://google.com</code>은 동일하다.
+    Rails 개발 서버는 보통 <code>3000</code>번 포트를 쓴다.
+  </p>
+
+  <h3>path — 그 앱 안에서 어떤 자원인지</h3>
+  <p>
+    리소스의 경로를 <strong>계층 구조</strong>로 표현한다.
+  </p>
+<pre><code>/departments/rnd/members/catsbi</code></pre>
+  <p>
+    Rails 라우팅(<code>resources :members</code>)이 이 구조와 직결된다.
+    <code>GET /members/42</code> 같은 경로가 바로 이 path 부분이다.
+  </p>
+
+  <h3>query — 추가 조건을 전달할 때</h3>
+  <p>
+    <code>?</code>로 시작하고, <code>&</code>로 여러 항목을 이어붙인다.
+    <code>key=value</code> 쌍의 문자열로 이루어지며,
+    <strong>query parameter</strong> 또는 <strong>query string</strong>이라고도 부른다.
+    서버에서는 이 값을 파싱해 검색 조건, 필터, 정렬 기준 등으로 활용한다.
+  </p>
+<pre><code>?q=hello&hl=ko
+↑ q(검색어)=hello, hl(언어)=ko 두 파라미터</code></pre>
+
+  <div class="analogy">
+    <code>fetch('/api/members?page=2&sort=name')</code>처럼 API 호출 시 URL에 붙이는 파라미터가 바로 query다.
+    axios라면 <code>params: { page: 2, sort: 'name' }</code> 옵션이 내부적으로 이 형식으로 변환된다.
+    Rails 컨트롤러에서는 <code>params[:page]</code>, <code>params[:sort]</code>로 꺼내 쓴다.
+  </div>
+
+  <h3>fragment — 페이지 내 위치</h3>
+  <p>
+    <code>#같이_보기</code>처럼 HTML 문서 내의 특정 위치(앵커)를 가리킨다.
+    <strong>서버로 전송되지 않는다</strong> — 브라우저가 로컬에서 스크롤 위치를 처리한다.
+    따라서 서버 로그에는 fragment가 보이지 않는다.
+  </p>
+
+  <div class="analogy">
+    React Router의 해시 라우팅(<code>/#/about</code>)이나, 마크다운 문서의 <code>#section-name</code> 링크가 바로 fragment다.
+    "서버로 안 간다"는 특성 때문에 SPA 초기에 클라이언트 라우팅 방법으로 해시를 많이 썼다.
+  </div>
+
+  <h2>전체 구조 한눈에 보기</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family:var(--font-sans); font-size:0.88rem; margin:1rem 0;">
+    <thead>
+      <tr style="background:var(--code-bg);">
+        <th style="padding:0.4rem 0.8rem; border:1px solid var(--border); text-align:left;">파트</th>
+        <th style="padding:0.4rem 0.8rem; border:1px solid var(--border); text-align:left;">역할</th>
+        <th style="padding:0.4rem 0.8rem; border:1px solid var(--border); text-align:left;">예시</th>
+        <th style="padding:0.4rem 0.8rem; border:1px solid var(--border); text-align:left;">생략 가능?</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);"><code>scheme</code></td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);">접근 프로토콜</td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);"><code>https</code></td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);">불가</td>
+      </tr>
+      <tr style="background:var(--code-bg);">
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);"><code>userinfo</code></td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);">인증 정보</td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);"><code>user@</code></td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);">가능 (거의 생략)</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);"><code>host</code></td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);">대상 컴퓨터</td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);"><code>google.com</code></td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);">불가</td>
+      </tr>
+      <tr style="background:var(--code-bg);">
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);"><code>port</code></td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);">대상 앱 포트</td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);"><code>:443</code></td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);">가능 (기본값 사용)</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);"><code>path</code></td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);">자원 경로</td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);"><code>/search</code></td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);">가능</td>
+      </tr>
+      <tr style="background:var(--code-bg);">
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);"><code>query</code></td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);">추가 파라미터</td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);"><code>?q=hello</code></td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);">가능</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);"><code>fragment</code></td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);">페이지 내 위치</td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);"><code>#section</code></td>
+        <td style="padding:0.4rem 0.8rem; border:1px solid var(--border);">가능 (서버 미전송)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li>URI ⊃ URL ⊃ (실무에서 URL = URI로 혼용)</li>
+    <li>URL 형식: <code>scheme://[userinfo@]host[:port][/path][?query][#fragment]</code></li>
+    <li>port = 컴퓨터 안 앱의 주소 (http=80, https=443, Rails dev=3000)</li>
+    <li>query = <code>?key=value&key2=value2</code> — 서버에 추가 조건 전달</li>
+    <li>fragment = <code>#anchor</code> — 브라우저 로컬 처리, <strong>서버에 전송되지 않음</strong></li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 다음 URL에서 query string에 해당하는 부분은?<br><code>https://api.example.com/members?role=admin&page=2#top</code></div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. <code>https://api.example.com</code></button></li>
+      <li><button onclick="answer(this,'q1',false)">B. <code>/members</code></button></li>
+      <li><button onclick="answer(this,'q1',true)">C. <code>role=admin&page=2</code></button></li>
+      <li><button onclick="answer(this,'q1',false)">D. <code>#top</code></button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. fragment(<code>#anchor</code>)에 대한 설명으로 옳은 것은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 서버가 fragment를 파싱해 DB 필터로 활용한다</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. 브라우저가 로컬에서 처리하며 서버로는 전송되지 않는다</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. query string과 달리 암호화되어 서버로 전달된다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 모든 브라우저에서 무조건 페이지를 새로고침한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "URL 인코딩(%20 같은 것)은 왜 필요한가요?", "Rails에서 path parameter와 query parameter를 어떻게 구분하나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <span>강의 9: URI</span>
+    <a href="net-07-web-browser-request-flow.html">강의 10: 웹 브라우저 요청 흐름 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    result.textContent = '다시 생각해보세요.';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: ?로 시작해 &로 이어지는 key=value 쌍이 query string입니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: fragment는 브라우저가 네트워크로 보내기 전에 떼어냅니다.';
+  }
+}
+</script>
 
 </body>
 </html>

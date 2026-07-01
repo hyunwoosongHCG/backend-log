@@ -25,7 +25,8 @@
   <p>
     인터넷 통신은 두 컴퓨터가 <strong>직접 연결</strong>돼 주고받는 게 아니라,
     중간의 <strong>수많은 노드(라우터·케이블)</strong>를 거쳐 메시지가 전달되는 것이다.
-    그래서 "누구에게, 어떤 규칙으로 보낼지"에 대한 <strong>약속(프로토콜)</strong>이 필요하다.
+    그래서 "누구에게, 어떤 규칙으로 보낼지"에 대한 <strong>약속(프로토콜)</strong>이 필요하고,
+    그 약속을 계층(레이어)으로 쌓아올린 것이 <strong>TCP/IP 프로토콜 스택</strong>이다.
   </p>
 
   <h2>출발점: <code>fetch()</code> 한 줄 뒤에서 무슨 일이?</h2>
@@ -63,7 +64,7 @@ const users = await res.json();</code></pre>
     <div class="flow-arrow">↓</div>
     <div class="flow-step">ISP(통신사) 라우터</div>
     <div class="flow-arrow">↓</div>
-    <div class="flow-step">인터넷 백본 — 수많은 라우터·해저 광케이블</div>
+    <div class="flow-step">인터넷 백본 — 수많은 라우터 · 해저 광케이블</div>
     <div class="flow-arrow">↓</div>
     <div class="flow-step">대상 서버 측 ISP · 데이터센터</div>
     <div class="flow-arrow">↓</div>
@@ -75,7 +76,7 @@ const users = await res.json();</code></pre>
     이 복잡한 경로 전체를 뭉뚱그려 우리는 그냥 <strong>"인터넷"</strong>이라고 부른다.
   </p>
 
-  <h2>그래서 "규칙"이 필요하다</h2>
+  <h2>그래서 "규칙"이 필요하다 — 프로토콜 스택</h2>
 
   <p>
     노드가 이렇게 많은데 아무 약속도 없다면, 메시지를 다음 노드에게
@@ -84,8 +85,98 @@ const users = await res.json();</code></pre>
   </p>
 
   <p>
-    그 약속 중 가장 밑바닥, "이 메시지를 어느 컴퓨터로 보낼 것인가"를 정하는 것이
-    바로 다음 강의에서 볼 <strong>IP(인터넷 프로토콜)</strong>다.
+    그 약속을 <strong>역할별로 나눠 쌓은 것</strong>이 <strong>프로토콜 스택(protocol stack)</strong>이다.
+    학문적으로는 OSI 7계층, 실제 인터넷에서는 <strong>TCP/IP 4계층</strong>을 쓴다.
+  </p>
+
+  <h3>OSI 7계층 vs TCP/IP 4계층</h3>
+
+  <table style="width:100%;border-collapse:collapse;margin:1rem 0;font-size:0.9rem;">
+    <thead>
+      <tr style="background:var(--surface2,#1e1e2e);text-align:left;">
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">OSI 7계층</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">TCP/IP 4계층</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">대표 프로토콜</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">담당</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">7 애플리케이션<br>6 표현<br>5 세션</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">① 애플리케이션 계층</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">HTTP, FTP, DNS</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">앱이 사용하는 데이터 표현</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">4 트랜스포트</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">② 트랜스포트 계층</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">TCP, UDP</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">경로 지정 후 데이터 전송 방법</td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">3 네트워크</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);font-weight:bold;">③ 인터넷 계층</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">IP</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">논리 주소로 경로 선택</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;">2 데이터링크<br>1 물리</td>
+        <td style="padding:0.5rem 0.75rem;font-weight:bold;">④ 네트워크 액세스 계층</td>
+        <td style="padding:0.5rem 0.75rem;">이더넷, Wi-Fi</td>
+        <td style="padding:0.5rem 0.75rem;">랜카드·드라이버 등 물리 영역</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="analogy">
+    React 컴포넌트도 "UI 레이어 → 상태 레이어 → API 레이어"로 역할을 나눈다.
+    TCP/IP 계층도 같은 원리다 — <strong>상위 계층은 하위 계층이 뭘 하는지 모른 채 자기 일만 한다</strong>.
+    HTTP는 "데이터를 어떻게 표현할까"만 신경 쓰고, IP가 "어디로 보낼까"를 어떻게 해결하는지 알 필요가 없다.
+    계층을 분리하면 각 계층을 독립적으로 개발하고 교체할 수 있다(객체지향처럼).
+  </div>
+
+  <h2>인터넷 통신 6단계 과정 요약</h2>
+
+  <p>
+    <code>fetch('https://google.com/users')</code>를 눌렀을 때 실제로 벌어지는 일을 계층 순서로 따라가보면:
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">
+      <strong>1. DNS 조회</strong><br>
+      브라우저가 <code>google.com</code> 도메인으로 DNS 서버에 질의 →
+      DNS가 매칭되는 IP 주소 응답 (예: <code>142.250.196.46</code>)
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>2. 데이터를 패킷(Packet)으로 분할</strong><br>
+      보낼 데이터를 적절한 크기의 블록(payload)들로 나눔
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>3. TCP 정보 추가 (트랜스포트 계층)</strong><br>
+      출발 포트·목적 포트·순서 번호·검증 정보를 각 패킷에 붙임
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>4. IP 정보 추가 (인터넷 계층)</strong><br>
+      출발 IP · 목적지 IP · 관리 정보를 붙여 목적지를 지정
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>5. TCP 3-way handshake (TCP인 경우)</strong><br>
+      SYN → SYN+ACK → ACK 로 양측 연결을 먼저 확인
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>6. 데이터 전송 및 응답</strong><br>
+      패킷들이 노드를 hop by hop으로 이동 → 서버 수신 → 응답 반환
+    </div>
+  </div>
+
+  <p>
+    이 6단계 각각을 뒷받침하는 규칙이 다음 강의들의 주제다
+    (DNS → 강의 8, 패킷 → 강의 5 IP, TCP → 강의 6).
   </p>
 
   <h2>정리</h2>
@@ -94,6 +185,8 @@ const users = await res.json();</code></pre>
     <li>인터넷 통신 = 중간 노드를 <strong>거쳐 전달되는 간접 통신</strong> (직접 연결 아님)</li>
     <li>"인터넷"은 복잡한 노드망 전체를 감추는 <strong>추상화된 이름</strong></li>
     <li>수많은 노드가 협력하려면 공통 <strong>규칙(프로토콜)</strong>이 필수</li>
+    <li>그 규칙을 역할별로 쌓은 것이 <strong>TCP/IP 4계층</strong> 스택</li>
+    <li>한 번의 HTTP 요청 뒤에는 DNS 조회 → 패킷 분할 → TCP/IP 포장 → handshake → 전송의 <strong>6단계</strong>가 있다</li>
     <li>가장 아래 규칙부터 → 다음 강의 <strong>IP</strong>로 이어진다</li>
   </ul>
 
@@ -109,19 +202,19 @@ const users = await res.json();</code></pre>
   </div>
 
   <div class="quiz">
-    <div class="quiz-q">Q2. 인터넷의 수많은 노드가 메시지를 목적지까지 협력해서 전달하려면 반드시 필요한 것은?</div>
+    <div class="quiz-q">Q2. TCP/IP 4계층에서 IP 프로토콜이 속하는 계층은?</div>
     <ul class="options" id="q2">
-      <li><button onclick="answer(this,'q2',false)">A. 모든 노드가 같은 회사 제품이어야 한다</button></li>
-      <li><button onclick="answer(this,'q2',false)">B. 노드들이 물리적으로 가까이 있어야 한다</button></li>
-      <li><button onclick="answer(this,'q2',true)">C. 공통으로 지키는 약속, 즉 프로토콜이 있어야 한다</button></li>
-      <li><button onclick="answer(this,'q2',false)">D. 클라이언트가 경로의 모든 노드 주소를 미리 알아야 한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">A. 애플리케이션 계층 — HTTP, FTP가 사용하는 계층</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. 트랜스포트 계층 — TCP, UDP가 속하는 계층</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. 인터넷 계층 — 논리 주소로 목적지 경로를 선택하는 계층</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 네트워크 액세스 계층 — 랜카드·드라이버 물리 영역 계층</button></li>
     </ul>
     <div class="quiz-result" id="q2-result"></div>
   </div>
 
   <div class="ask-teacher">
     개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
-    예: "노드가 다음에 어디로 보낼지는 누가 정하나요?"(→ 라우팅), "경로는 매번 같은가요?" 같은 질문을 환영합니다.
+    예: "노드가 다음에 어디로 보낼지는 누가 정하나요?"(→ 라우팅), "OSI 7계층을 실무에서도 쓰나요?" 같은 질문을 환영합니다.
   </div>
 
   <div class="nav-links">
@@ -133,7 +226,7 @@ const users = await res.json();</code></pre>
 function answer(btn, qid, correct) {
   const container = document.getElementById(qid);
   if (correct) {
-    container.querySelectorAll('button').forEach(b => b.disabled = true);
+    container.querySelectorAll('button').forEach(function(button) { button.disabled = true; });
   } else {
     btn.disabled = true;
   }
@@ -144,9 +237,8 @@ function answer(btn, qid, correct) {
     result.textContent = '정답입니다.';
   } else {
     result.style.color = 'var(--wrong)';
-    result.textContent = '다시 생각해보세요.';
     if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 내 컴퓨터와 서버 사이에 무엇이 있는지 떠올려보세요.';
-    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: 서로 다른 노드들이 협력하려면 공통의 "약속"이 있어야 합니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: IP는 논리 주소로 경로를 선택하는 역할입니다.';
   }
 }
 </script>

@@ -16,18 +16,276 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 메서드 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 메서드 — 안전·멱등·캐시 가능 세 속성을 이해하고, API 설계와 재시도 전략에 어떻게 쓰이는지 파악한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    HTTP 메서드에는 <strong>안전(Safe)</strong>, <strong>멱등(Idempotent)</strong>,
+    <strong>캐시 가능(Cacheable)</strong> 세 가지 공식 속성이 있고,
+    이 속성이 <strong>재시도 안전성·캐시 전략·서버 설계</strong>에 직결된다.
+  </p>
+
+  <h2>속성 1: 안전(Safe)</h2>
+
+  <p>
+    <strong>정의</strong>: 메서드를 호출해도 리소스가 변경되지 않는 성질.
+  </p>
+
+  <ul>
+    <li>안전한 메서드: <code>GET</code>, <code>HEAD</code>, <code>OPTIONS</code></li>
+    <li>안전하지 않은 메서드: <code>POST</code>, <code>PUT</code>, <code>PATCH</code>, <code>DELETE</code></li>
+  </ul>
+
+  <p>
+    중요한 점: "안전"의 범위는 <strong>해당 리소스에 한정</strong>된다.
+    GET 요청도 서버가 로그를 기록하거나 접속 통계를 갱신할 수 있다.
+    하지만 GET이 요청한 <em>리소스 자체</em>는 변경되지 않으므로 "안전"하다고 본다.
+  </p>
+
+  <h2>속성 2: 멱등(Idempotent)</h2>
+
+  <p>
+    <strong>정의</strong>: 같은 요청을 <strong>한 번 하든 열 번 하든</strong> 결과가 동일한 성질.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>메서드</th>
+        <th>멱등 여부</th>
+        <th>이유</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>GET</td>
+        <td>멱등</td>
+        <td>같은 리소스를 조회하면 항상 같은 결과</td>
+      </tr>
+      <tr>
+        <td>PUT</td>
+        <td>멱등</td>
+        <td>같은 내용으로 대체하면 몇 번을 해도 상태 동일</td>
+      </tr>
+      <tr>
+        <td>DELETE</td>
+        <td>멱등</td>
+        <td>이미 삭제된 것을 다시 삭제해도 "없는 상태" 동일</td>
+      </tr>
+      <tr>
+        <td>POST</td>
+        <td>비멱등</td>
+        <td>회원 등록을 2번 하면 회원이 2명 생긴다</td>
+      </tr>
+      <tr>
+        <td>PATCH</td>
+        <td>구현에 따라 다름</td>
+        <td>절댓값 설정이면 멱등, 상대값 증가이면 비멱등</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>멱등의 실무 의미: 자동 재시도</h3>
+
+  <p>
+    멱등성이 왜 중요한가? <strong>네트워크 오류 후 자동 재시도</strong>를 안전하게 할 수 있느냐가 결정되기 때문이다.
+  </p>
+
+<pre><code># GET, PUT, DELETE는 재시도 안전 — 결과가 달라지지 않는다
+GET /members/1   → 실패 → 재시도 → 동일한 데이터 반환 (안전)
+DELETE /members/1 → 실패 → 재시도 → 이미 삭제됐거나 없음 (안전)
+
+# POST는 재시도 위험 — 중복 실행 가능
+POST /members → 실패? → 재시도 → 회원이 2명 생길 수 있다 (위험)</code></pre>
+
+  <p>
+    멱등하지 않은 POST를 재시도하려면 별도로 <strong>중복 방지 키(Idempotency Key)</strong>를 사용해야 한다.
+    결제 API에서 흔히 쓰는 패턴이다.
+  </p>
+
+  <h3>PATCH는 왜 "구현에 따라 다름"인가?</h3>
+
+<pre><code># 멱등한 PATCH: 절댓값으로 설정
+PATCH /members/1 { "age": 31 }   # 몇 번을 해도 age = 31
+
+# 비멱등한 PATCH: 상대값으로 증가
+PATCH /members/1 { "age_increment": 1 }   # 3번 하면 age가 3 증가</code></pre>
+
+  <h2>속성 3: 캐시 가능(Cacheable)</h2>
+
+  <p>
+    응답 결과를 브라우저·CDN·프록시 등이 저장해서 재사용할 수 있는 성질이다.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>메서드</th>
+        <th>명세상 캐시 가능</th>
+        <th>실무에서 실제 사용</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>GET</td>
+        <td>가능</td>
+        <td>주로 사용 (URL이 캐시 키)</td>
+      </tr>
+      <tr>
+        <td>HEAD</td>
+        <td>가능</td>
+        <td>사용</td>
+      </tr>
+      <tr>
+        <td>POST</td>
+        <td>가능</td>
+        <td>거의 사용 안 함 (바디까지 캐시 키로 고려해야 해 구현 복잡)</td>
+      </tr>
+      <tr>
+        <td>PATCH</td>
+        <td>가능</td>
+        <td>거의 사용 안 함 (위와 같은 이유)</td>
+      </tr>
+      <tr>
+        <td>PUT, DELETE</td>
+        <td>불가</td>
+        <td>사용 안 함</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    결론적으로 실무에서 캐시는 <strong>GET, HEAD</strong>에서만 쓴다고 이해해도 무방하다.
+  </p>
+
+  <h2>세 속성 전체 요약 표</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>메서드</th>
+        <th>안전(Safe)</th>
+        <th>멱등(Idempotent)</th>
+        <th>캐시 가능(Cacheable)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>GET</td>
+        <td>안전</td>
+        <td>멱등</td>
+        <td>가능</td>
+      </tr>
+      <tr>
+        <td>HEAD</td>
+        <td>안전</td>
+        <td>멱등</td>
+        <td>가능</td>
+      </tr>
+      <tr>
+        <td>OPTIONS</td>
+        <td>안전</td>
+        <td>멱등</td>
+        <td>불가</td>
+      </tr>
+      <tr>
+        <td>POST</td>
+        <td>안전하지 않음</td>
+        <td>비멱등</td>
+        <td>명세상 가능, 실무 불가</td>
+      </tr>
+      <tr>
+        <td>PUT</td>
+        <td>안전하지 않음</td>
+        <td>멱등</td>
+        <td>불가</td>
+      </tr>
+      <tr>
+        <td>PATCH</td>
+        <td>안전하지 않음</td>
+        <td>구현에 따라 다름</td>
+        <td>명세상 가능, 실무 불가</td>
+      </tr>
+      <tr>
+        <td>DELETE</td>
+        <td>안전하지 않음</td>
+        <td>멱등</td>
+        <td>불가</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="analogy">
+    React Query / SWR에서 <code>useQuery</code>는 GET 요청에만 쓰고,
+    <code>useMutation</code>은 POST/PUT/PATCH/DELETE에 쓰는 이유가 정확히 이 속성들 때문이다.
+    useQuery는 캐싱·자동 재시도를 기본으로 켜지만, useMutation은 멱등성이 없으니 재시도를 신중하게 제어한다.
+    라이브러리 설계 자체가 HTTP 메서드의 속성을 그대로 반영한 것이다.
+  </div>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>안전(Safe)</strong>: 리소스 변경 없음. GET·HEAD·OPTIONS만 해당</li>
+    <li><strong>멱등(Idempotent)</strong>: 반복 호출 = 같은 결과. GET·PUT·DELETE는 멱등, POST는 비멱등</li>
+    <li><strong>캐시 가능(Cacheable)</strong>: 실무에서는 GET·HEAD만 사용한다고 이해하면 충분</li>
+    <li>멱등성은 <strong>자동 재시도 안전성</strong>에 직결 — API 설계 시 반드시 고려</li>
+    <li>PATCH의 멱등 여부는 서버 구현에 달려 있다 (절대값 vs 상대값)</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 결제 API가 POST /payments 로 설계됐다. 네트워크 오류로 응답이 안 왔을 때 클라이언트가 바로 재시도하면 안 되는 이유는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. POST는 안전하지 않아 서버가 요청 자체를 거부해서</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. POST는 비멱등이라 재시도 시 결제가 중복 처리될 수 있어서</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. POST는 캐시 불가여서 응답을 저장해 재활용 못하기 때문</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. POST 응답은 항상 201이어서 200 재시도가 불필요해서</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. DELETE /members/1 을 5번 연속 호출했을 때 서버 최종 상태는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 첫 번째 호출만 성공하고 나머지는 에러로 상태가 다름</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. 멱등이므로 어떤 횟수로 호출해도 "없는 상태"로 동일</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. 5번이라 리소스가 5번 삭제돼 관련 데이터 전체 소멸</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 안전하지 않아 매 호출마다 서버 상태가 달라진다고 봄</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "React Query가 GET을 자동 재시도하는 것과 멱등성의 관계를 더 설명해주세요", "결제에서 Idempotency Key를 실제로 어떻게 구현하나요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <a href="net-15-put-patch-delete.html">← 강의 18: PUT, PATCH, DELETE</a>
+    <a href="net-17-client-to-server-data.html">강의 20: 클라이언트에서 서버로 데이터 전송 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(function(button) { button.disabled = true; });
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: POST를 여러 번 호출하면 어떤 일이 생기는지, 멱등 개념과 연결해 생각해보세요.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: 멱등이라는 것은 "반복 호출해도 결과가 같다"는 뜻입니다. 첫 번째 DELETE 이후 상태가 어떤가요?';
+  }
+}
+</script>
 
 </body>
 </html>

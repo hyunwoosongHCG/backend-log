@@ -16,18 +16,155 @@
   </div>
 
   <div class="mission-link">
-    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 일반 — 강의 들으며 채운다
+    🎯 김영한 「모든 개발자를 위한 HTTP 웹 기본 지식」 · HTTP 헤더 - 일반 — 요청·응답 메시지의 맥락을 설명하는 일반 정보 헤더 4종(Referer·User-Agent·Server·Date)을 파악한다
   </div>
 
   <h2>핵심 한 줄</h2>
-  <p style="color:#aaa;font-style:italic">이 강의의 핵심을 한 문장으로 정리한다.</p>
 
-  <h2>배운 내용</h2>
-  <p style="color:#aaa;font-style:italic">개념 · 그림 · 예시 · 프론트 경험과의 연결을 채운다.</p>
+  <p>
+    <strong>Referer, User-Agent, Server, Date</strong>는 HTTP 메시지가 <em>어디서 왔고, 누가 보냈고, 누가 처리했으며, 언제 생성됐는지</em>를 알려주는 일반 정보 헤더다.
+  </p>
+
+  <h2>Referer — 이전 웹 페이지 주소</h2>
+
+  <p>
+    클라이언트가 요청할 때 <strong>현재 페이지로 오기 직전에 있던 페이지의 URL</strong>을 담아 보내는 헤더다.
+    서버는 이 값을 보고 사용자가 어떤 경로로 유입됐는지 분석할 수 있다.
+  </p>
+
+<pre><code>Referer: https://www.google.com/search?q=HTTP+헤더</code></pre>
+
+  <p>
+    서버에서 Google 광고를 통해 온 사용자와 직접 접속한 사용자를 구분하거나,
+    GA(Google Analytics) 같은 유입 경로 분석 도구가 이 헤더를 활용한다.
+  </p>
+
+  <p>
+    <strong>Referer는 오타가 표준이 된 헤더다.</strong>
+    원래 올바른 영어 단어는 <code>referrer</code>(r 두 번)지만,
+    1996년 HTTP 1.0 명세를 쓸 때 오타로 <code>Referer</code>(r 한 번)라고 적힌 채 표준이 돼버렸다.
+    지금은 고칠 수 없다 — 이미 전 세계 수십억 개의 서버와 클라이언트가 이 오타를 기준으로 동작하기 때문이다.
+  </p>
+
+  <h2>User-Agent — 클라이언트 환경 정보</h2>
+
+  <p>
+    요청을 보내는 <strong>클라이언트(브라우저·앱·봇)가 무엇인지</strong>를 서버에 알려준다.
+    브라우저 종류, 버전, 운영체제, 기기 정보가 담긴다.
+  </p>
+
+<pre><code>User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)
+            AppleWebKit/537.36 (KHTML, like Gecko)
+            Chrome/125.0.0.0 Safari/537.36</code></pre>
+
+  <p>서버가 이 값을 읽어서 다음과 같은 일을 할 수 있다.</p>
+
+  <ul>
+    <li>오래된 브라우저에게 호환성 페이지를 제공</li>
+    <li>모바일 기기에게 모바일 최적화 응답 제공</li>
+    <li>검색 엔진 크롤러(Googlebot 등)를 식별해 SEO 처리</li>
+    <li>서버 로그에서 어떤 클라이언트가 많이 오는지 통계 집계</li>
+  </ul>
+
+  <div class="analogy">
+    React에서 <code>window.navigator.userAgent</code>를 읽어 모바일/데스크탑을 분기하거나,
+    <code>useMediaQuery</code> 훅으로 반응형 처리하는 것과 같은 목적이다.
+    차이는 프론트는 JS 실행 후 판단하고, 서버는 요청이 도착하는 순간 User-Agent 헤더로 판단한다는 점이다.
+  </div>
+
+  <h2>Server — 서버 소프트웨어 정보</h2>
+
+  <p>
+    응답을 보내는 <strong>오리진 서버(Origin Server)가 어떤 소프트웨어로 동작하는지</strong>를 알려준다.
+    요청 헤더인 User-Agent와 반대로, <code>Server</code>는 <strong>응답 헤더</strong>다.
+  </p>
+
+<pre><code>Server: Apache/2.4.1 (Unix)
+Server: nginx/1.18.0
+Server: Puma 6.4.2 (tcp://0.0.0.0:3000)</code></pre>
+
+  <p>
+    Rails 앱은 기본적으로 <code>Puma</code> 서버로 실행되고, 응답 헤더에 위와 같이 표시된다.
+    보안상의 이유로 <strong>서버 정보를 숨기는</strong> 것이 권장되기도 한다 —
+    공격자가 특정 서버 버전의 취약점을 노릴 수 있기 때문이다.
+    Rails에서는 <code>config.action_dispatch.default_headers</code>로 커스텀할 수 있다.
+  </p>
+
+  <h2>Date — 메시지 생성 일시</h2>
+
+  <p>
+    HTTP 메시지가 생성된 날짜와 시각을 담는다. <strong>현재는 응답 헤더로만 사용</strong>한다.
+    캐시 유효성 판단 등에 활용된다.
+  </p>
+
+<pre><code>Date: Tue, 01 Jul 2026 09:00:00 GMT</code></pre>
+
+  <p>
+    시간대는 항상 <strong>GMT(Greenwich Mean Time)</strong>로 표기한다.
+    이는 HTTP 명세가 정한 규칙이다.
+  </p>
+
+  <h2>정리</h2>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>Referer</strong>: 요청 헤더 — 이전 페이지 URL (오타가 표준으로 굳음)</li>
+    <li><strong>User-Agent</strong>: 요청 헤더 — 클라이언트 브라우저·기기·OS 정보</li>
+    <li><strong>Server</strong>: 응답 헤더 — 오리진 서버 소프트웨어 정보</li>
+    <li><strong>Date</strong>: 응답 헤더 — 메시지 생성 일시 (GMT 형식)</li>
+  </ul>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 다음 중 요청(Request) 헤더에 해당하는 것을 모두 고른 것은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. Server, Date                        </button></li>
+      <li><button onclick="answer(this,'q1',true)">B. Referer, User-Agent                  </button></li>
+      <li><button onclick="answer(this,'q1',false)">C. Referer, Server                     </button></li>
+      <li><button onclick="answer(this,'q1',false)">D. User-Agent, Date                    </button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. Referer 헤더 이름에 대한 설명으로 옳은 것은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. referrer가 오타이고 Referer가 올바른 영어 표기다    </button></li>
+      <li><button onclick="answer(this,'q2',false)">B. 최신 HTTP/2 명세에서 referrer로 수정됐다          </button></li>
+      <li><button onclick="answer(this,'q2',true)">C. 1996년 명세에서 오타로 굳었으며 지금도 그대로 쓴다  </button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 브라우저마다 다르게 표기하므로 통일 기준이 없다     </button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
 
   <div class="ask-teacher">
-    ✏️ 아직 작성 전 스텁입니다. 강의를 듣고 이 자리를 채워주세요.
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    예: "Referer를 서버에서 어떻게 읽나요?", "User-Agent 값을 위조하는 게 가능한가요?" 같은 질문을 환영합니다.
   </div>
+
+  <div class="nav-links">
+    <span>강의 31: 일반 정보</span>
+    <a href="net-29-special-info.html">강의 32: 특별한 정보 →</a>
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 힌트: 서버가 클라이언트에게 자신을 소개하는 헤더는 어느 방향인지 생각해보세요.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 힌트: 명세가 한번 굳으면 전 세계 시스템이 그 값을 기준으로 동작해 되돌리기 매우 어렵습니다.';
+  }
+}
+</script>
 
 </body>
 </html>
