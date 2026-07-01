@@ -28,6 +28,8 @@
 - 마이그레이션(Migration) — 2026-06-25
 - 클래스와 인스턴스 — 2026-06-25
 - 상속과 오버라이드 — 2026-06-25
+- 자동 타임스탬프 관리 (created_at/updated_at, 숨은 콜백) — 2026-07-01
+- Dirty Tracking / Partial Writes (changed?, attribute_changed?) — 2026-07-01
 
 ## 주의사항
 

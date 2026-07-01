@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 20 — Dirty Tracking과 Partial Writes</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>Dirty Tracking과 Partial Writes</h1>
+  <div class="lesson-meta">
+    <span>레슨 020</span>
+    <span>changed? · attribute_changed? · partial_writes</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 레슨 19의 "updated_at은 저장할 때마다 자동 갱신된다"에 예외가 있다는 걸 완성한다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>질문에서 시작한다</h2>
+
+  <p>
+    레슨 19에서 <code>update</code>를 호출하면 <code>updated_at</code>이 항상 자동으로 갱신된다고 배웠다.
+    그런데 ppback의 <code>check_ins_controller.rb</code>에는 이런 코드가 있다.
+  </p>
+
+<pre><code>def create_check_in_revision(check_in_details)
+  data = check_in_details.each_with_object([]) do |check_in_detail, arr|
+    key_result = @objective.key_results.find(check_in_detail[:key_result_id])
+    next if key_result.value == check_in_detail[:value]   # ← 이 줄
+    ...
+  end
+end</code></pre>
+
+  <p>
+    "값이 같으면 건너뛴다"는 가드가 왜 필요할까? 그냥 <code>update</code>를 호출해도
+    되지 않나? 이 질문의 답이 Dirty Tracking이다.
+  </p>
+
+  <h2>파트 1: 값이 실제로 안 바뀌면 저장 자체가 일어나지 않는다</h2>
+
+  <p>
+    ActiveRecord는 레코드의 각 속성(attribute)에 대해
+    "저장 전 값과 지금 값이 다른가"를 항상 추적하고 있다. 이걸 <strong>Dirty Tracking</strong>이라 부른다.
+  </p>
+
+<pre><code>key_result = KeyResult.find(1)
+key_result.value          # => 50
+
+key_result.value = 50     # 기존 값과 동일한 값을 대입
+key_result.changed?       # => false  ← "바뀐 게 없다"
+
+key_result.value = 80     # 실제로 다른 값
+key_result.changed?       # => true   ← "바뀐 게 있다"</code></pre>
+
+  <p>
+    그리고 <code>changed?</code>가 <code>false</code>인 상태에서 <code>save</code>/<code>update</code>를 호출하면,
+    ActiveRecord는 <strong>UPDATE SQL 자체를 DB에 보내지 않는다.</strong>
+    (이 최적화를 <code>partial_writes</code>라고 부른다 — 바뀐 컬럼만 골라서, 그리고 바뀐 게 없으면 아예 안 보낸다.)
+  </p>
+
+<pre><code>key_result.update(value: 50)  # 기존 값과 동일
+# → SQL: 아무것도 안 나감
+key_result.updated_at         # → 그대로! (레슨 19의 자동 갱신이 "안 일어남")
+
+key_result.update(value: 80)  # 실제로 다른 값
+# → SQL: UPDATE key_results SET value = 80, updated_at = '...' WHERE id = 1
+key_result.updated_at         # → 방금 시각으로 갱신</code></pre>
+
+  <div class="analogy">
+    프론트에서 폼을 다룰 때 "실제로 값이 바뀐 필드만 서버에 diff로 보낸다"는 것과 같은 원리다.<br><br>
+    <code>if (formValue !== initialValue) { submit() }</code><br><br>
+    Rails는 이 비교를 레코드 저장 단위로 자동으로 해준다 — 그래서 "저장을 호출했다"와
+    "실제로 DB에 UPDATE가 나갔다"는 서로 다른 이야기다.
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. <code>key_result.value</code>가 이미 50인 상태에서 <code>key_result.update(value: 50)</code>을 호출했다. 어떻게 되는가?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. UPDATE SQL이 나가고 updated_at도 갱신된다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. changed?가 false라서 UPDATE SQL 자체가 안 나가고, updated_at도 그대로다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 예외가 발생한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. value가 nil로 초기화된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>파트 2: 그래서 저 가드 코드가 있는 것이다</h2>
+
+  <p>다시 처음 코드로 돌아가 보자.</p>
+
+<pre><code>key_result = @objective.key_results.find(check_in_detail[:key_result_id])
+next if key_result.value == check_in_detail[:value]</code></pre>
+
+  <p>
+    이 가드가 없다면, 사용자가 이미 50인 값을 다시 50으로 "체크인"했을 때도
+    <code>CheckInRevision</code>(승인 대기 이력)이 생성되고, 매니저에게 승인 알림이 가고,
+    <code>History</code> 레코드가 쌓인다 — 아무 의미 없는 노이즈가 계속 생기는 것이다.
+  </p>
+
+  <p>
+    Dirty Tracking이 <code>updated_at</code> 자동 갱신을 스킵해주는 것과 별개로,
+    "애초에 의미 없는 변경이면 이력 자체를 만들지 말자"는 판단은
+    프레임워크가 대신해주지 않는다. 그래서 <code>==</code> 비교를 개발자가 직접 짜둔 것이다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">① 사용자가 체크인 값 입력 (예: 50 → 50, 안 바뀜)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">② <code>next if key_result.value == check_in_detail[:value]</code> → 여기서 걸러짐</div>
+    <div class="flow-arrow">↓ (만약 이 가드가 없었다면)</div>
+    <div class="flow-step">③ CheckInRevision 생성 → 매니저 승인 대기 → History 기록... 전부 의미 없이 발생</div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. Dirty Tracking이 있는데도 <code>check_ins_controller.rb</code>가 <code>value == check_in_detail[:value]</code>를 직접 비교하는 이유는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. Dirty Tracking은 문자열 비교를 못하기 때문에</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. UPDATE SQL을 막는 것과, 애초에 승인 이력(CheckInRevision)을 안 만드는 것은 다른 문제라서</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. KeyResult 모델에는 Dirty Tracking이 적용 안 되기 때문에</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. Ruby 문법상 changed?를 controller에서 못 써서</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>알아두면 좋은 관련 메서드</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">메서드</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">의미</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>record.changed?</code></td>
+        <td style="padding:0.4rem 0.5rem;">저장 전, 어떤 속성이든 바뀐 게 있는가 (bool)</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>record.value_changed?</code></td>
+        <td style="padding:0.4rem 0.5rem;">저장 전, value 속성만 바뀌었는가</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>record.saved_change_to_value?</code></td>
+        <td style="padding:0.4rem 0.5rem;">저장 <strong>후</strong>, 방금 저장에서 value가 바뀌었는가</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="quiz">
+    <div class="quiz-q">Q3. 저장이 끝난 직후, "방금 이 save에서 value가 실제로 바뀌었는지"를 확인하려면?</div>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">A. value_changed?</button></li>
+      <li><button onclick="answer(this,'q3',true)">B. saved_change_to_value?</button></li>
+      <li><button onclick="answer(this,'q3',false)">C. changed?</button></li>
+      <li><button onclick="answer(this,'q3',false)">D. dirty?</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">개념</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">한 줄</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Dirty Tracking</td>
+        <td style="padding:0.4rem 0.5rem;">저장 전/후 속성값 변화를 자동으로 추적</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Partial Writes</td>
+        <td style="padding:0.4rem 0.5rem;">바뀐 게 없으면 UPDATE SQL 자체를 스킵</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">레슨 19와의 연결</td>
+        <td style="padding:0.4rem 0.5rem;">값이 안 바뀌면 updated_at 자동 갱신도 "일어나지 않는다"</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고:
+    <a href="https://api.rubyonrails.org/classes/ActiveModel/Dirty.html" target="_blank">ActiveModel::Dirty API</a>
+    &nbsp;·&nbsp;
+    <a href="https://guides.rubyonrails.org/active_record_callbacks.html#skipping-callbacks" target="_blank">Rails Guides — Active Record Callbacks</a>
+  </p>
+
+  <div class="nav-links">
+    <a href="0019-timestamps-and-hidden-callbacks.html">← 레슨 19 — 자동 타임스탬프와 숨은 콜백</a>
+    <span style="color: var(--muted);">다음 레슨 준비 중</span>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "saved_change_to_*? 는 실무에서 언제 쓰나요?" 같은 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 값이 실제로 바뀌었는지가 핵심입니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. "SQL을 막는 것"과 "이력 자체를 안 만드는 것"은 레이어가 다릅니다.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. "저장 후"라는 시점 키워드에 주목하세요.';
+  }
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 19 — 자동 타임스탬프와 숨은 콜백</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>자동 타임스탬프와 숨은 콜백</h1>
+  <div class="lesson-meta">
+    <span>레슨 019</span>
+    <span>created_at · updated_at · ActiveRecord::Timestamp · 콜백</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 ppback Objective의 <code>updated_at</code>이 "어디서" 갱신되는지 추적하다가 나온 질문을 완성한다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>질문에서 시작한다</h2>
+
+  <p>
+    ppback의 <code>app/models/objective.rb</code>를 아무리 뒤져봐도
+    <code>updated_at</code>을 직접 세팅하는 코드는 한 줄도 없다.
+  </p>
+
+<pre><code>def accept_check_ins_and_create_history(current_user_id, values)
+  accept_check_ins
+  update!(progress: calculate_progress, stage: 'open')
+  update_obj_progress_history
+  ...
+end</code></pre>
+
+  <p>
+    그런데도 이 메서드가 실행되고 나면 <code>objective.updated_at</code>은 방금 시각으로 바뀌어 있다.
+    코드에 없는 동작이 어떻게 일어나는가?
+  </p>
+
+  <h2>파트 1: t.timestamps — 컬럼만 있으면 프레임워크가 알아서 채운다</h2>
+
+  <p>
+    마이그레이션(레슨 2026-06-25에서 배운)에서 테이블을 만들 때 보통 이렇게 쓴다.
+  </p>
+
+<pre><code>create_table :objectives do |t|
+  t.string :name
+  t.timestamps   # ← created_at, updated_at 두 컬럼을 한 번에 생성
+end</code></pre>
+
+  <p>
+    <code>t.timestamps</code>로 만든 두 컬럼이 테이블에 <strong>존재하기만 하면</strong>,
+    ActiveRecord는 별도 코드 없이 다음을 자동으로 한다.
+  </p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">컬럼</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">채워지는 시점</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">횟수</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>created_at</code></td>
+        <td style="padding:0.4rem 0.5rem;">레코드가 처음 INSERT될 때</td>
+        <td style="padding:0.4rem 0.5rem;">딱 1번</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>updated_at</code></td>
+        <td style="padding:0.4rem 0.5rem;"><code>save</code> / <code>update</code> / <code>update!</code>로 UPDATE가 실제로 나갈 때</td>
+        <td style="padding:0.4rem 0.5rem;">매번</td>
+      </tr>
+    </tbody>
+  </table>
+
+<pre><code>objective = Objective.create(name: "Q3 목표")
+objective.updated_at        # => 방금 생성된 시각 (자동)
+
+objective.update(stage: :open)
+objective.updated_at        # => 방금 시각으로 다시 자동 갱신</code></pre>
+
+  <div class="analogy">
+    프론트에서는 <code>createdAt: new Date()</code>처럼 값을 직접 만들어 넣어야 한다.<br><br>
+    Rails는 컬럼 이름이 <code>created_at</code> / <code>updated_at</code>이기만 하면
+    이 값 채우기를 아예 대신 해준다. 내가 신경 쓸 일이 사라지는 것이다.
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. <code>key_result.update(weight: 3)</code>를 호출했다. <code>key_result.created_at</code>은 어떻게 되는가?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 방금 시각으로 갱신된다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 그대로다 — created_at은 최초 INSERT 때만 세팅된다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. nil이 된다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 에러가 발생한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>파트 2: 이게 왜 "콜백"인가</h2>
+
+  <p>
+    Rails 모델에 <code>before_save</code>, <code>after_create</code> 같은 콜백을 직접 선언하면,
+    저장 전후 특정 시점에 내가 지정한 메서드가 자동으로 실행된다.
+  </p>
+
+<pre><code># 내가 직접 선언하는 콜백
+class Objective < ApplicationRecord
+  before_save :log_something
+
+  def log_something
+    Rails.logger.info "저장 직전!"
+  end
+end</code></pre>
+
+  <p>
+    <code>created_at</code>/<code>updated_at</code> 자동 관리는 원리가 똑같다.
+    다만 내가 선언한 게 아니라, <strong><code>ActiveRecord::Timestamp</code>라는 모듈이 모든 모델에
+    이미 이 콜백을 걸어둔 것</strong>이다. 그래서 모델 코드에는 아무것도 안 보이지만,
+    저장 직전에 "타임스탬프 컬럼 채우기" 콜백이 항상 조용히 실행되고 있다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">① <code>objective.update!(stage: 'open')</code> 호출</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">② ActiveRecord::Timestamp의 숨은 <code>before_save</code> 실행 → updated_at = 지금</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">③ 내가 <code>before_save</code>를 선언했다면 그것도 같이 실행</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">④ 실제 UPDATE SQL 실행</div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. <code>created_at</code>/<code>updated_at</code>이 모델 코드 한 줄 없이 자동으로 채워지는 이유는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. MySQL이 컬럼 이름을 보고 알아서 채운다</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. ActiveRecord::Timestamp 모듈이 모든 모델에 숨은 콜백을 걸어두기 때문</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. Rails가 컬럼 이름을 정규식으로 매번 검사해서</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 마이그레이션 실행 시점에 값이 고정되기 때문</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>실무 연결: 자동인 것과 자동이 아닌 것의 경계</h2>
+
+  <p>
+    오늘 조사하면서 진짜 중요했던 지점은 이거다 — 자동 갱신은
+    <strong>"저장되는 그 레코드 자신의 컬럼"</strong>에만 적용된다.
+  </p>
+
+  <p>
+    ppback에는 <code>ObjProgressHistory</code>라는, Objective의 진행률 변화를 기록하는
+    별도 테이블이 있다. Objective가 저장될 때 이 테이블에도 자동으로 행이 생기면 좋겠지만,
+    그런 일은 일어나지 않는다. 대신 코드에 이렇게 명시적으로 써 있다.
+  </p>
+
+<pre><code># app/models/objective.rb
+def update_obj_progress_history
+  ObjProgressHistory.create!(
+    objective_id: id,
+    progress:,
+    time_at: updated_at,   # 방금 배운 그 자동 updated_at을 여기서 스냅샷으로 활용
+  )
+end</code></pre>
+
+  <p>
+    즉 "같은 row를 저장하는 것"은 프레임워크가 대신해주지만,
+    "그 김에 다른 테이블에 행을 하나 더 만드는 것"은 반드시 내가 명시적으로 호출해야 한다.
+    이 경계를 헷갈리면, 나중에 "왜 이 경로에서는 이력이 안 남지?" 같은 버그를 만들기 쉽다
+    (실제로 ppback 가중치 수정 워커에서 이 호출이 빠진 사례를 발견했다).
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q3. Objective를 저장하면서 동시에 별도 테이블(ObjProgressHistory)에 이력을 남기고 싶다. 어떻게 해야 하는가?</div>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">A. 아무것도 안 해도 ActiveRecord::Timestamp가 대신 만들어준다</button></li>
+      <li><button onclick="answer(this,'q3',false)">B. updated_at 컬럼 이름을 맞추면 자동으로 연결된다</button></li>
+      <li><button onclick="answer(this,'q3',true)">C. 이벤트 메서드 안에서 ObjProgressHistory.create!를 명시적으로 호출해야 한다</button></li>
+      <li><button onclick="answer(this,'q3',false)">D. t.timestamps를 ObjProgressHistory 마이그레이션에도 추가하면 된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">동작</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">누가 하나</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">코드에 보이는가</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">같은 레코드의 created_at/updated_at</td>
+        <td style="padding:0.4rem 0.5rem;">ActiveRecord::Timestamp (숨은 콜백)</td>
+        <td style="padding:0.4rem 0.5rem;">아니오</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">다른 테이블에 이력 남기기</td>
+        <td style="padding:0.4rem 0.5rem;">개발자 (명시적 호출)</td>
+        <td style="padding:0.4rem 0.5rem;">예</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고:
+    <a href="https://guides.rubyonrails.org/active_record_callbacks.html" target="_blank">Rails Guides — Active Record Callbacks</a>
+    &nbsp;·&nbsp;
+    <a href="https://api.rubyonrails.org/classes/ActiveRecord/Timestamp.html" target="_blank">ActiveRecord::Timestamp API</a>
+  </p>
+
+  <div class="nav-links">
+    <a href="0018-grape-params.html">← 레슨 18 — Grape params do 블록</a>
+    <a href="0020-dirty-tracking-and-partial-writes.html">레슨 20 — Dirty Tracking과 Partial Writes →</a>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "touch: true 옵션은 뭔가요?" 같은 실무 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. created_at과 updated_at은 채워지는 시점이 다릅니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 이 자동 동작이 어느 모듈에서 오는지 떠올려보세요.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. "다른 테이블에 행을 만드는 것"까지 프레임워크가 대신해줄 수 있는지 생각해보세요.';
+  }
+}
+</script>
+
+</body>
+</html>
