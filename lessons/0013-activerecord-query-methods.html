@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 13 — ActiveRecord 쿼리 메서드</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>ActiveRecord 쿼리 메서드</h1>
+  <div class="lesson-meta">
+    <span>레슨 013</span>
+    <span>find · find_by · where · order · limit</span>
+    <span>~25분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 DB에서 데이터를 꺼내는 모든 코드의 뼈대 — 실무에서 매일 마주친다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>출발점: "테이블에서 데이터를 어떻게 꺼내나?"</h2>
+
+  <p>
+    레슨 8에서 <code>belongs_to</code>, <code>has_many</code>로 <em>관계를 정의</em>하는 법을 배웠다.
+    그런데 실제로 데이터를 꺼낼 때는 다른 메서드를 쓴다.
+    레슨 9에서 잠깐 본 <code>.includes</code>도 그 중 하나다.
+  </p>
+
+  <p>SQL로 치면 이런 것들이다:</p>
+
+<pre><code>-- 이런 SQL을 ActiveRecord 메서드로 표현한다
+SELECT * FROM users WHERE id = 3;
+SELECT * FROM users WHERE role = 'admin' ORDER BY created_at DESC LIMIT 10;</code></pre>
+
+  <div class="analogy">
+    프론트에서 <code>array.find()</code>, <code>array.filter()</code>로 배열에서 원소를 꺼내듯이,
+    ActiveRecord는 DB 테이블에서 레코드를 꺼내는 메서드 모음이다.
+    차이는 배열이 아니라 DB이기 때문에 — 결국 SQL 쿼리로 변환된다는 것.
+  </div>
+
+  <h2>1. find — "이 ID의 레코드를 줘"</h2>
+
+  <p>가장 단순한 형태. PK(Primary Key)로 딱 한 건을 찾는다.</p>
+
+<pre><code>User.find(3)
+# → SELECT * FROM users WHERE id = 3 LIMIT 1</code></pre>
+
+  <p>두 가지 규칙을 외운다:</p>
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>찾으면</strong> → User 객체 하나를 반환</li>
+    <li><strong>없으면</strong> → <code>ActiveRecord::RecordNotFound</code> 예외 발생</li>
+  </ul>
+
+  <p>
+    레슨 12에서 봤던 <code>rescue_from ActiveRecord::RecordNotFound, with: :not_found</code>가
+    바로 이 예외를 잡는 것이다. 컨트롤러에서 <code>find(params[:id])</code>를 쓰고,
+    없는 id가 오면 404가 자동으로 나가는 이유가 여기 있다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. <code>ReviewTemplate.find(9999)</code>를 실행했는데 id=9999인 레코드가 없다. 어떻게 되나?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. nil을 반환한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">B. 빈 배열 []을 반환한다</button></li>
+      <li><button onclick="answer(this,'q1',true)">C. ActiveRecord::RecordNotFound 예외가 발생한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. false를 반환한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>2. find_by — "이 조건에 맞는 첫 번째 레코드를 줘"</h2>
+
+  <p>ID가 아닌 다른 컬럼으로 찾을 때 쓴다. 조건에 맞는 첫 번째 레코드 하나만 반환한다.</p>
+
+<pre><code>User.find_by(email: 'alice@example.com')
+# → SELECT * FROM users WHERE email = 'alice@example.com' LIMIT 1
+
+Member.find_by(workspace: workspace, user: current_user)
+# → 레슨 12에서 pundit_user 메서드가 쓴 바로 그것</code></pre>
+
+  <p><code>find</code>와의 결정적 차이:</p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">메서드</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">없을 때</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">여러 건일 때</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>find(id)</code></td>
+        <td style="padding:0.4rem 0.5rem;">예외 발생</td>
+        <td style="padding:0.4rem 0.5rem;">ID는 유일하므로 해당 없음</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>find_by(…)</code></td>
+        <td style="padding:0.4rem 0.5rem;"><strong>nil 반환</strong></td>
+        <td style="padding:0.4rem 0.5rem;">첫 번째 건만 반환</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    그래서 없을 수도 있는 상황에서 예외 없이 처리하고 싶을 때 <code>find_by</code>를 쓰고,
+    결과에 <code>&amp;.</code> (safe navigation)으로 접근한다:
+  </p>
+
+<pre><code>member = Member.find_by(workspace: workspace, user: current_user)
+member&.admin?   # member가 nil이면 nil, 아니면 admin?의 결과</code></pre>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 레코드가 없을 때 예외 대신 <code>nil</code>을 반환하는 메서드는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. find</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. find_by</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. where</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. first</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>3. where — "이 조건에 맞는 전체 레코드를 줘"</h2>
+
+  <p>
+    여러 건을 꺼낼 때 쓴다. SQL의 <code>WHERE</code> 절 그대로다.
+  </p>
+
+<pre><code>Review.where(status: :submitted)
+# → SELECT * FROM reviews WHERE status = 'submitted'
+
+Review.where(status: :submitted, appraisee_id: 5)
+# → 조건 여러 개는 AND로 연결된다</code></pre>
+
+  <h3>핵심: where는 즉시 실행되지 않는다</h3>
+
+  <p>
+    <code>where</code>의 반환값은 <strong>배열이 아니다</strong>.
+    <code>ActiveRecord::Relation</code>이라는 객체다.
+    실제 SQL은 이 Relation이 실제로 데이터를 필요로 하는 순간에 실행된다.
+  </p>
+
+  <div class="analogy">
+    JS의 <code>Promise</code>처럼 생각하면 된다.
+    <code>where</code>는 "이런 쿼리를 실행하겠다"는 <em>계획</em>을 만들 뿐이고,
+    <code>.each</code>, <code>.to_a</code>, <code>.count</code>처럼 실제 데이터가 필요한 순간에 <code>await</code>처럼 실행된다.
+    이 덕분에 조건을 체이닝(chaining)으로 쌓을 수 있다.
+  </div>
+
+<pre><code># 체이닝: 각 메서드가 Relation을 반환하므로 계속 이어 붙일 수 있다
+Review.where(status: :submitted)
+      .order(created_at: :desc)
+      .limit(10)
+# → SELECT * FROM reviews
+#     WHERE status = 'submitted'
+#     ORDER BY created_at DESC
+#     LIMIT 10
+# SQL은 단 한 번만 실행된다</code></pre>
+
+  <h2>4. 자주 쓰는 체이닝 메서드</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">메서드</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">역할</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">SQL 대응</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>.order(col: :desc)</code></td>
+        <td style="padding:0.4rem 0.5rem;">정렬</td>
+        <td style="padding:0.4rem 0.5rem;"><code>ORDER BY col DESC</code></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>.limit(n)</code></td>
+        <td style="padding:0.4rem 0.5rem;">최대 n건</td>
+        <td style="padding:0.4rem 0.5rem;"><code>LIMIT n</code></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>.count</code></td>
+        <td style="padding:0.4rem 0.5rem;">건수 세기</td>
+        <td style="padding:0.4rem 0.5rem;"><code>SELECT COUNT(*)</code></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>.first</code> / <code>.last</code></td>
+        <td style="padding:0.4rem 0.5rem;">첫/마지막 한 건 (없으면 nil)</td>
+        <td style="padding:0.4rem 0.5rem;"><code>LIMIT 1</code></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>.exists?</code></td>
+        <td style="padding:0.4rem 0.5rem;">존재하면 true</td>
+        <td style="padding:0.4rem 0.5rem;"><code>SELECT 1 ... LIMIT 1</code></td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>.pluck(:col)</code></td>
+        <td style="padding:0.4rem 0.5rem;">특정 컬럼 값만 배열로</td>
+        <td style="padding:0.4rem 0.5rem;"><code>SELECT col FROM ...</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    레슨 12에서 봤던 <code>record.reviews.kept.exists?</code> —
+    이제 완전히 읽힌다.
+    <code>record.reviews</code>는 연관관계(has_many), <code>.kept</code>는 다음 레슨에서 배울 scope,
+    <code>.exists?</code>는 방금 배운 체이닝 메서드다.
+  </p>
+
+  <h2>5. 한눈에 비교</h2>
+
+<pre><code># 하나를 ID로 — 없으면 예외
+User.find(3)
+
+# 하나를 조건으로 — 없으면 nil
+User.find_by(email: 'alice@example.com')
+
+# 여러 건을 조건으로 — Relation 반환 (체이닝 가능)
+User.where(role: :admin).order(created_at: :desc).limit(5)
+
+# 개수만 필요할 때
+User.where(role: :admin).count
+
+# id 배열만 필요할 때 (객체를 만들지 않아서 빠름)
+User.where(role: :admin).pluck(:id)   # → [1, 4, 7, ...]</code></pre>
+
+  <div class="quiz">
+    <div class="quiz-q">Q3. <code>Review.where(status: :draft)</code>를 실행한 직후, SQL이 DB에 날아갔는가?</div>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">A. 즉시 날아간다 — 배열을 반환한다</button></li>
+      <li><button onclick="answer(this,'q3',true)">B. 아직 날아가지 않았다 — Relation 객체를 반환한다</button></li>
+      <li><button onclick="answer(this,'q3',false)">C. nil을 반환한 뒤 나중에 날아간다</button></li>
+      <li><button onclick="answer(this,'q3',false)">D. count를 호출해야 처음 실행된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">메서드</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">반환값</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">없을 때</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>find(id)</code></td>
+        <td style="padding:0.4rem 0.5rem;">객체 하나</td>
+        <td style="padding:0.4rem 0.5rem;">예외 발생 → 404</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>find_by(…)</code></td>
+        <td style="padding:0.4rem 0.5rem;">객체 하나</td>
+        <td style="padding:0.4rem 0.5rem;">nil</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>where(…)</code></td>
+        <td style="padding:0.4rem 0.5rem;">Relation (체이닝 가능)</td>
+        <td style="padding:0.4rem 0.5rem;">빈 Relation (예외 없음)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고:
+    <a href="https://guides.rubyonrails.org/active_record_querying.html" target="_blank">Rails Guides — Active Record Query Interface</a>
+  </p>
+
+  <div class="nav-links">
+    <a href="0012-pundit-authorize-and-rescue-from.html">← 레슨 12 — Pundit 권한 체크와 rescue_from</a>
+    <a href="0014-activerecord-scope-and-validates.html">레슨 14 — Scope와 validates →</a>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "그럼 find_by가 여러 건 있으면 어떤 게 나오나요?" 같은 구체적인 질문을 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. find는 "반드시 있어야 한다"는 전제로 동작합니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. find와 find_by의 "없을 때 동작"이 핵심 차이입니다.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. where의 반환값 타입을 확인해보세요.';
+  }
+}
+</script>
+
+</body>
+</html>
