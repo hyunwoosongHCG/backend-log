@@ -115,8 +115,8 @@
 - [x] 연관관계 (`belongs_to`, `has_many`, `has_one`, `has_many :through`) → [레슨](lessons/0008-active-record-associations.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [ ] 유효성 검사 (`validates`)
 - [ ] 스코프(Scope)란?
-- [x] 콜백 (`before_save`, `after_create` 등) → [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)
-- [x] Dirty Tracking이란? (`changed?`, `attribute_changed?`, partial writes) → [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)
+- [x] 콜백 (`before_save`, `after_create` 등) → [정리](concepts/timestamps-and-callbacks.md) | [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)
+- [x] Dirty Tracking이란? (`changed?`, `attribute_changed?`, partial writes) → [정리](concepts/dirty-tracking.md) | [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)
 - [ ] 쿼리 메서드 (`where`, `find`, `find_by`, `includes`, `joins`)
 - [x] N+1 문제란? `includes`로 해결하기 → [레슨](lessons/0009-n-plus-1.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 
