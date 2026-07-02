@@ -68,7 +68,7 @@
 ### 자료형과 변수
 
 - [ ] 자료형 (String, Integer, Float, Boolean, nil)
-- [ ] Symbol vs String
+- [x] Symbol vs String → [정리](concepts/symbol-vs-string.md) | [배운 작업](work-log/2026-07-02-symbol-vs-string.md)
 - [ ] 배열(Array)
 - [ ] 해시(Hash)
 - [ ] 변수 종류 (지역, 인스턴스, 클래스, 전역)
