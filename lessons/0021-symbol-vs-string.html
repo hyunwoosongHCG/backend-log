@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 21 — Ruby Symbol vs String</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>Ruby Symbol — <code>:foo</code>가 도대체 뭔가</h1>
+  <div class="lesson-meta">
+    <span>레슨 021</span>
+    <span>Symbol · String · 인터닝(interning)</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 ppback `talent_sessions/start_worker.rb`에서 <code>%i[feedbackpool multisource_feedbacks]</code>를 보고
+    "이거 그냥 문자열 아닌가?" 싶었던 것에서 시작 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>실제로 본 코드</h2>
+
+  <p>ppback 리뷰 중 이런 코드를 봤다:</p>
+
+<pre><code>talent_session_reference_data: { reference_data: %i[feedbackpool multisource_feedbacks] },</code></pre>
+
+  <p>
+    <code>:feedbackpool</code>, <code>:multisource_feedbacks</code> — 콜론이 붙은 이 값들이
+    <strong>Symbol</strong>이다. JS만 해온 입장에서는 낯설다. 문자열이랑 뭐가 다른가?
+  </p>
+
+  <h2>Symbol과 String, 겉모습은 비슷하다</h2>
+
+<pre><code>:foo      # Symbol
+"foo"     # String</code></pre>
+
+  <p>
+    둘 다 "foo"라는 이름/텍스트를 나타내는 것처럼 보인다. 하지만 역할이 다르다.
+    String은 <strong>화면에 보여줄 텍스트, 사용자 입력, 바뀔 수 있는 데이터</strong>에 쓰고,
+    Symbol은 <strong>코드 내부에서만 쓰는 고정된 이름표</strong>(해시 키, enum 값, 메서드 이름)에 쓴다.
+  </p>
+
+  <h2>핵심 차이 — 인터닝(interning)</h2>
+
+  <p>
+    Symbol은 <strong>불변(immutable)</strong>이고, 코드 어디에 몇 번을 쓰든
+    <strong>항상 완전히 같은 객체</strong>다. String은 리터럴을 새로 쓸 때마다 별개의 객체가 생긴다.
+    <code>object_id</code>로 직접 확인하면 차이가 드러난다:
+  </p>
+
+<pre><code>:foo.object_id == :foo.object_id     # => true  (항상 같은 객체)
+"foo".object_id == "foo".object_id   # => false (매번 새 객체)</code></pre>
+
+  <p>
+    같은 객체라는 건 비교(<code>==</code>)가 문자를 한 글자씩 훑을 필요 없이
+    정수 비교급으로 빠르다(O(1))는 뜻이다. 반복적으로 비교하거나 분기(<code>case</code>, <code>include?</code>)에
+    쓰기에 String보다 유리한 이유다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. <code>:status.object_id == :status.object_id</code>의 결과는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. false — 매번 다른 객체가 생긴다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. true — Symbol은 항상 같은 객체로 재사용된다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 에러 발생 — object_id는 String에만 쓸 수 있다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. nil — Symbol에는 object_id가 없다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="analogy">
+    ⚠️ JS의 <code>Symbol()</code>과 이름은 같지만 동작은 <strong>정반대</strong>다:<br><br>
+<pre><code>// JS: 호출할 때마다 유일한 값을 만든다
+Symbol('foo') === Symbol('foo')   // false
+
+# Ruby: 항상 같은 값을 재사용한다 (인터닝)
+:foo == :foo                      # true</code></pre>
+    이름만 같고 정반대로 동작하는 개념이라 그냥 별개로 기억하는 게 낫다.
+    굳이 비유하자면 Ruby Symbol은 <code>const STATUS = { ACTIVE: 'active' }</code>처럼
+    고정된 enum 값을 언어가 알아서 인터닝(캐싱)해주는 것에 더 가깝다.
+  </div>
+
+  <h2>축약 문법 두 가지 뜯어보기</h2>
+
+  <p>
+    맨 처음 코드로 돌아가면, 사실 축약 문법이 두 겹으로 겹쳐 있었다:
+  </p>
+
+<pre><code>talent_session_reference_data: { reference_data: %i[feedbackpool multisource_feedbacks] },
+#                             ↑ 해시 키 축약형        ↑ 심볼 배열 리터럴 축약형</code></pre>
+
+<pre><code># 1. 해시 키 축약형 — key: value는 :key => value의 축약
+talent_session_reference_data: value
+# 동일:
+:talent_session_reference_data => value
+
+# 2. 심볼 배열 리터럴 — %i[...]는 [:a, :b]의 축약
+%i[feedbackpool multisource_feedbacks]
+# 동일:
+[:feedbackpool, :multisource_feedbacks]</code></pre>
+
+  <p>
+    <code>%i[...]</code>는 공백으로만 구분하면 되고 따옴표·콜론·쉼표를 안 붙여도 된다.
+    "고정된 식별자 목록"을 나열할 때 자주 쓰는 문법이다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. <code>%i[a b c]</code>와 완전히 같은 표현은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. ["a", "b", "c"]</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. [:a, :b, :c]</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. { a: 1, b: 2, c: 3 }</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. "a, b, c"</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>왜 String이 아니라 Symbol을 쓰나</h2>
+
+  <p>
+    <code>feedbackpool</code>, <code>multisource_feedbacks</code>는 사용자 입력이나 화면에 보여줄 텍스트가
+    아니라, "어떤 참조 데이터 종류를 같이 복사할지"를 코드 내부에서만 구분하는 고정된 태그다.
+    이런 경우 Symbol이 관용적이다:
+  </p>
+
+  <ul>
+    <li>고정된 내부 식별자(enum 성격) — 값이 바뀔 일이 없다</li>
+    <li>반복 비교·분기에서 String보다 빠르고 메모리도 덜 쓴다</li>
+    <li>불변이라 실수로 값이 바뀌는 사고가 안 난다</li>
+  </ul>
+
+  <p>
+    단, JSON으로 직렬화되는 순간 Symbol은 String으로 바뀐다. 그래서 Symbol은
+    <strong>프로세스 내부통신에서만</strong>의미가 있고, API 응답처럼 프로세스 경계를 넘는 데이터는
+    보통 String을 쓴다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q3. 다음 중 Symbol을 쓰는 게 더 적절한 경우는?</div>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">A. 사용자가 입력한 댓글 내용</button></li>
+      <li><button onclick="answer(this,'q3',false)">B. API 응답으로 내려줄 JSON 본문</button></li>
+      <li><button onclick="answer(this,'q3',true)">C. 해시의 고정된 키 이름 (예: reference_data:)</button></li>
+      <li><button onclick="answer(this,'q3',false)">D. 외부 서비스로 전송할 텍스트 메시지</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">항목</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">Symbol (<code>:foo</code>)</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">String (<code>"foo"</code>)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">가변성</td>
+        <td style="padding:0.4rem 0.5rem;">불변(immutable)</td>
+        <td style="padding:0.4rem 0.5rem;">가변(mutable)</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">동일 리터럴 재사용</td>
+        <td style="padding:0.4rem 0.5rem;">항상 같은 객체 (인터닝)</td>
+        <td style="padding:0.4rem 0.5rem;">매번 새 객체</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">비교 속도</td>
+        <td style="padding:0.4rem 0.5rem;">O(1)</td>
+        <td style="padding:0.4rem 0.5rem;">글자 수만큼</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">주 용도</td>
+        <td style="padding:0.4rem 0.5rem;">해시 키, enum 값, 메서드 이름</td>
+        <td style="padding:0.4rem 0.5rem;">사용자 입력, 화면 표시 텍스트, API 페이로드</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="nav-links">
+    <a href="0020-dirty-tracking-and-partial-writes.html">← 레슨 20 — Dirty Tracking과 Partial Writes</a>
+    <span style="color: var(--muted);">다음 레슨 준비 중</span>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "심볼도 가비지 컬렉션 되나요?" 같은 심화 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. Symbol은 인터닝되어 항상 같은 객체를 가리킵니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. %i[...]는 심볼 배열 리터럴의 축약형입니다.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. 프로세스 경계를 넘는 데이터인지, 코드 내부 고정 식별자인지를 구분해보세요.';
+  }
+}
+</script>
+
+</body>
+</html>
