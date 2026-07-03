@@ -43,7 +43,7 @@
 - [x] 기본키(PK)와 외래키(FK) → [레슨](lessons/0004-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [ ] 1:1, 1:N, N:M 관계
 - [ ] 인덱스(Index)란? 왜 필요한가
-- [ ] 트랜잭션(Transaction)과 ACID
+- [x] 트랜잭션(Transaction)과 ACID → [배운 작업](work-log/2026-07-03-sentry-batch-approval-atomicity-bug.md)
 - [ ] 행 잠금(Row Locking)과 동시성 제어 (`with_lock`, `SELECT ... FOR UPDATE`)
 - [ ] SQL 기본 (SELECT, INSERT, UPDATE, DELETE)
 - [x] JOIN이란? → [레슨](lessons/0004-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
