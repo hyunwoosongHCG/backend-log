@@ -164,9 +164,10 @@
 ### 백그라운드 잡
 
 - [ ] Sidekiq란?
-- [ ] 워커(Worker) 작성법
+- [x] 워커(Worker) 작성법 → [정리](concepts/sidekiq-job-argument-pipeline.md) | [배운 작업](work-log/2026-07-03-sidekiq-job-args-and-slack-investigation.md)
 - [ ] 큐(Queue) 종류와 우선순위
 - [ ] 실패한 잡 재시도
+- [x] job 인자 직렬화 (Marshal vs JSON, `on_complex_arguments`) → [정리](concepts/sidekiq-marshal-vs-json-serialization.md) | [배운 작업](work-log/2026-07-03-sidekiq-job-args-and-slack-investigation.md)
 
 ### 기타
 
