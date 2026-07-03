@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 23 — Rails 리소스 라우팅의 경우의 수</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>resources 한 줄 — 실제로 몇 가지 경우가 숨어있나</h1>
+  <div class="lesson-meta">
+    <span>레슨 023</span>
+    <span>resources · canonical actions · collection/member/new</span>
+    <span>~20분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 ppback <code>config/routes/v1.rb</code>의
+    <code>resources :multisource_feedbacks do collection { get 'new' } end</code>를 보고
+    "왜 <code>:id</code> 붙은 라우트까지 자동으로 생기지? 이 한 줄에 경우의 수가 몇 개나 숨어있는 거야?"
+    싶었던 것에서 시작 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>React Router와 다른 출발점</h2>
+
+  <p>
+    React Router라면 라우트를 하나하나 손으로 등록한다:
+  </p>
+
+<pre><code>&lt;Route path="/photos" element={&lt;PhotoList /&gt;} /&gt;
+&lt;Route path="/photos/:id" element={&lt;PhotoDetail /&gt;} /&gt;
+&lt;Route path="/photos/new" element={&lt;PhotoForm /&gt;} /&gt;
+// ...생성/수정/삭제도 각각 등록</code></pre>
+
+  <p>
+    Rails는 정반대다. "REST 자원 하나 = CRUD 라우트 세트"라는 <strong>관습(convention)</strong>이 있어서,
+    <code>resources :photos</code> 딱 한 줄이 저 여러 개를 <strong>자동으로</strong> 만들어낸다.
+    문제는 "자동"이라는 말 뒤에 실제로는 여러 겹의 조건 분기(경우의 수)가 숨어있다는 것 — 오늘은 그걸 다 펼쳐본다.
+  </p>
+
+  <div class="analogy">
+    💡 프론트로 치면: <code>resources :photos</code>는 React Router의 개별 <code>&lt;Route&gt;</code> 여러 줄이 아니라,
+    "CRUD 페이지 세트를 만들어주는 코드 제너레이터(scaffolding)"에 더 가깝다.
+    다만 이 제너레이터가 상황(api_only 여부, only/except, 블록 유무, 중첩 여부)에 따라
+    결과물을 다르게 뱉는다는 게 오늘 배울 "경우의 수"다.
+  </div>
+
+  <h2>경우의 수 ① — API 전용 모드냐 아니냐 (액션 개수: 5개 vs 7개)</h2>
+
+  <p>
+    Rails의 <code>resources</code>는 원래 아래 7개 액션을 기본으로 만든다: <code>index, new, create, show, edit, update, destroy</code>.
+    그런데 ppback은 <code>config/application.rb</code>에서 <code>config.api_only = true</code>로 설정되어 있다.
+    API 전용 모드에서는 화면(HTML 폼)을 그리기 위한 액션인 <code>new</code>·<code>edit</code>이 애초에 의미가 없으므로,
+    Rails 프레임워크 코드 자체가 이 둘을 자동으로 뺀다:
+  </p>
+
+<pre><code># actionpack 소스 (action_dispatch/routing/mapper.rb)
+def default_actions
+  if @api_only
+    [:index, :create, :show, :update, :destroy]              # 5개
+  else
+    [:index, :create, :new, :show, :update, :destroy, :edit]  # 7개
+  end
+end</code></pre>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. <code>config.api_only = true</code>인 앱에서 <code>resources :photos</code>가 기본으로 만들지 <strong>않는</strong> 액션 두 가지는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. show, update 두 가지</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. new, edit 두 가지</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. index, create 두 가지</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. edit, destroy 두 가지</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>경우의 수 ② — 액션 이름이 URL에 노출되느냐 (canonical 여부)</h2>
+
+  <p>
+    5~7개 액션 모두가 "그 이름 그대로" URL에 나타나는 건 아니다. Rails는 <code>index, create, new, show, update, destroy</code>를
+    <strong>canonical action(관용적인 액션)</strong>으로 취급해서, 이 액션들은 URL에 이름을 붙이지 않고
+    "URL 모양 + HTTP 메서드"만으로 구분한다. 반면 <code>edit</code>은 이 목록에 없어서 URL에 이름이 그대로 붙는다.
+  </p>
+
+<pre><code>CANONICAL_ACTIONS = %w(index create new show update destroy)   # edit은 없다!
+
+GET    /photos          → index    (이름 없음, GET+목록 경로로 구분)
+GET    /photos/:id      → show     (이름 없음, GET+id 경로로 구분)
+GET    /photos/:id/edit → edit     (canonical이 아니라서 "edit"이 그대로 URL에 붙음)</code></pre>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 다음 중 URL에 액션 이름이 그대로 노출되는 것은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. GET /photos (index)</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. GET /photos/1 (show)</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. GET /photos/1/edit (edit)</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. DELETE /photos/1 (destroy)</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>경우의 수 ③ — 어느 스코프에 속하느냐 (collection / member / new)</h2>
+
+  <p>
+    Rails 내부적으로 액션마다 URL "자리"가 정해져 있다. 이 자리를 스코프(scope)라고 부르고, 세 종류뿐이다:
+  </p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">스코프</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">URL 모양</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">여기 속하는 기본 액션</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>collection</code></td>
+        <td style="padding:0.4rem 0.5rem;"><code>/photos</code> (id 없음)</td>
+        <td style="padding:0.4rem 0.5rem;"><code>index</code>, <code>create</code></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>member</code></td>
+        <td style="padding:0.4rem 0.5rem;"><code>/photos/:id</code> (id 있음)</td>
+        <td style="padding:0.4rem 0.5rem;"><code>show</code>, <code>update</code>, <code>destroy</code>, <code>edit</code></td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>new</code></td>
+        <td style="padding:0.4rem 0.5rem;"><code>/photos/new</code></td>
+        <td style="padding:0.4rem 0.5rem;"><code>new</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    이 세 스코프는 <code>do...end</code> 블록으로 직접 열어서 <strong>커스텀 라우트</strong>를 추가할 수도 있다.
+    예를 들어 "사진 미리보기" 같은, RESTful 7종에 없는 기능을 추가하고 싶다면:
+  </p>
+
+<pre><code>resources :photos do
+  member do
+    get 'preview'   # member 스코프 = id가 붙는 자리
+  end
+end</code></pre>
+
+  <div class="quiz">
+    <div class="quiz-q">Q3. 위 코드처럼 <code>member do get 'preview' end</code>라고 쓰면 생기는 URL은?</div>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">A. GET /photos/preview</button></li>
+      <li><button onclick="answer(this,'q3',true)">B. GET /photos/:id/preview</button></li>
+      <li><button onclick="answer(this,'q3',false)">C. GET /photos/new/preview</button></li>
+      <li><button onclick="answer(this,'q3',false)">D. GET /photos/preview/:id</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>경우의 수 ④ — only / except로 액션 자체를 줄이기</h2>
+
+  <p>
+    5개 기본 액션이 전부 필요하지 않을 때도 있다. ppback에서 실제로 본 예:
+  </p>
+
+<pre><code># config/routes/v1.rb
+resources :multisource_feedback_responses, only: [:show, :update, :destroy]</code></pre>
+
+  <p>
+    이렇게 쓰면 <code>index</code>와 <code>create</code>는 아예 라우트로 만들어지지 않는다.
+    (이 리소스는 다른 API로 생성/목록 조회를 하고, 개별 항목 조회/수정/삭제만 이 라우트로 하는 경우다.)
+    반대로 <code>except: [:destroy]</code>처럼 "이것만 빼고 다 만들어라"도 가능하다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q4. <code>resources :multisource_feedback_responses, only: [:show, :update, :destroy]</code>일 때 생기지 <strong>않는</strong> 라우트는?</div>
+    <ul class="options" id="q4">
+      <li><button onclick="answer(this,'q4',false)">A. GET .../:id (show)</button></li>
+      <li><button onclick="answer(this,'q4',false)">B. PATCH .../:id (update)</button></li>
+      <li><button onclick="answer(this,'q4',true)">C. POST ... (create)</button></li>
+      <li><button onclick="answer(this,'q4',false)">D. DELETE .../:id (destroy)</button></li>
+    </ul>
+    <div class="quiz-result" id="q4-result"></div>
+  </div>
+
+  <h2>경우의 수 ⑤ — do...end 블록은 "추가"이지 "대체"가 아니다</h2>
+
+  <p>
+    처음 봤을 때 가장 헷갈렸던 부분. ppback 실제 코드:
+  </p>
+
+<pre><code>resources :multisource_feedbacks do
+  collection do
+    get 'new'
+  end
+end</code></pre>
+
+  <p>
+    이 코드를 보면 <code>get 'new'</code> 하나만 눈에 보여서, "그럼 <code>show</code>·<code>update</code>·<code>destroy</code>는 어디서 온 거지?"
+    라는 의문이 생긴다. 답은 — <strong>이 블록은 기본 5개 액션 위에 얹는 "추가분"일 뿐</strong>이라는 것.
+    Rails <code>resources</code> 내부 코드를 보면 순서가 이렇다:
+  </p>
+
+<pre><code>def resources(*resources, &block)
+  ...
+  resource_scope(Resource.new(...)) do
+    yield if block_given?              # ① 사용자가 쓴 do...end 블록 — 딱 한 번 실행
+                                        #    (지금 예시에선 get 'new' 하나)
+
+    collection do                      # ② 여기부터는 블록 유무와 무관하게 무조건 실행
+      get  :index  if ...
+      post :create if ...
+    end
+
+    set_member_mappings_for_resource   # ③ show/update/destroy(=id 붙는 라우트)가 여기서 나옴
+  end
+end</code></pre>
+
+  <p>
+    즉 <code>do...end</code> 블록을 통째로 지워도 <code>index</code>·<code>create</code>·<code>show</code>·<code>update</code>·<code>destroy</code>는
+    그대로 생긴다. 블록이 있어야만 생기는 건 <code>new</code> 하나뿐이다 (원래 api_only라 자동 제외됐던 걸 누군가 수동으로 되살려놓은 것).
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q5. <code>resources :photos do collection { get 'new' } end</code>에서 <code>show</code>/<code>update</code>/<code>destroy</code> 라우트는 어디서 오나?</div>
+    <ul class="options" id="q5">
+      <li><button onclick="answer(this,'q5',false)">A. collection 블록 코드가 자동 생성</button></li>
+      <li><button onclick="answer(this,'q5',true)">B. resources :photos 자체가 기본 생성</button></li>
+      <li><button onclick="answer(this,'q5',false)">C. get 'new' 한 줄이 확장돼 생성</button></li>
+      <li><button onclick="answer(this,'q5',false)">D. Grape API가 별도로 생성</button></li>
+    </ul>
+    <div class="quiz-result" id="q5-result"></div>
+  </div>
+
+  <h2>경우의 수 ⑥ — 중첩(nested)되면 URL 앞에 상위 자원이 붙는다</h2>
+
+  <p>
+    실제 라우트를 <code>rails routes -c multisource_feedbacks</code>로 찍어보면 URL이
+    <code>/api/v1/workspaces/:workspace_id/multisource_feedbacks</code>로, 앞에 <code>workspaces/:workspace_id</code>가 붙어 있다.
+    이건 <code>resources :multisource_feedbacks</code>가 <code>resources :workspaces</code> 블록 <strong>안에 중첩</strong>되어 있기 때문이다:
+  </p>
+
+<pre><code>resources :workspaces do
+  resources :multisource_feedbacks    # 중첩 → 상위 workspaces의 :id가 URL 앞에 붙는다
+end
+# 최종: /workspaces/:workspace_id/multisource_feedbacks</code></pre>
+
+  <p>
+    "이 360피드백이 어느 workspace 소속인지"가 URL 자체에 박히기 때문에, 컨트롤러에서
+    <code>params[:workspace_id]</code>로 항상 상위 자원을 먼저 찾아 권한 검사를 할 수 있게 된다
+    (지난 PR 리뷰에서 봤던 <code>workspace.all_multisource_feedbacks.where(...)</code> 같은 보안 스코프의 근거이기도 하다).
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q6. <code>resources :workspaces do resources :multisource_feedbacks end</code>이면 최종 URL 접두어는?</div>
+    <ul class="options" id="q6">
+      <li><button onclick="answer(this,'q6',false)">A. /multisource_feedbacks/:workspace_id</button></li>
+      <li><button onclick="answer(this,'q6',true)">B. /workspaces/:workspace_id/multisource_feedbacks</button></li>
+      <li><button onclick="answer(this,'q6',false)">C. /workspaces/multisource_feedbacks/:id</button></li>
+      <li><button onclick="answer(this,'q6',false)">D. /multisource_feedbacks/workspaces/:id</button></li>
+    </ul>
+    <div class="quiz-result" id="q6-result"></div>
+  </div>
+
+  <h2>마지막 한 조각 — "controller#action" 문자열의 정체</h2>
+
+  <p>
+    지금까지의 모든 경우의 수는 결국 라우팅 테이블에 <code>"multisource_feedbacks#show"</code> 같은 문자열을 등록하는
+    걸로 끝난다. 요청이 실제로 오면 Rails가 이 문자열을 <code>#</code> 기준으로 쪼갠다:
+  </p>
+
+<pre><code>"multisource_feedbacks#show"
+ └ 왼쪽: "multisource_feedbacks" → 카멜케이스 + Controller → MultisourceFeedbacksController.new
+ └ 오른쪽: "show"                → 그 인스턴스의 show 메서드를 호출</code></pre>
+
+  <p>
+    지금까지 배운 6가지 경우의 수는 전부 "이 문자열이 정확히 뭐가 되는지, 그리고 어떤 URL+메서드 조합에 붙는지"를 결정하는 규칙들이었다.
+  </p>
+
+  <h2>핵심 요약 — 경우의 수 총정리</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.85rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">경우의 수</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">갈리는 기준</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">ppback 예시</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">① api_only 여부</td>
+        <td style="padding:0.4rem 0.5rem;">5개 액션 vs 7개 액션</td>
+        <td style="padding:0.4rem 0.5rem;"><code>config.api_only = true</code> → new/edit 자동 제외</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">② canonical 여부</td>
+        <td style="padding:0.4rem 0.5rem;">URL에 액션명 노출 안 함 vs 함</td>
+        <td style="padding:0.4rem 0.5rem;">show/update는 숨김, edit은 노출</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">③ 스코프 종류</td>
+        <td style="padding:0.4rem 0.5rem;">collection / member / new</td>
+        <td style="padding:0.4rem 0.5rem;"><code>collection { get 'new' }</code></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">④ only / except</td>
+        <td style="padding:0.4rem 0.5rem;">기본 액션 화이트/블랙리스트로 축소</td>
+        <td style="padding:0.4rem 0.5rem;"><code>multisource_feedback_responses, only: [...]</code></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">⑤ 커스텀 블록</td>
+        <td style="padding:0.4rem 0.5rem;">기본 라우트에 "추가"(대체 아님)</td>
+        <td style="padding:0.4rem 0.5rem;"><code>collection { get 'new' }</code></td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">⑥ nested</td>
+        <td style="padding:0.4rem 0.5rem;">상위 자원의 :id가 URL 접두어로 붙음</td>
+        <td style="padding:0.4rem 0.5rem;"><code>/workspaces/:workspace_id/multisource_feedbacks</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="nav-links">
+    <a href="0022-data-wrapper-and-swagger.html">← 레슨 22 — DataWrapper와 Swagger 문서 자동 생성</a>
+    <span style="color: var(--muted);">다음 레슨 준비 중</span>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "shallow 옵션은 뭔가요?", "Grape는 왜 이 관습을 안 쓰나요?" 같은 심화 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. api_only 모드에서 자동으로 빠지는 건 폼 렌더링용 액션입니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. CANONICAL_ACTIONS 목록에 없는 액션만 URL에 이름이 그대로 붙습니다.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. member 스코프는 항상 :id가 붙는 자리입니다.';
+    if (qid === 'q4') result.textContent = '다시 생각해보세요. only 목록에 없는 액션(index, create)은 라우트 자체가 안 생깁니다.';
+    if (qid === 'q5') result.textContent = '다시 생각해보세요. resources 호출 자체가 블록과 무관하게 기본 액션을 항상 만듭니다.';
+    if (qid === 'q6') result.textContent = '다시 생각해보세요. 중첩된 resources는 상위 자원의 :id가 URL 앞쪽에 붙습니다.';
+  }
+}
+</script>
+
+</body>
+</html>

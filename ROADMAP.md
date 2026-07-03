@@ -105,7 +105,7 @@
 ### 프로젝트 구조
 
 - [ ] Rails 디렉토리 구조 (`app/`, `config/`, `db/`)
-- [x] `config/routes.rb` 역할 → [정리](concepts/rails-routing-and-controller-convention.md) | [배운 작업](work-log/2026-07-03-controller-routing-and-read-replica.md)
+- [x] `config/routes.rb` 역할 → [레슨](lessons/0023-rails-resources-routing-cases.html) | [정리](concepts/rails-routing-and-controller-convention.md) | [배운 작업](work-log/2026-07-03-controller-routing-and-read-replica.md)
 - [ ] `Gemfile`과 `bundle install`
 
 ### ActiveRecord (Model)
@@ -124,7 +124,7 @@
 ### Controller
 
 - [ ] 컨트롤러(Controller)란?
-- [ ] 액션(Action)과 HTTP 메서드 매핑
+- [x] 액션(Action)과 HTTP 메서드 매핑 → [레슨](lessons/0023-rails-resources-routing-cases.html) | [배운 작업](work-log/2026-07-03-rails-resources-routing-lesson.md)
 - [ ] `before_action`이란?
 - [ ] Strong Parameters (`params.require.permit`)
 - [ ] `render` vs `redirect_to`

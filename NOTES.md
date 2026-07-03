@@ -30,6 +30,10 @@
 - 상속과 오버라이드 — 2026-06-25
 - 자동 타임스탬프 관리 (created_at/updated_at, 숨은 콜백) — 2026-07-01
 - Dirty Tracking / Partial Writes (changed?, attribute_changed?) — 2026-07-01
+- Symbol vs String (인터닝) — 2026-07-02
+- DataWrapper / grape-swagger 응답 스키마 자동 생성 — 2026-07-03
+- Read Replica 라우팅 (connects_to/connected_to, 멀티 DB) — 2026-07-03
+- Rails 리소스 라우팅 (resources, canonical actions, collection/member/new, only/except, nested) — 2026-07-03
 
 ## 주의사항
 
