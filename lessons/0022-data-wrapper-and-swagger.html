@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 22 — DataWrapper와 Swagger 문서 자동 생성</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>DataWrapper — Swagger 응답 스키마는 누가 만드나</h1>
+  <div class="lesson-meta">
+    <span>레슨 022</span>
+    <span>DataWrapper · grape-swagger model_parsers</span>
+    <span>~12분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 ppback PR #5489 리뷰 중 <code>multisource_feedbacks.rb</code>의
+    <code>success model: DataWrapper.new(Entities::MultisourceFeedbacks::MonitorEntity)</code>를 보고
+    "이게 뭘 감싸는 거지?" 싶었던 것에서 시작 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>실제로 본 코드</h2>
+
+  <p>Grape API 엔드포인트의 <code>desc</code> 블록 안에서 이런 코드를 봤다:</p>
+
+<pre><code>desc '360 피드백 평가자 리스트 수정' do
+  success model: DataWrapper.new(Entities::MultisourceFeedbacks::MonitorEntity)
+end
+put ':id/assessors' do
+  # ...
+end</code></pre>
+
+  <p>
+    이름만 보면 "응답을 <code>DataWrapper</code>로 감싼다"는 뜻처럼 읽힌다.
+    그런데 실제로 이 엔드포인트의 응답을 만드는 코드에는 <code>DataWrapper</code>가 등장하지 않는다.
+    그렇다면 이건 대체 뭘 하는 클래스인가?
+  </p>
+
+  <h2>이름은 Wrapper인데, 진짜 응답을 감싸지는 않는다</h2>
+
+  <p>
+    <code>lib/types/data_wrapper.rb</code>를 열어보면 힌트가 있다 — 이 클래스는 로직이 없다.
+    그냥 값을 들고 있는 객체다:
+  </p>
+
+<pre><code>class DataWrapper
+  attr_reader :model, :key, :is_array, :meta, :meta_key, :wrapper_name
+
+  def initialize(model, wrapper_name: nil, key: :data, is_array: false, meta: false, meta_key: :meta)
+    @model = model
+    @key = key
+    @is_array = is_array
+    @meta = meta
+    @meta_key = meta_key
+  end
+end</code></pre>
+
+  <p>
+    <code>model</code>(어떤 Entity인지), <code>key</code>(응답 키, 기본 <code>:data</code>),
+    <code>is_array</code>(배열이냐 단일 객체냐), <code>meta</code>/<code>meta_key</code>(페이지네이션 같은 부가 정보) —
+    전부 <strong>설명(description)</strong>일 뿐 실행 로직이 없다. 즉 이 객체는
+    "이 API는 <code>{ "data": ... }</code> 모양으로 응답한다"는 사실을 <strong>문서화하기 위한 선언</strong>이다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. <code>DataWrapper</code>가 실제로 하는 일은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 런타임에 응답 JSON을 실제로 <code>{ data: ... }</code>로 감싼다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. Swagger 문서에 응답 모양을 선언하는 값 객체 — 실행 로직이 없다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. Entity를 상속해서 직렬화를 수행한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. Grape 미들웨어로 모든 응답에 자동으로 끼어든다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>그럼 실제로 감싸는 건 누구인가 — <code>present</code></h2>
+
+  <p>
+    실제로 응답을 <code>{ "data": ... }</code> 모양으로 조립하는 코드는 완전히 별개의 위치,
+    엔드포인트 액션 안의 <code>present</code> 호출이다:
+  </p>
+
+<pre><code>get do
+  examples = policy_scope(Example).page(params[:page]).per_page(params[:per_page])
+
+  present :data, examples, with: Entities::Example   # ← 진짜 응답 조립은 여기
+  present :meta, { total: examples.total_count }
+end</code></pre>
+
+  <p>
+    <code>DataWrapper.new(...)</code>와 <code>present :data, ...</code>는 코드로 강제 연결되어 있지 않다.
+    둘 다 <strong><code>:data</code>라는 키를 쓰기로 관례적으로 약속</strong>되어 있을 뿐이다.
+    그래서 둘 중 하나만 바꾸면(예: <code>present :items, ...</code>로 키를 바꿨는데 <code>DataWrapper</code> 선언은
+    그대로 두면) 실제 응답과 Swagger 문서가 서로 다른 모양을 가리키게 된다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. <code>{ "data": [...] }</code> 모양의 실제 JSON 응답을 런타임에 만드는 코드는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. <code>DataWrapper.new(...)</code></button></li>
+      <li><button onclick="answer(this,'q2',false)">B. <code>DataWrapperParser#call</code></button></li>
+      <li><button onclick="answer(this,'q2',true)">C. 엔드포인트 액션 안의 <code>present :data, ..., with: Entity</code></button></li>
+      <li><button onclick="answer(this,'q2',false)">D. <code>GrapeSwagger.model_parsers.register</code></button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>grape-swagger가 DataWrapper를 이해하는 방법 — <code>model_parsers.register</code></h2>
+
+  <p>
+    grape-swagger는 기본적으로 Grape::Entity만 알아본다. <code>DataWrapper</code> 같은 커스텀 객체를
+    <code>success model:</code>에 넘기려면, "이 타입을 만나면 이 파서로 처리해라"라고 미리 등록해둬야 한다:
+  </p>
+
+<pre><code># config/initializers/grape_swagger.rb
+GrapeSwagger.model_parsers.register(DataWrapperParser, DataWrapper)</code></pre>
+
+  <p>
+    이 등록 덕분에 grape-swagger가 문서를 만들다가 <code>DataWrapper</code> 인스턴스를 만나면
+    <code>DataWrapperParser#call</code>을 호출해서 실제 JSON Schema 조각을 받아간다:
+  </p>
+
+<pre><code># lib/types/data_wrapper_parser.rb
+memo[wrapper.key] = if wrapper.is_array
+                      { 'type' => 'array', 'items' => { '$ref' => "#/definitions/#{name}" } }
+                    else
+                      { 'type' => :object, '$ref' => "#/definitions/#{name}" }
+                    end
+memo[wrapper.meta_key] = wrapper.meta if wrapper.meta</code></pre>
+
+  <p>
+    <code>is_array: true</code>면 배열 스키마를, 아니면 단일 객체 스키마를 만들고,
+    <code>meta</code>가 있으면 페이지네이션 같은 부가 필드도 스키마에 추가한다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q3. <code>GrapeSwagger.model_parsers.register(DataWrapperParser, DataWrapper)</code> 등록을 빼먹으면?</div>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">A. 서버가 부팅되지 않는다</button></li>
+      <li><button onclick="answer(this,'q3',false)">B. 실제 API 응답이 깨진다</button></li>
+      <li><button onclick="answer(this,'q3',true)">C. grape-swagger가 DataWrapper를 못 알아봐서 Swagger 문서가 제대로 안 만들어진다</button></li>
+      <li><button onclick="answer(this,'q3',false)">D. N+1 쿼리가 발생한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>배열 + 메타(페이지네이션) 선언 예시</h2>
+
+  <p>같은 PR 리뷰에서 본 다른 예시 — 배열 응답에 페이지네이션 메타를 얹은 경우:</p>
+
+<pre><code>success model: DataWrapper.new(Entities::Users::AdminObjectiveWeightEntity,
+                                is_array: true,
+                                meta_key: :total_pages,
+                                meta: { type: 'Integer' })</code></pre>
+
+  <p>
+    이건 "응답은 <code>AdminObjectiveWeightEntity</code> 배열이고, <code>total_pages</code>라는
+    정수형 메타 필드가 같이 온다"고 문서에 선언하는 것이다. 실제로 그 필드를 채우는 건
+    역시 액션 안의 <code>present :meta, { total_pages: ... }</code> 몫이다.
+  </p>
+
+  <div class="analogy">
+    💡 FE 비유: OpenAPI/Swagger 스펙을 YAML로 손으로 적어본 적이 있다면,
+    <code>DataWrapper.new(Entity, is_array: true, ...)</code>는 그 <code>responses.200.schema</code>
+    부분을 YAML 대신 Ruby 객체로 선언하는 것과 같다.<br><br>
+    다만 OpenAPI YAML은 스펙과 서버 코드가 물리적으로 분리되어 있어서 어긋나기 쉽다는 게 흔한 문제인데,
+    여기서도 <code>DataWrapper</code> 선언과 <code>present</code> 실행이 서로 다른 코드라서
+    똑같은 종류의 "선언 vs 실제 구현" 어긋남 위험이 있다는 점은 동일하다.
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">구성 요소</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">역할</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">실행 시점</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>DataWrapper</code></td>
+        <td style="padding:0.4rem 0.5rem;">응답 모양 선언 (값 객체, 로직 없음)</td>
+        <td style="padding:0.4rem 0.5rem;"><code>success model:</code> 작성 시점 (코드 정의)</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>DataWrapperParser</code></td>
+        <td style="padding:0.4rem 0.5rem;">DataWrapper → JSON Schema 변환</td>
+        <td style="padding:0.4rem 0.5rem;">Swagger 문서 생성 시점</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>present :data, ...</code></td>
+        <td style="padding:0.4rem 0.5rem;">실제 런타임 응답 조립</td>
+        <td style="padding:0.4rem 0.5rem;">HTTP 요청 처리 시점</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="nav-links">
+    <a href="0021-symbol-vs-string.html">← 레슨 21 — Ruby Symbol vs String</a>
+    <span style="color: var(--muted);">다음 레슨 준비 중</span>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "grape-swagger가 기본 Entity는 어떻게 파싱하나요?" 같은 심화 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. DataWrapper 자체엔 응답을 조립하는 로직이 없습니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 실제 JSON을 만드는 건 엔드포인트 액션 안의 present 호출입니다.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. 이건 문서 생성 파이프라인의 문제이지, 런타임 응답이나 서버 부팅과는 무관합니다.';
+  }
+}
+</script>
+
+</body>
+</html>

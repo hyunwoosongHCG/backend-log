@@ -150,7 +150,7 @@
 - [x] 엔티티(Entity)란? (Grape::Entity) → [레슨](lessons/0010-grape-entity-and-n-plus-1-trace.html)
 - [ ] `present`로 응답 만들기
 - [ ] `params do` 블록으로 파라미터 정의
-- [ ] `desc`와 Swagger 문서 자동 생성
+- [x] `desc`와 Swagger 문서 자동 생성 → [레슨](lessons/0022-data-wrapper-and-swagger.html) | [정리](concepts/data-wrapper-and-swagger.md) | [배운 작업](work-log/2026-07-03-pr-5489-review-and-data-wrapper.md)
 - [ ] `before` 블록과 인증 처리
 
 ### 권한
