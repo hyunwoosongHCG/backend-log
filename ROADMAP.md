@@ -105,7 +105,7 @@
 ### 프로젝트 구조
 
 - [ ] Rails 디렉토리 구조 (`app/`, `config/`, `db/`)
-- [ ] `config/routes.rb` 역할
+- [x] `config/routes.rb` 역할 → [정리](concepts/rails-routing-and-controller-convention.md) | [배운 작업](work-log/2026-07-03-controller-routing-and-read-replica.md)
 - [ ] `Gemfile`과 `bundle install`
 
 ### ActiveRecord (Model)
@@ -119,6 +119,7 @@
 - [x] Dirty Tracking이란? (`changed?`, `attribute_changed?`, partial writes) → [레슨](lessons/0020-dirty-tracking-and-partial-writes.html) | [정리](concepts/dirty-tracking.md) | [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)
 - [ ] 쿼리 메서드 (`where`, `find`, `find_by`, `includes`, `joins`)
 - [x] N+1 문제란? `includes`로 해결하기 → [레슨](lessons/0009-n-plus-1.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
+- [x] Read Replica 라우팅 (멀티 DB, `connects_to`/`connected_to`) → [정리](concepts/read-replica-routing.md) | [배운 작업](work-log/2026-07-03-controller-routing-and-read-replica.md)
 
 ### Controller
 
