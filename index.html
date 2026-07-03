@@ -589,7 +589,7 @@ const TRACKS = [
   {
     key: 'backend',
     label: '백엔드 실무',
-    sections: ['Ruby 기초', 'Grape API', '엔티티·도메인', 'ActiveRecord', 'Controller·라우팅', '실무 패턴']
+    sections: ['Ruby 기초', 'Grape API', '엔티티·도메인', 'ActiveRecord', 'Controller·라우팅', '트랜잭션·동시성', '실무 패턴']
   },
   {
     key: 'network',
@@ -633,6 +633,7 @@ const LESSONS = [
   { id: '0021', title: '레슨 21 — Ruby Symbol vs String', short: 'Symbol · String · 인터닝(interning)', file: 'lessons/0021-symbol-vs-string.html', track: 'backend', category: 'Ruby 기초' },
   { id: '0022', title: '레슨 22 — DataWrapper와 Swagger 문서 자동 생성', short: 'DataWrapper · grape-swagger model_parsers', file: 'lessons/0022-data-wrapper-and-swagger.html', track: 'backend', category: 'Grape API' },
   { id: '0023', title: '레슨 23 — Rails 리소스 라우팅의 경우의 수', short: 'resources · canonical actions · collection/member/new', file: 'lessons/0023-rails-resources-routing-cases.html', track: 'backend', category: 'Controller·라우팅' },
+  { id: '0024', title: '레슨 24 — 트랜잭션과 원자성, 그리고 조용히 깨진 승인 데이터', short: 'Transaction · Atomicity · update vs update!', file: 'lessons/0024-transaction-atomicity-bulk-approval-bug.html', track: 'backend', category: '트랜잭션·동시성' },
 
   /* ── 네트워크 트랙 — 김영한「모든 개발자를 위한 HTTP 웹 기본 지식」(스텁) ── */
   { id:'net-01', short:'인터넷 통신', title:'인터넷 통신', file:'lessons/net-01-internet-communication.html', track:'network', category:'인터넷 네트워크', duration:'01:51', num:4 },
