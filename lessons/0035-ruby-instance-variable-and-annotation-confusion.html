@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 35 — Ruby 인스턴스 변수 @, 어노테이션이 아니다</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>Ruby <code>@</code> — 어노테이션이 아니라 인스턴스 변수</h1>
+  <div class="lesson-meta">
+    <span>레슨 035</span>
+    <span>인스턴스 변수 · 변수 종류 · 메모이제이션</span>
+    <span>~10분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 ppback <code>app/controllers/entities/feedbacks/datum_entity.rb</code>의 <code>@badge_stats</code>를 보고
+    "이거 Java/Python의 <code>@Override</code>, <code>@decorator</code> 같은 어노테이션 아닌가?" 싶었던 것에서 시작 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>실제로 본 코드</h2>
+
+  <p>최근 커밋(시간복잡도 개선)에서 이런 메서드를 봤다:</p>
+
+<pre><code>def badge_stats
+  @badge_stats ||= badgepool_group.transform_values do |badge_count|
+    {
+      median: badge_count.median(user_count),
+      max: badge_count.max || 0,
+      average: user_count.zero? ? 0 : (badge_count.sum.to_f / user_count).round,
+    }
+  end
+end</code></pre>
+
+  <p>
+    <code>@badge_stats</code>의 <code>@</code> 기호를 보고 Java의 <code>@Override</code>,
+    Python의 <code>@decorator</code> 같은 "어노테이션(annotation)"이라고 생각했다. 하지만 Ruby에는
+    언어 차원의 데코레이터/어노테이션 문법 자체가 없다.
+  </p>
+
+  <h2>Ruby의 <code>@</code>는 변수 종류를 나타내는 접두사</h2>
+
+  <p>Ruby는 변수 이름 앞에 붙는 기호로 스코프(범위)를 구분한다:</p>
+
+<pre><code>변수명        # 지역 변수 (local variable)
+@변수명       # 인스턴스 변수 (instance variable)
+@@변수명      # 클래스 변수 (class variable)
+$변수명       # 전역 변수 (global variable)</code></pre>
+
+  <p>
+    <code>@badge_stats</code>는 <strong>이 객체(인스턴스) 하나에 속한 변수</strong>라는 뜻일 뿐,
+    메서드나 클래스에 특별한 행동을 부여하는 문법이 아니다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. Ruby에서 <code>@badge_stats</code>의 <code>@</code>가 의미하는 것은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 메서드에 특별한 동작을 부여하는 데코레이터 문법</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 이 인스턴스에 속한 변수(인스턴스 변수)라는 표시</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 클래스 전체가 공유하는 상수</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 문법 오류를 방지하기 위한 이스케이프 문자</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="analogy">
+    ⚠️ Python/Java 배경에서 오면 "함수 위/변수 앞의 <code>@</code>"를 보고 어노테이션·데코레이터를
+    떠올리기 쉽지만, Ruby의 <code>@</code>는 완전히 다른 개념이다:<br><br>
+<pre><code>// Python: @가 함수를 감싸는 데코레이터
+@property
+def name(self): ...
+
+// JS: this.속성명으로 인스턴스 속성 표현
+this.badgeStats = this.badgeStats || computeStats();
+
+# Ruby: @가 인스턴스 변수 접두사
+@badge_stats ||= compute_stats</code></pre>
+    JS의 <code>this.badgeStats</code>와 가장 비슷한 역할이라고 생각하면 된다. <code>this.</code> 대신
+    <code>@</code>를 쓴다는 차이뿐이다.
+  </div>
+
+  <h2>이 코드에서의 실제 동작 — 메모이제이션</h2>
+
+  <p>
+    <code>||=</code>는 "왼쪽 값이 <code>nil</code>/<code>false</code>면 오른쪽을 계산해서 대입하고,
+    이미 값이 있으면 그대로 반환"하는 연산자다. 인스턴스 변수와 결합하면
+    <strong>메모이제이션(memoization)</strong> 패턴이 된다 — 같은 요청·같은 인스턴스 안에서
+    비싼 계산을 한 번만 수행하고 캐싱해서 재사용한다.
+  </p>
+
+  <p>
+    실제로 이 메서드는 리팩터링 전에 <code>percentile_series</code>, <code>radar_indicator</code>,
+    <code>radar_series</code> 세 곳에서 각각 median 정렬(O(n log n))과 max 스캔을 중복 수행하던 것을,
+    <code>badge_stats</code> 하나로 모아 <strong>렌더당 한 번만</strong> 계산하도록 바꾼 것이다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. <code>@badge_stats ||= 계산식</code>의 동작으로 옳은 것은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 호출할 때마다 무조건 계산식을 다시 실행한다</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. @badge_stats가 비어있을 때만 계산하고, 이후엔 캐시된 값을 반환한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. 클래스의 모든 인스턴스가 값을 공유한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 계산식이 예외를 던지면 무시하고 nil을 반환한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">기호</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">이름</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">범위</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>변수명</code></td>
+        <td style="padding:0.4rem 0.5rem;">지역 변수</td>
+        <td style="padding:0.4rem 0.5rem;">정의된 메서드/블록 내부</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>@변수명</code></td>
+        <td style="padding:0.4rem 0.5rem;">인스턴스 변수</td>
+        <td style="padding:0.4rem 0.5rem;">해당 객체(인스턴스) 전체</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>@@변수명</code></td>
+        <td style="padding:0.4rem 0.5rem;">클래스 변수</td>
+        <td style="padding:0.4rem 0.5rem;">클래스와 모든 인스턴스가 공유</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>$변수명</code></td>
+        <td style="padding:0.4rem 0.5rem;">전역 변수</td>
+        <td style="padding:0.4rem 0.5rem;">프로세스 전체 (사실상 사용 지양)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="nav-links">
+    <a href="0034-msa-ddd-and-not-knowing-everything.html">← 레슨 34 — MSA, DDD, 그리고 다 몰라도 되는 이유</a>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "클래스 변수는 왜 지양되나요?" 같은 심화 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. Ruby에는 언어 차원의 어노테이션/데코레이터 문법이 없습니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. ||=는 값이 없을 때만 계산하는 메모이제이션 패턴입니다.';
+  }
+}
+</script>
+
+</body>
+</html>

@@ -73,7 +73,7 @@
 - [x] Symbol vs String → [레슨](lessons/0021-symbol-vs-string.html) | [정리](concepts/symbol-vs-string.md) | [배운 작업](work-log/2026-07-02-symbol-vs-string.md)
 - [ ] 배열(Array)
 - [ ] 해시(Hash)
-- [ ] 변수 종류 (지역, 인스턴스, 클래스, 전역)
+- [x] 변수 종류 (지역, 인스턴스, 클래스, 전역) → [레슨](lessons/0035-ruby-instance-variable-and-annotation-confusion.html) | [정리](concepts/ruby-instance-variables.md) | [배운 작업](work-log/2026-07-08-badge-stats-instance-variable-question.md)
 
 ### 메서드와 제어문
 
