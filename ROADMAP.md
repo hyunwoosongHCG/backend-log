@@ -41,6 +41,7 @@
 - [ ] 관계형 데이터베이스(RDB)란?
 - [ ] 테이블, 컬럼, 로우
 - [x] 기본키(PK)와 외래키(FK) → [레슨](lessons/0004-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
+- [x] 공개 식별자(Public ID)와 내부 PK 분리 패턴 → [정리](concepts/public-id-vs-primary-key.md) | [배운 작업](work-log/2026-07-07-delete-workspace-self-find.md)
 - [ ] 1:1, 1:N, N:M 관계
 - [ ] 인덱스(Index)란? 왜 필요한가
 - [x] 트랜잭션(Transaction)과 ACID → [레슨](lessons/0024-transaction-atomicity-bulk-approval-bug.html) | [배운 작업](work-log/2026-07-03-sentry-batch-approval-atomicity-bug.md)
@@ -118,7 +119,7 @@
 - [ ] 스코프(Scope)란?
 - [x] 콜백 (`before_save`, `after_create` 등) → [레슨](lessons/0019-timestamps-and-hidden-callbacks.html) | [정리](concepts/timestamps-and-callbacks.md) | [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)
 - [x] Dirty Tracking이란? (`changed?`, `attribute_changed?`, partial writes) → [레슨](lessons/0020-dirty-tracking-and-partial-writes.html) | [정리](concepts/dirty-tracking.md) | [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)
-- [ ] 쿼리 메서드 (`where`, `find`, `find_by`, `includes`, `joins`)
+- [x] 쿼리 메서드 (`where`, `find`, `find_by`, `includes`, `joins`) → [배운 작업](work-log/2026-07-07-delete-workspace-self-find.md)
 - [x] N+1 문제란? `includes`로 해결하기 → [레슨](lessons/0009-n-plus-1.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [x] Read Replica 라우팅 (멀티 DB, `connects_to`/`connected_to`) → [정리](concepts/read-replica-routing.md) | [배운 작업](work-log/2026-07-03-controller-routing-and-read-replica.md)
 
@@ -174,3 +175,41 @@
 - [ ] Docker와 컨테이너 기초
 - [ ] `docker compose` 명령어 흐름
 - [ ] Redis란? 어디에 쓰이나
+
+---
+
+## 섹션 5. 메시지 큐 / 이벤트 기반 아키텍처 (Kafka)
+
+> Performance Plus(theplus-back)가 다른 서비스(System·HR 등)와 어떻게 데이터를 주고받는지 조사하다가 처음 마주친 개념들. theplus-aws-lambda(people-sync) ↔ optimiz-system/optimiz-hr(Java) ↔ theplus-back/ppback(Karafka) 실제 연동 경로를 코드로 추적하며 배웠다.
+
+### Kafka 기본 개념
+
+- [x] Topic이란? → [레슨](lessons/0025-kafka-topic.html) | [배운 작업](work-log/2026-07-06-kafka-data-flow-investigation.md)
+- [x] Producer란? → [레슨](lessons/0026-kafka-producer.html) | [배운 작업](work-log/2026-07-06-kafka-data-flow-investigation.md)
+- [x] Consumer란? Karafka(Ruby)는 무엇인가 → [레슨](lessons/0027-kafka-consumer-karafka.html) | [배운 작업](work-log/2026-07-06-kafka-data-flow-investigation.md)
+- [x] Consumer Group이란? → [레슨](lessons/0028-kafka-consumer-group.html) | [배운 작업](work-log/2026-07-06-kafka-data-flow-investigation.md)
+- [x] DLQ(Dead Letter Queue)란? → [레슨](lessons/0029-kafka-dlq.html) | [배운 작업](work-log/2026-07-06-kafka-data-flow-investigation.md)
+- [x] MSK(Managed Streaming for Kafka)란? → [레슨](lessons/0030-aws-msk.html) | [배운 작업](work-log/2026-07-06-kafka-data-flow-investigation.md)
+
+### 신뢰성 있는 이벤트 처리
+
+> theplus-back PR #1294(Kafka 컨슘 실패 처리 개편)를 보며 심화. 레슨 24(트랜잭션)·29(DLQ)도 이 PR 내용으로 함께 보강했다.
+
+- [x] 원자성(Atomicity) vs 멱등성(Idempotency) → [레슨](lessons/0031-atomicity-vs-idempotency.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md)
+- [x] Transient vs Non-transient 에러 분류 (재시도 가능 여부로 에러 나누기) → [레슨](lessons/0029-kafka-dlq.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md)
+
+### 분산 트랜잭션과 아키텍처 패턴
+
+> 팀 시니어(juhoLee)와의 대화에서 나온 "2PC → Saga → Outbox" 순서, "MSA 이해하려면 DDD로 돌아가야 한다"는 관점을 정리했다.
+
+- [x] 분산 트랜잭션 전략: 2PC → Saga → Outbox → [레슨](lessons/0032-distributed-transaction-2pc-saga-outbox.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md)
+- [x] 언제 카프카를 쓰면 안 되는가 (기술 선택 기준) → [레슨](lessons/0033-when-not-to-use-kafka.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md)
+- [x] MSA와 DDD의 관계 (아키텍처는 구조, 패턴은 전략) → [레슨](lessons/0034-msa-ddd-and-not-knowing-everything.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md)
+
+### 더 알아볼 것
+
+- [ ] 파티션(Partition)과 메시지 순서 보장
+- [ ] Exactly-once vs At-least-once 처리 시맨틱스
+- [ ] 오프셋 커밋 시점 (`mark_as_consumed` 타이밍)
+- [ ] Saga의 Choreography vs Orchestration 구현 방식 차이
+- [ ] Bounded Context가 실제 코드/레포 경계에서 어떻게 드러나는지

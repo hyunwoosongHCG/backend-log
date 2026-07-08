@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 32 — 분산 트랜잭션: 2PC → Saga → Outbox</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>분산 트랜잭션: 2PC → Saga → Outbox</h1>
+  <div class="lesson-meta">
+    <span>레슨 032</span>
+    <span>2PC · Saga · Transactional Outbox · Dual Write Problem</span>
+    <span>~25분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 "트랜잭션 하나로는 안 되는 경우가 있다" — 여러 서비스에 걸친 작업을 안전하게 처리하는 세 가지 전략의 계보를 이해한다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>레슨 24에서 남겨둔 질문</h2>
+
+  <p>
+    레슨 24에서 PR #1294를 보면서 이런 질문을 남겼었다:
+    "트랜잭션 커밋 후에 카프카 이벤트를 발행하도록 순서를 바꿨는데, 그럼 <strong>커밋은 됐는데 발행 직전에 프로세스가 죽으면</strong>
+    어떻게 되는가?" 답은 "그 이벤트는 유실된다"이다. DB write와 메시지 발행은 서로 다른 두 시스템(Postgres, Kafka)에 대한
+    쓰기라서, 하나의 트랜잭션으로 묶을 수 없다 — 이걸 <strong>Dual Write Problem(이중 쓰기 문제)</strong>이라고 부른다.
+  </p>
+
+  <p>
+    이 문제, 그리고 더 넓게 "여러 서비스에 걸친 작업을 어떻게 안전하게 다룰 것인가"는 팀 시니어(juhoLee)와의 대화에서
+    이렇게 정리됐다: <strong>"2PC → Saga → Outbox 순서로 보시죠."</strong> 세 개는 경쟁 관계가 아니라 계보다 —
+    2PC의 한계를 Saga가 풀고, Saga를 실전에서 안전하게 쓰기 위한 배관이 Outbox다.
+  </p>
+
+  <h2>1. 2PC (Two-Phase Commit) — 가장 직관적이지만 MSA엔 안 맞는 방법</h2>
+
+  <p>
+    2PC는 여러 데이터베이스에 걸친 트랜잭션을 하나처럼 커밋하는 프로토콜이다.
+    코디네이터가 참여자 전원에게 "준비됐어?"(prepare)라고 묻고, 전원이 "그렇다"고 답해야만
+    "그럼 커밋해"(commit)라고 지시한다. 한 명이라도 실패를 답하면 전원 롤백한다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">① 코디네이터 → 모든 참여자: "커밋할 준비 됐어?" (Prepare)</div>
+    <div class="flow-arrow">↓ 전원 준비 완료 응답 시</div>
+    <div class="flow-step">② 코디네이터 → 모든 참여자: "그럼 커밋해" (Commit)</div>
+    <div class="flow-arrow">↓ 하나라도 실패하면</div>
+    <div class="flow-step">전원 롤백 (Abort)</div>
+  </div>
+
+  <div class="analogy">
+    프론트에서 여러 API를 동시에 호출하고 <code>Promise.all</code>로 "전부 성공해야 진행"하는 것과 비슷한 발상이다.
+    다만 2PC는 그보다 훨씬 엄격하다 — 응답을 기다리는 동안 참여자들이 자원(락)을 계속 붙잡고 있어야 하고,
+    코디네이터가 죽으면 참여자들이 영원히 "커밋해도 되나?" 상태로 멈춰버릴 수 있다.
+  </div>
+
+  <p>
+    이게 왜 MSA·카프카 환경에 안 맞는가: 2PC는 <strong>모든 참여자가 같은 프로토콜(보통 XA)을 지원해야</strong> 하는데,
+    Kafka는 애초에 이런 분산 락 기반 프로토콜을 위해 설계되지 않았다. 그리고 서비스 하나가 느려지면
+    나머지 전부가 락을 붙잡은 채 대기해야 해서, MSA가 원하는 "서비스 간 느슨한 결합"과 정반대로 간다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 2PC가 MSA·카프카 환경에서 잘 쓰이지 않는 가장 큰 이유는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 2PC는 데이터베이스가 하나일 때만 쓸 수 있어서</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 커밋이 끝날 때까지 참여자들이 락을 붙잡고 대기해야 해서, 한 서비스의 지연이 전체를 블로킹한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 2PC는 자바 서비스에서만 구현 가능해서</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 2PC는 읽기 전용 트랜잭션에만 쓸 수 있어서</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>2. Saga — "묶어서 커밋" 대신 "실패하면 되돌리기"</h2>
+
+  <p>
+    Saga는 발상을 뒤집는다. 여러 서비스를 하나의 트랜잭션으로 묶으려 하지 않고,
+    <strong>각 서비스가 자기 몫의 로컬 트랜잭션만 책임지고, 끝나면 다음 단계를 트리거하는 이벤트를 발행한다.</strong>
+    중간 단계에서 실패하면, 이미 끝낸 이전 단계들을 <strong>보상 트랜잭션(compensating transaction)</strong>으로
+    하나씩 되돌린다 — DB 트랜잭션의 롤백처럼 자동은 아니고, "취소 로직"을 직접 짜야 한다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">① HR 서비스: 조직 변경 로컬 트랜잭션 커밋 → "조직 변경됨" 이벤트 발행</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">② Performance(theplus-back): 이벤트 소비 → 조직 캐시 갱신 로컬 트랜잭션 커밋</div>
+    <div class="flow-arrow">↓ 만약 ②가 실패하면</div>
+    <div class="flow-step">보상 이벤트 발행 → HR 서비스가 ①의 변경을 되돌리는 보상 트랜잭션 실행</div>
+  </div>
+
+  <p>
+    이 프로젝트의 실제 카프카 토픽 구조 — <code>optimiz-async</code>로 조직/발령 이벤트가 오고,
+    theplus-back이 처리 후 <code>user-performance-module-status</code> 같은 이벤트를 다시 발행하는 구조 —
+    는 이미 Saga의 "각자 로컬 트랜잭션 + 이벤트로 다음 단계 트리거" 모양과 닮아 있다.
+    다만 지금은 <strong>실패했을 때 자동으로 되돌리는 보상 로직은 없다</strong> — 실패하면 DLQ로 가서
+    사람이 확인하는 수준이다. "Saga를 도입했다"고 부르려면 이 보상 흐름까지 설계돼 있어야 한다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. Saga 패턴에서 중간 단계가 실패했을 때 이전 단계를 되돌리는 방법은?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 데이터베이스의 ROLLBACK 명령이 모든 서비스에 걸쳐 자동으로 실행된다</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. 각 단계마다 미리 정의해둔 "보상 트랜잭션"을 개발자가 직접 실행해 이전 상태를 되돌린다</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. 코디네이터가 모든 참여자의 락을 풀어서 자동으로 되돌아간다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. Saga는 실패를 되돌리지 않고 그냥 무시한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>3. Transactional Outbox — Saga를 안전하게 발행하는 배관</h2>
+
+  <p>
+    Saga가 굴러가려면 "로컬 트랜잭션 커밋 + 이벤트 발행"이 안전하게 짝지어져야 하는데,
+    이게 바로 레슨 24에서 남긴 Dual Write Problem이다. Outbox 패턴은 이렇게 푼다:
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">① 비즈니스 데이터 저장 + 이벤트를 <code>outbox</code> 테이블에 저장 — <strong>같은 로컬 트랜잭션 안에서</strong></div>
+    <div class="flow-arrow">↓ 트랜잭션 커밋 (둘 다 성공하거나 둘 다 실패)</div>
+    <div class="flow-step">② 별도 프로세스(relay/poller)가 <code>outbox</code> 테이블을 감시</div>
+    <div class="flow-arrow">↓ 새 행 발견 시</div>
+    <div class="flow-step">③ 카프카에 발행 → 성공하면 outbox 행에 "발행 완료" 표시</div>
+  </div>
+
+  <p>
+    핵심은 "이벤트를 발행하는 행위"를 카프카에 직접 하지 않고, <strong>같은 DB 트랜잭션으로 보장되는 테이블에 대신 적어두는 것</strong>이다.
+    비즈니스 데이터가 커밋됐다면 outbox 행도 반드시 함께 커밋돼 있다 — 그러면 relay 프로세스가 언제 도든
+    그 행을 읽어서 "언젠가는" 카프카에 발행할 수 있다. 프로세스가 발행 도중 죽어도, outbox 테이블에 기록이
+    남아있으니 재시작하면 다시 시도하면 된다 — 이벤트가 유실되지 않는다(단, 중복 발행 가능성은 남아서,
+    수신 측은 레슨 31의 멱등성이 결국 다시 필요하다).
+  </p>
+
+  <div class="analogy">
+    프론트의 낙관적 업데이트(optimistic update) + 재시도 큐와 비슷하다.
+    서버에 저장은 로컬 스토리지에 "동기화 대기 중"으로 먼저 기록해두고,
+    별도 백그라운드 로직이 그 대기열을 훑으며 실제 서버 전송을 재시도하는 구조 — 전송 자체가
+    사용자 액션과 같은 순간에, 같은 성공/실패로 묶이지 않아도 되게 만든다.
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q3. Outbox 패턴이 Dual Write Problem을 해결하는 핵심 아이디어는?</div>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">A. 카프카 발행을 트랜잭션보다 먼저 실행해서 순서를 보장한다</button></li>
+      <li><button onclick="answer(this,'q3',true)">B. 카프카에 직접 발행하는 대신, 같은 로컬 트랜잭션 안에서 outbox 테이블에 이벤트를 기록하고 별도 프로세스가 나중에 발행한다</button></li>
+      <li><button onclick="answer(this,'q3',false)">C. 2PC를 사용해 DB와 카프카를 하나의 트랜잭션으로 묶는다</button></li>
+      <li><button onclick="answer(this,'q3',false)">D. 카프카 메시지에 타임스탬프를 추가해서 순서를 보장한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>지금 이 프로젝트는 어디쯤 와 있나</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">레이어</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">상태</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">서비스 내부 로컬 트랜잭션</td>
+        <td style="padding:0.4rem 0.5rem;">PR #1294에서 개선 완료 — 저장 트랜잭션 커밋 후 이벤트 발행, 뱅 메서드로 원자성 확보</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Dual Write 안전성 (Outbox)</td>
+        <td style="padding:0.4rem 0.5rem;">아직 없음 — 커밋 후 발행 사이에 죽으면 이벤트 유실 가능. 다음 개선 후보</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">분산 트랜잭션 전략 (Saga)</td>
+        <td style="padding:0.4rem 0.5rem;">이벤트 체인은 있지만, 실패 시 자동 보상 트랜잭션은 없음 — juhoLee가 짚은 "아직 논의가 필요한 부분"</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    "MSA인데 분산 트랜잭션 전략이 없어서 한 것"이라는 juhoLee의 말이 이 표의 3번째 줄이다.
+    PR #1294는 1번째 줄(로컬 원자성)을 확실히 고쳤고, 2·3번째 줄은 여전히 열린 과제로 남아있다 —
+    "다 고쳤다"가 아니라 "제일 급한 층부터 고쳤다"로 이해하는 게 정확하다.
+  </p>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">패턴</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">한 줄 요약</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">2PC</td>
+        <td style="padding:0.4rem 0.5rem;">전원 준비 확인 후 동시 커밋. 강력하지만 락·블로킹 때문에 MSA엔 부적합</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Saga</td>
+        <td style="padding:0.4rem 0.5rem;">각자 로컬 트랜잭션 + 이벤트로 다음 단계 트리거, 실패 시 보상 트랜잭션으로 되돌림</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">Outbox</td>
+        <td style="padding:0.4rem 0.5rem;">DB write와 이벤트 발행을 outbox 테이블로 묶어, Saga의 각 단계를 안전하게 만드는 배관</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고:
+    <a href="https://microservices.io/patterns/data/transactional-outbox.html" target="_blank">microservices.io — Pattern: Transactional Outbox</a>
+    &nbsp;·&nbsp;
+    <a href="https://microservices.io/patterns/data/saga.html" target="_blank">microservices.io — Pattern: Saga</a>
+    &nbsp;·&nbsp;
+    <a href="https://en.wikipedia.org/wiki/Two-phase_commit_protocol" target="_blank">Two-Phase Commit Protocol</a>
+  </p>
+
+  <div class="nav-links">
+    <a href="0031-atomicity-vs-idempotency.html">← 레슨 31 — 원자성 vs 멱등성</a>
+    <a href="0033-when-not-to-use-kafka.html">레슨 33 — 언제 카프카를 쓰면 안 되는가 →</a>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "Saga를 Choreography로 짤지 Orchestration으로 짤지는 어떻게 정하나요?" 같은 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 2PC는 커밋이 끝날 때까지 모든 참여자가 자원을 잠그고 대기해야 하므로, 한 서비스가 느려지면 전체가 블로킹됩니다. MSA가 지향하는 느슨한 결합과 반대입니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. Saga는 자동 롤백이 없습니다. 각 단계마다 "취소하려면 이렇게 한다"는 보상 트랜잭션을 개발자가 직접 정의하고 실행해야 합니다.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. Outbox의 핵심은 이벤트를 즉시 카프카로 보내지 않고, 같은 트랜잭션으로 보장되는 DB 테이블에 먼저 기록한 뒤 별도 프로세스가 안전하게 발행하는 것입니다.';
+  }
+}
+</script>
+
+</body>
+</html>

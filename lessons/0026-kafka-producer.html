@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 26 — 카프카 Producer(발행자)</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>카프카 Producer(발행자)</h1>
+  <div class="lesson-meta">
+    <span>레슨 026</span>
+    <span>Producer · kafkajs · produce_async · Fire-and-forget</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 "메시지를 보냈는데 응답이 없다 — 실패인가?" — 발행이 요청/응답과 뭐가 다른지 이해한다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>Producer란</h2>
+
+  <p>
+    Producer(프로듀서)는 토픽에 메시지를 써넣는 쪽이다.
+    <code>theplus-aws-lambda</code>의 <code>people-sync</code> Lambda가 대표적인 예다.
+    HR 시스템에서 새 멤버가 생성되면, 이 Lambda는 Postgres에 직접 write하는 것과 별개로
+    <code>perpl-account</code> 토픽에도 메시지를 하나 발행한다.
+  </p>
+
+<pre><code>// theplus-aws-lambda/people-sync/peopleModelLayer/config/kafka.js
+class KafkaService {
+  async sendKafkaMessage({ key, topic, payload, maxRetries = 2 }) {
+    const producer = this.kafka.producer();
+    await producer.connect();
+    await producer.send({
+      topic,
+      messages: [{ key, value: JSON.stringify(payload) }],
+    });
+    await producer.disconnect();
+  }
+}
+
+// userSynchronizer.js — 멤버 생성 시 호출
+KafkaService.sendKafkaMessage({
+  key: 'User',
+  topic: 'perpl-account',
+  payload: { uid, email, display_name, workspace_hash_id },
+});</code></pre>
+
+  <p>
+    여기서 중요한 건, 이 코드가 <strong>"누가 이 메시지를 받는지 전혀 모른다"</strong>는 점이다.
+    실제로는 <code>optimiz-system</code>(Java 서비스)의 <code>PerplAccountConsumer</code>가 받아서 처리하지만,
+    Lambda 쪽 코드에는 그 사실이 전혀 등장하지 않는다. 그냥 <code>perpl-account</code>라는 주소로 던질 뿐이다.
+  </p>
+
+  <div class="analogy">
+    HTTP 요청과 비교하면 이해가 쉽다.<br><br>
+    <code>await fetch('/api/users', { method: 'POST', body })</code>는
+    서버가 처리를 끝내고 응답(JSON, 상태 코드)을 줄 때까지 기다린다.<br><br>
+    반면 카프카 발행은
+    <code>window.dispatchEvent(new CustomEvent('user:created', { detail }))</code>에 더 가깝다.
+    이벤트를 던지고 나면 그걸로 끝 — 누가 들었는지, 뭘 했는지 발행자는 신경 쓰지 않는다.
+    "받았다"는 응답이 아니라 "브로커에 잘 적재됐다"는 확인만 받는다.
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. <code>producer.send()</code>가 성공적으로 끝났다는 것의 의미는?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 이 토픽을 구독하는 모든 Consumer가 메시지 처리를 끝냈다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 메시지가 카프카 브로커(토픽)에 잘 적재됐다 — Consumer가 언제 읽을지는 별개</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 특정 서버가 이 요청에 대한 처리 결과를 JSON으로 반환했다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. DB 트랜잭션이 커밋됐다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>같은 서비스가 Producer이면서 Consumer일 수 있다</h2>
+
+  <p>
+    "Producer/Consumer"는 앱 전체의 역할이 아니라 <strong>메시지 한 건 단위의 역할</strong>이다.
+    theplus-back은 카프카를 구독하는 Consumer이지만, 동시에 자기도 이벤트를 발행한다.
+    예를 들어 멤버가 활성화되면 <code>Produce::UserStatusProduce</code>가
+    <code>user-performance-module-status</code> 토픽에 메시지를 쏜다:
+  </p>
+
+<pre><code># theplus-back/app/services/produce/user_status_produce.rb (요약)
+class Produce::UserStatusProduce
+  def self.call(user:, type:)
+    payload = { type: type, data: { uid: user.uid } }
+    Karafka.producer.produce_async(
+      topic: 'user-performance-module-status',
+      payload: payload.to_json
+    )
+  end
+end</code></pre>
+
+  <p>
+    즉 theplus-back은 <code>record-hr-organization-code</code> 같은 토픽에 대해서는 Consumer지만,
+    <code>user-performance-module-status</code>에 대해서는 Producer다.
+    한 애플리케이션 안에 두 역할이 공존한다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 한 Rails 앱이 카프카 토픽 A는 구독(consume)하면서, 처리 결과를 토픽 B에 발행(produce)할 수 있는가?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 아니다. 한 앱은 Producer 또는 Consumer 중 하나만 될 수 있다</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. 그렇다. Producer/Consumer는 토픽·메시지 단위의 역할이라 한 앱이 둘 다 할 수 있다</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. 아니다. Producer는 자바 서비스만, Consumer는 루비 서비스만 될 수 있다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 가능하지만 별도의 카프카 클러스터가 필요하다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>발행 당시 구독자가 없어도 괜찮다</h2>
+
+  <p>
+    자바스크립트 <code>EventEmitter</code>나 DOM 이벤트는 리스너가 등록돼 있지 않은 순간에 이벤트가 발생하면
+    그냥 유실된다. 카프카는 다르다 — 토픽은 메시지를 <strong>로그처럼 일정 기간 보관</strong>하기 때문에,
+    Consumer가 나중에 붙어도(또는 재시작해서 다시 붙어도) 못 읽은 메시지부터 이어서 읽을 수 있다.
+    ppback의 <code>karafka.rb</code>에 Consumer 라우팅이 주석 처리돼 있어도
+    Producer 코드(<code>log_producer.rb</code>)는 멀쩡히 도는 이유가 이거다 — 발행은 구독자의 존재 여부와 무관하다.
+  </p>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">개념</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">역할</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Producer</td>
+        <td style="padding:0.4rem 0.5rem;">토픽에 메시지를 써넣는 쪽. 누가 읽는지 몰라도 된다</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">produce_async / send</td>
+        <td style="padding:0.4rem 0.5rem;">"브로커가 받았다"까지만 보장. Consumer 처리 완료를 기다리지 않는다</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">역할의 단위</td>
+        <td style="padding:0.4rem 0.5rem;">앱 전체가 아니라 토픽 단위. 한 앱이 A는 소비, B는 발행 둘 다 가능</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고:
+    <a href="https://kafka.js.org/docs/producing" target="_blank">KafkaJS 공식 문서 — Producing Messages</a>
+    &nbsp;·&nbsp;
+    <a href="https://karafka.io/docs/WaterDrop-Usage/" target="_blank">WaterDrop(Karafka Producer) 공식 문서</a>
+  </p>
+
+  <div class="nav-links">
+    <a href="0025-kafka-topic.html">← 레슨 25 — Topic</a>
+    <a href="0027-kafka-consumer-karafka.html">레슨 27 — Consumer / Karafka →</a>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "발행이 실패하면 어떻게 되나요? 재시도는 누가 해주나요?" 같은 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. Producer는 브로커에 잘 적재됐는지까지만 확인합니다. Consumer가 언제, 어떻게 처리하는지는 별개의 이야기입니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. theplus-back이 정확히 이 사례입니다 — record-hr-organization-code는 소비하고, user-performance-module-status는 발행합니다.';
+  }
+}
+</script>
+
+</body>
+</html>

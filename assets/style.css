@@ -64,6 +64,16 @@ p { margin-top: 0.8rem; }
 }
 .analogy::before { content: "💡 프론트로 치면"; display: block; font-family: var(--font-sans); font-weight: 600; font-size: 0.75rem; color: #1565c0; margin-bottom: 0.3rem; }
 
+.quote {
+  background: #f4f2fa;
+  border-left: 3px solid #7e57c2;
+  padding: 0.7rem 1rem;
+  margin: 1.2rem 0;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.92rem;
+}
+.quote-who { display: block; font-family: var(--font-sans); font-weight: 600; font-size: 0.75rem; color: #5e35b1; margin-bottom: 0.3rem; }
+
 pre {
   background: var(--code-bg);
   border: 1px solid var(--border);

@@ -589,7 +589,7 @@ const TRACKS = [
   {
     key: 'backend',
     label: '백엔드 실무',
-    sections: ['Ruby 기초', 'Grape API', '엔티티·도메인', 'ActiveRecord', 'Controller·라우팅', '트랜잭션·동시성', '실무 패턴']
+    sections: ['Ruby 기초', 'Grape API', '엔티티·도메인', 'ActiveRecord', 'Controller·라우팅', '트랜잭션·동시성', '실무 패턴', 'Kafka·메시지 큐', 'MSA·분산 아키텍처']
   },
   {
     key: 'network',
@@ -634,6 +634,16 @@ const LESSONS = [
   { id: '0022', title: '레슨 22 — DataWrapper와 Swagger 문서 자동 생성', short: 'DataWrapper · grape-swagger model_parsers', file: 'lessons/0022-data-wrapper-and-swagger.html', track: 'backend', category: 'Grape API' },
   { id: '0023', title: '레슨 23 — Rails 리소스 라우팅의 경우의 수', short: 'resources · canonical actions · collection/member/new', file: 'lessons/0023-rails-resources-routing-cases.html', track: 'backend', category: 'Controller·라우팅' },
   { id: '0024', title: '레슨 24 — 트랜잭션과 원자성, 그리고 조용히 깨진 승인 데이터', short: 'Transaction · Atomicity · update vs update!', file: 'lessons/0024-transaction-atomicity-bulk-approval-bug.html', track: 'backend', category: '트랜잭션·동시성' },
+  { id: '0025', title: '레슨 25 — 카프카 토픽(Topic)이란', short: 'Topic · Pub/Sub · 네이밍 컨벤션', file: 'lessons/0025-kafka-topic.html', track: 'backend', category: 'Kafka·메시지 큐' },
+  { id: '0026', title: '레슨 26 — 카프카 Producer(발행자)', short: 'Producer · kafkajs · produce_async', file: 'lessons/0026-kafka-producer.html', track: 'backend', category: 'Kafka·메시지 큐' },
+  { id: '0027', title: '레슨 27 — Consumer와 Karafka', short: 'Karafka · consume · 라우팅 DSL', file: 'lessons/0027-kafka-consumer-karafka.html', track: 'backend', category: 'Kafka·메시지 큐' },
+  { id: '0028', title: '레슨 28 — Consumer Group', short: 'Consumer Group · 경쟁 소비 · 오프셋', file: 'lessons/0028-kafka-consumer-group.html', track: 'backend', category: 'Kafka·메시지 큐' },
+  { id: '0029', title: '레슨 29 — DLQ(Dead Letter Queue)', short: 'DLQ · max_retries · mark_as_consumed', file: 'lessons/0029-kafka-dlq.html', track: 'backend', category: 'Kafka·메시지 큐' },
+  { id: '0030', title: '레슨 30 — MSK(Managed Streaming for Kafka)', short: 'MSK · SASL/OAUTHBEARER · bootstrap.servers', file: 'lessons/0030-aws-msk.html', track: 'backend', category: 'Kafka·메시지 큐' },
+  { id: '0031', title: '레슨 31 — 원자성 vs 멱등성', short: 'Atomicity · Idempotency · find_or_initialize_by', file: 'lessons/0031-atomicity-vs-idempotency.html', track: 'backend', category: 'MSA·분산 아키텍처' },
+  { id: '0032', title: '레슨 32 — 분산 트랜잭션: 2PC → Saga → Outbox', short: '2PC · Saga · Transactional Outbox', file: 'lessons/0032-distributed-transaction-2pc-saga-outbox.html', track: 'backend', category: 'MSA·분산 아키텍처' },
+  { id: '0033', title: '레슨 33 — 언제 카프카를 쓰면 안 되는가', short: 'Kafka vs Job Queue · 기술 오용', file: 'lessons/0033-when-not-to-use-kafka.html', track: 'backend', category: 'MSA·분산 아키텍처' },
+  { id: '0034', title: '레슨 34 — MSA, DDD, 그리고 다 몰라도 되는 이유', short: 'MSA · DDD · 아키텍처 vs 패턴 · 회고', file: 'lessons/0034-msa-ddd-and-not-knowing-everything.html', track: 'backend', category: 'MSA·분산 아키텍처' },
 
   /* ── 네트워크 트랙 — 김영한「모든 개발자를 위한 HTTP 웹 기본 지식」(스텁) ── */
   { id:'net-01', short:'인터넷 통신', title:'인터넷 통신', file:'lessons/net-01-internet-communication.html', track:'network', category:'인터넷 네트워크', duration:'01:51', num:4 },

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 33 — 언제 카프카를 쓰면 안 되는가</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>언제 카프카를 쓰면 안 되는가</h1>
+  <div class="lesson-meta">
+    <span>레슨 033</span>
+    <span>Kafka vs Job Queue · 기술 오용 · Sidekiq</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 "다들 카프카 쓰니까 나도 카프카" — 기술을 잘 쓰는 것보다 언제 안 써야 하는지 아는 게 왜 더 어려운지 이해한다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>거의 모든 레포가 카프카를 쓰고 있었다</h2>
+
+  <p>
+    이 조직의 레포를 훑어보면서 놀랐던 점 — 급여(Pay) 모듈 정도를 빼면 거의 모든 서비스가 카프카를 쓰고 있었다.
+    근태·연차·일일집계, 외부 출입(Secom/NICE) 기록 처리까지도. 그런데 팀 시니어(juhoLee)에게 이 얘길 하니
+    돌아온 답은 예상 밖이었다:
+  </p>
+
+  <div class="analogy">
+    "사용 안 해야 하는 곳도 쓰고있긴 하죠ㅋㅋㅋ 잡 큐 대신 카프카로 다 때려박아서 사용하는 느낌... 기술 오용이랄까요"<br><br>
+    "그런 건 큐가 필요한 거죠, 워커를 돌릴. Redis 같은 걸로 충분합니다"
+  </div>
+
+  <p>
+    이 레슨은 "카프카를 배우자"가 아니라, <strong>"카프카가 필요한 순간과 필요 없는 순간을 구분하는 눈"</strong>을
+    기르기 위한 레슨이다. 도구를 쓸 줄 아는 것보다, 안 써야 할 때를 아는 게 실무에서 훨씬 어렵다.
+
+  </p>
+
+  <h2>카프카와 Sidekiq은 겉보기엔 비슷하다</h2>
+
+  <p>
+    레슨 17에서 배운 Sidekiq(잡 큐)와 카프카(이벤트 스트림)는 둘 다 "지금 당장 안 하고 나중에 처리한다"는
+    점에서 비슷해 보인다. 하지만 원래 풀도록 설계된 문제가 다르다:
+  </p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;"></th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">Sidekiq(잡 큐)</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">Kafka(이벤트 스트림)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">누가 읽나</td>
+        <td style="padding:0.4rem 0.5rem;">보통 같은 앱의 워커 하나 (1:1)</td>
+        <td style="padding:0.4rem 0.5rem;">다른 서비스 여러 개가 각자 구독 가능 (1:N)</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">처리 후 메시지</td>
+        <td style="padding:0.4rem 0.5rem;">사라짐 (재실행 불가)</td>
+        <td style="padding:0.4rem 0.5rem;">보관 기간 동안 남음 → 재처리·재생(replay) 가능</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">주 용도</td>
+        <td style="padding:0.4rem 0.5rem;">"이 작업을 비동기로 실행해줘" (태스크 실행)</td>
+        <td style="padding:0.4rem 0.5rem;">"이런 일이 있었다는 걸 여러 곳에 알려줘" (사실의 전파)</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">인프라 무게</td>
+        <td style="padding:0.4rem 0.5rem;">Redis 하나 (가볍다)</td>
+        <td style="padding:0.4rem 0.5rem;">브로커 클러스터(MSK), 파티션·컨슈머 그룹 운영 필요 (무겁다)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 근태 모듈에서 "출퇴근 기록이 생기면 일일 집계를 다시 계산해줘"라는 작업이 있다. 이 작업을 소비하는 곳은 근태 모듈 자기 자신뿐이다. 어떤 도구가 더 적합한가?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 카프카 — 이벤트가 발생했으니 무조건 토픽에 발행해야 한다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. Sidekiq 같은 잡 큐 — 소비자가 자기 자신 하나뿐이고, 재생(replay)이 필요 없다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 둘 다 필요 없다 — 동기로 즉시 계산하면 된다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 2PC를 사용해 분산 트랜잭션으로 처리한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>이 프로젝트에서 카프카가 "맞는" 이유가 있는 곳</h2>
+
+  <p>
+    반대로, 레슨 25~32에서 계속 봐온 <code>optimiz-async</code>, <code>record-hr-organization-code</code> 같은
+    HR/조직 동기화 이벤트는 카프카가 맞는 선택이다:
+  </p>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><strong>여러 서비스가 같은 이벤트를 구독</strong>한다 — theplus-back뿐 아니라 optimiz-time도 <code>record-hr-organization-code</code>를 구독한다 (1:N)</li>
+    <li><strong>발행자와 구독자가 다른 팀·다른 배포 주기의 서비스</strong>다 — Java(HR/System)와 Ruby(Performance)가 서로의 배포를 기다리지 않고 독립적으로 동작해야 한다</li>
+    <li><strong>실패 이력을 남기고 재처리해야 한다</strong> — 레슨 29에서 본 DLQ, <code>KafkaFailedMessage</code> 테이블이 이걸 활용한다</li>
+  </ul>
+
+  <p>
+    반면 근태 일일집계, 외부 출입 기록 저장처럼 <strong>"한 서비스 안에서, 한 워커가 처리하면 끝"</strong>인 작업은
+    이 세 조건 중 어느 것도 해당하지 않는다 — 카프카가 주는 이점(다중 구독, 재생, 순서 보장)을
+    전혀 쓰지 않으면서, 운영 부담(브로커 클러스터, 파티션 설계, Consumer Group 관리)만 떠안는 셈이다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 다음 중 카프카를 쓸 이유가 가장 뚜렷한 경우는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 하나의 컨트롤러 액션 끝에서 이메일 한 통을 비동기로 보내야 한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">B. 특정 화면의 PDF 리포트를 백그라운드에서 생성해야 한다</button></li>
+      <li><button onclick="answer(this,'q2',true)">C. "조직 코드가 바뀌었다"는 사실을, 서로 다른 팀이 관리하는 3개 서비스가 각자의 속도로 반영해야 한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 같은 앱 안에서 무거운 통계 계산을 야간 배치로 돌려야 한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>판단 기준을 질문 형태로 정리하면</h2>
+
+  <div class="flow">
+    <div class="flow-step">이 작업을 소비할 곳이 하나뿐인가, 여러 팀/서비스인가?</div>
+    <div class="flow-arrow">하나뿐 → Sidekiq &nbsp;&nbsp;|&nbsp;&nbsp; 여러 곳 → Kafka 후보</div>
+    <div class="flow-step">나중에 처음부터 다시 재생(replay)할 필요가 있는가?</div>
+    <div class="flow-arrow">없음 → Sidekiq &nbsp;&nbsp;|&nbsp;&nbsp; 있음 → Kafka 후보</div>
+    <div class="flow-step">발행자·구독자가 서로 다른 배포 주기를 가진 독립된 서비스인가?</div>
+    <div class="flow-arrow">아니오(같은 앱) → Sidekiq &nbsp;&nbsp;|&nbsp;&nbsp; 예 → Kafka 후보</div>
+  </div>
+
+  <p>
+    세 질문에 전부 "여러 곳/필요/독립 서비스"로 답할 수 있어야 카프카를 쓸 이유가 뚜렷해진다.
+    하나라도 "하나뿐/불필요/같은 앱"이면, 십중팔구 Redis 기반 잡 큐로 충분하다.
+  </p>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">개념</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">역할</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">기술 오용</td>
+        <td style="padding:0.4rem 0.5rem;">이미 있는 인프라(카프카)를 익숙하다는 이유로 안 맞는 곳에도 쓰는 것</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">선택 기준</td>
+        <td style="padding:0.4rem 0.5rem;">소비자 수(1 vs N), 재생 필요 여부, 배포 독립성 — 이 셋을 보고 판단</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고: <a href="0017-sidekiq-and-background-jobs.html">레슨 17 — Sidekiq와 백그라운드 잡</a> (같은 팀 대화에서: "Redis 기반 큐 — Sidekiq 같은 것")
+  </p>
+
+  <div class="nav-links">
+    <a href="0032-distributed-transaction-2pc-saga-outbox.html">← 레슨 32 — 분산 트랜잭션</a>
+    <a href="0034-msa-ddd-and-not-knowing-everything.html">레슨 34 — MSA, DDD, 그리고 다 몰라도 되는 이유 →</a>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "이미 카프카로 잘못 짜여진 기존 코드를 Sidekiq으로 옮기는 게 항상 맞나요?" 같은 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 소비자가 자기 자신뿐이고 재생이 필요 없다면, 카프카의 이점(다중 구독, 재생)을 전혀 못 쓰면서 운영 부담만 커집니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 서로 다른 팀이 관리하는 여러 서비스가 같은 사실을 각자 반영해야 하는 경우가 카프카의 1:N 구독·독립 배포 이점을 가장 잘 활용하는 사례입니다.';
+  }
+}
+</script>
+
+</body>
+</html>

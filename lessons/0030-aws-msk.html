@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 30 — MSK(Managed Streaming for Kafka)</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>MSK(Managed Streaming for Kafka)</h1>
+  <div class="lesson-meta">
+    <span>레슨 030</span>
+    <span>MSK · Managed Kafka · SASL/OAUTHBEARER · bootstrap.servers</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 "로컬에서는 되는데 배포하면 카프카 인증 에러가 난다" — 로컬 카프카와 운영 카프카가 뭐가 다른지 이해한다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>MSK란</h2>
+
+  <p>
+    MSK(Amazon Managed Streaming for Apache Kafka)는 AWS가 카프카 브로커를
+    대신 운영해주는 서비스다. 브로커 서버를 직접 띄우고, 패치하고, 스케일 조정하는 대신
+    AWS가 관리하는 클러스터에 <strong>접속만</strong> 하면 된다.
+  </p>
+
+  <div class="analogy">
+    RDS/Aurora가 Postgres에게 해주는 것과 똑같은 일을 MSK가 카프카에게 해준다.<br><br>
+    <strong>MSK : Kafka = RDS : Postgres</strong>.
+    프로토콜과 클라이언트 코드는 동일하고, "누가 서버를 관리하느냐"만 다르다.
+    로컬 Docker로 띄운 Postgres와 운영 Aurora가 SQL 쿼리 코드는 똑같듯이,
+    로컬 Kafka 컨테이너와 운영 MSK도 Producer/Consumer 코드는 똑같다 — 접속 설정만 바뀐다.
+  </div>
+
+  <h2>실제 예시 — 같은 코드, 다른 설정</h2>
+
+  <p>theplus-back의 <code>karafka.rb</code>는 환경에 따라 접속 대상을 분기한다:</p>
+
+<pre><code># theplus-back/karafka.rb
+config.kafka = {
+  'bootstrap.servers':
+    Rails.env.development? ? 'host.docker.internal:9092'   # 로컬 Docker Kafka
+                            : Server.credentials['kafka_broker_url']  # AWS MSK 엔드포인트
+}
+
+unless Rails.env.development?
+  config.kafka['security.protocol'.to_sym] = 'SASL_SSL'
+  config.kafka['sasl.mechanisms'.to_sym] = 'OAUTHBEARER'
+  config.oauth.token_provider_listener = OauthTokenRefresher.new
+end</code></pre>
+
+  <p>
+    로컬에서는 <code>host.docker.internal:9092</code> — 인증 없이 접속 가능한 컨테이너 안의 카프카.
+    운영에서는 MSK 엔드포인트에 <strong>SASL_SSL + OAUTHBEARER</strong>(AWS IAM 기반 인증)로 접속한다.
+    같은 <code>Karafka::App</code>, 같은 Consumer 코드가 환경 변수 하나로 완전히 다른 인프라에 붙는다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 로컬 개발 환경에서는 SASL_SSL 인증 없이 카프카에 붙는데, 운영에서는 왜 필요한가?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 로컬 Kafka가 더 최신 버전이라 인증이 필요 없다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 로컬은 신뢰된 Docker 네트워크 안이지만, MSK는 네트워크 너머의 공유 인프라라 신원 확인이 필요하다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. SASL_SSL은 유료 옵션이라 로컬에서는 비활성화한 것이다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. Karafka gem이 로컬 환경을 자동으로 감지해 인증을 생략해준다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>Lambda 쪽도 같은 인증 방식을 쓴다</h2>
+
+  <p>
+    <code>theplus-aws-lambda</code>의 <code>people-sync</code>도 MSK에 붙는다 — Ruby 대신
+    Node.js의 <code>kafkajs</code> + <code>aws-msk-iam-sasl-signer-js</code>를 쓰지만,
+    인증 방식(IAM 기반 OAUTHBEARER)은 theplus-back과 동일한 컨벤션이다.
+    언어가 달라도(Ruby ↔ Node.js) "같은 MSK 클러스터에 붙는다"는 규칙은 공유된다 —
+    MSK가 인증 방식을 강제하기 때문이다.
+  </p>
+
+<pre><code>// theplus-aws-lambda/people-sync/peopleModelLayer/config/kafka.js
+const kafka = new Kafka({
+  brokers: process.env["kafka_broker_url"].split(','),
+  ssl: true,
+  sasl: {
+    mechanism: "oauthBearer",
+    oauthBearerProvider: () => this.oauthBearerTokenProvider("ap-northeast-2"),
+  },
+});</code></pre>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. Ruby(theplus-back)와 Node.js(people-sync Lambda)가 서로 다른 언어인데 같은 MSK 클러스터에 붙을 수 있는 이유는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. MSK는 Ruby 전용이라 Node.js 쪽은 실제로는 접속하지 못한다</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. 카프카는 프로토콜(TCP + Kafka wire protocol) 기반이라, 언어와 무관하게 그 프로토콜을 구현한 클라이언트 라이브러리라면 붙을 수 있다</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. AWS가 언어별로 별도의 MSK 클러스터를 만들어주기 때문이다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 두 서비스가 실제로는 카프카가 아니라 HTTP로 통신하기 때문이다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">개념</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">역할</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">MSK</td>
+        <td style="padding:0.4rem 0.5rem;">AWS가 운영해주는 관리형 카프카 클러스터 (RDS의 카프카 버전)</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">bootstrap.servers</td>
+        <td style="padding:0.4rem 0.5rem;">접속할 브로커 주소. 환경별로 로컬 Docker ↔ MSK 엔드포인트로 갈아끼움</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">SASL_SSL / OAUTHBEARER</td>
+        <td style="padding:0.4rem 0.5rem;">MSK 접속 시 필요한 IAM 기반 인증 방식. 언어와 무관하게 프로토콜만 맞으면 접속 가능</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고:
+    <a href="https://docs.aws.amazon.com/msk/latest/developerguide/what-is-msk.html" target="_blank">AWS 공식 문서 — Amazon MSK란</a>
+    &nbsp;·&nbsp;
+    <a href="https://docs.aws.amazon.com/msk/latest/developerguide/iam-access-control.html" target="_blank">AWS 공식 문서 — MSK IAM 접근 제어</a>
+  </p>
+
+  <div class="nav-links">
+    <a href="0029-kafka-dlq.html">← 레슨 29 — DLQ</a>
+    <a href="0031-atomicity-vs-idempotency.html">레슨 31 — 원자성 vs 멱등성 →</a>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "MSK 대신 자체 EC2에 카프카를 직접 올리면 뭐가 달라지나요?" 같은 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 로컬 Docker 네트워크는 이미 신뢰된 경계 안이지만, MSK는 네트워크 너머의 공유 인프라라 누가 접속하는지 확인이 필요합니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 카프카는 언어에 종속되지 않은 와이어 프로토콜이라, 그 프로토콜을 구현한 클라이언트(kafkajs, ruby-kafka 등)라면 어떤 언어에서든 접속할 수 있습니다.';
+  }
+}
+</script>
+
+</body>
+</html>

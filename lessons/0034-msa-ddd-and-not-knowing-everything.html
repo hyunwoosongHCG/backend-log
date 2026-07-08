@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 34 — MSA, DDD, 그리고 다 몰라도 되는 이유</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>MSA, DDD, 그리고 다 몰라도 되는 이유</h1>
+  <div class="lesson-meta">
+    <span>레슨 034</span>
+    <span>MSA · DDD · 아키텍처 vs 패턴 · 회고</span>
+    <span>~10분 (퀴즈 없음)</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 기술 레슨이 아니라, 이 조사를 하면서 실제로 느낀 "진입장벽"을 어떻게 다뤄야 할지에 대한 기록
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>"생각보다 저희 서비스 진입장벽이 크네요"</h2>
+
+  <p>
+    카프카 기초 레슨 6개(0025~0030)를 만들고 나서, PR #1294를 보러 가기 전에 팀 시니어 juhoLee님께
+    카프카 기술적인 부분과 아키텍처 방향을 여쭤봤다. 대화가 예상보다 훨씬 깊은 곳까지 갔다.
+  </p>
+
+  <div class="quote">
+    <span class="quote-who">juhoLee</span>
+    msa 가 아키텍쳐 레벨이 굉장히 높습니다. 그래서 내부적으로 제대로 안되어 있어서, 그거 고쳐보자고 시작한 게
+    원희님이랑 저랑 이벤트 개선한 작업임다. 수준이 좀 높음...
+  </div>
+
+  <p>
+    PR #1294(레슨 24, 29에서 다룬 트랜잭션·DLQ 개선)는 혼자 튀어나온 리팩터링이 아니라,
+    "이 조직의 MSA가 아키텍처 레벨에 비해 내부 구현이 못 따라가고 있다"는 더 큰 문제의식에서 시작된
+    작업의 일부였다. 카프카 문법을 아는 것과, <strong>왜 지금 이 개선이 필요했는지</strong>를 아는 건 다른 이야기다.
+  </p>
+
+  <h2>아키텍처는 구조, 패턴은 전략</h2>
+
+  <p>
+    분산 트랜잭션 얘기(레슨 32)를 하다가 나온 구분인데, 계속 곱씹게 된다:
+  </p>
+
+  <div class="quote">
+    <span class="quote-who">juhoLee</span>
+    아키텍쳐는 구조고, 패턴은 전략입니다. 아웃박스 전에 saga 먼저 도입이 되어야 해요.
+    2pc → saga → outbox 순서로 보시죠.
+  </div>
+
+  <p>
+    MSA(마이크로서비스 아키텍처)는 "서비스를 어떻게 나눌 것인가"라는 구조의 문제다.
+    Saga·Outbox·2PC는 "나뉜 서비스들 사이에서 데이터 일관성을 어떻게 지킬 것인가"라는 전략의 문제다.
+    구조를 먼저 정하고 나서야 그 구조 안에서 어떤 전략(패턴)이 맞는지 고를 수 있다 — 순서가 있다는 뜻이다.
+  </p>
+
+  <div class="quote">
+    <span class="quote-who">juhoLee</span>
+    진짜 근본부터 하시려면 사실 msa부터 개념 잡으셔야 하고... msa 개념 잡으시려면 다시 돌아와서 DDD...
+    하하하하 돌돌D 입니다
+  </div>
+
+  <p>
+    "돌고 돌아 DDD"라는 농담이 웃기면서도 정확하다. 이미 레슨 3·6(도메인이란? 도메인 vs 엔티티)에서
+    도메인의 책임 경계를 배웠는데, 그게 바로 MSA에서 "이 서비스와 저 서비스를 어디서 자를 것인가"를
+    정하는 기준(Bounded Context)이 된다. <strong>도메인 개념 → MSA의 서비스 경계 → 그 경계를 넘나드는 트랜잭션 전략</strong>이
+    하나의 사슬로 이어져 있다는 걸 이번에 처음 실감했다.
+  </p>
+
+  <h2>몰라도 서비스는 돌아간다 — 그런데도 왜 배우는가</h2>
+
+  <p>
+    가장 위안이 됐던 대화는 이거였다:
+  </p>
+
+  <div class="quote">
+    <span class="quote-who">juhoLee</span>
+    저희 bu 백엔드 전체 털어도 그거 절반정도까지 아시는 분 거의 없을꺼에여. 몰라도 저희 서비스 개발하는 데
+    아무 이슈 없긴 함... 이젠 그 몇 명도 저 포함해서 안 하실 듯... 이야기할 때마다 줘터지니까 ㅋㅋ
+  </div>
+
+  <p>
+    DDD·MSA·분산 트랜잭션은 몰라도 당장 티켓을 쳐낼 수 있다. 그런데 juhoLee님이 "답답해서 직접 뛰었다"고
+    말한 이 개선 작업(PR #1294)이 왜 필요했는지, <strong>어느 맥락에서 도입을 결정했는지</strong>를 모르면
+    이 코드를 리뷰하거나 이어서 확장할 때 "왜 굳이 이렇게 짰지"를 이해하지 못한 채 건드리게 된다.
+    이 레슨 시리즈(25~34)를 만든 이유가 그거다 — 문법이 아니라 <strong>맥락</strong>을 남겨두는 것.
+  </p>
+
+  <h2>이번에 되짚어본 사슬</h2>
+
+  <div class="flow">
+    <div class="flow-step">도메인(Domain)의 책임 경계 — 레슨 3, 6</div>
+    <div class="flow-arrow">↓ 그 경계를 물리적으로 나누면</div>
+    <div class="flow-step">MSA — 서로 다른 서비스, 서로 다른 배포 주기, 서로 다른 팀</div>
+    <div class="flow-arrow">↓ 나뉜 서비스 사이에 데이터 일관성이 필요해지면</div>
+    <div class="flow-step">분산 트랜잭션 전략: 2PC → Saga → Outbox — 레슨 32</div>
+    <div class="flow-arrow">↓ 이 전략을 실어 나르는 매체가</div>
+    <div class="flow-step">Kafka — Topic·Producer·Consumer·DLQ — 레슨 25~30</div>
+  </div>
+
+  <p>
+    처음엔 "카프카가 뭔지"만 알면 될 줄 알았는데, 실제로는 이 사슬 전체가 왜 있는지를 알아야
+    "원희님 작업"의 방향성이 보인다는 걸 이번 대화에서 배웠다. 전부 한 번에 이해할 필요는 없다 —
+    이번 주말엔 MSA 파트만 보고, 원희님 작업은 그 다음에 보기로 했다. 순서대로, 필요한 만큼만.
+  </p>
+
+  <p class="source">
+    참고: 이 레슨은 2026-07-06 팀 Slack 대화(juhoLee, hwSong)를 바탕으로 정리했다.
+  </p>
+
+  <div class="nav-links">
+    <a href="0033-when-not-to-use-kafka.html">← 레슨 33 — 언제 카프카를 쓰면 안 되는가</a>
+  </div>
+
+  <div class="ask-teacher">
+    이 레슨엔 퀴즈가 없습니다. 대신 궁금한 게 있으면 편하게 질문하세요.
+    "Bounded Context는 실제로 코드에서 어떻게 드러나나요?" 같은 질문도 환영합니다.
+  </div>
+
+</body>
+</html>

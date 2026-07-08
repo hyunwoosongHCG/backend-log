@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 25 — 카프카 토픽(Topic)이란</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>카프카 토픽(Topic)이란</h1>
+  <div class="lesson-meta">
+    <span>레슨 025</span>
+    <span>Topic · Kafka · Pub/Sub · 토픽 네이밍 컨벤션</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 "서비스 A가 서비스 B를 몰라도 데이터를 주고받을 수 있는 이유는?" — 카프카가 서비스 사이를 어떻게 갈라놓는지 이해한다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>왜 토픽이 필요한가</h2>
+
+  <p>
+    theplus-back(Performance Plus 백엔드)은 HR 정보가 바뀌었다는 걸 어떻게 알까?
+    HR 시스템에 직접 물어보러 가지 않는다. 대신 <code>record-hr-organization-code</code>라는
+    이름의 <strong>토픽(Topic)</strong>을 구독하고 있다가, 거기에 메시지가 오면 반응한다.
+  </p>
+
+  <p>
+    토픽은 카프카에서 메시지가 쌓이는 <strong>이름 붙은 채널</strong>이다.
+    발행자(Producer)는 "이 토픽에 이런 이벤트가 있었다"고 써넣고,
+    구독자(Consumer)는 자기가 관심 있는 토픽만 구독해서 읽는다.
+    발행자와 구독자는 서로의 존재를 몰라도 된다 — 오직 <strong>토픽 이름</strong>이라는 약속만 공유한다.
+  </p>
+
+  <div class="analogy">
+    Kafka 토픽은 REST API 엔드포인트가 아니라 <strong>이벤트 이름</strong>에 가깝다.<br><br>
+    <code>window.addEventListener('user:created', handler)</code>처럼,
+    누가 <code>dispatchEvent</code>를 호출했는지 몰라도 <code>'user:created'</code>라는
+    이벤트 이름만 알면 반응할 수 있다.<br>
+    토픽 이름 = 이벤트 이름. 구독자는 발행자의 코드를 import할 필요가 없다.
+  </div>
+
+  <h2>실제 예시 — theplus-back의 토픽들</h2>
+
+  <p>
+    <code>theplus-back/karafka.rb</code>에는 이런 토픽들이 등록되어 있다
+    (일부만 발췌):
+  </p>
+
+<pre><code># theplus-back/karafka.rb
+routes.draw do
+  consumer_group :perpl do
+    topic :'optimiz-async' do
+      consumer OptimizAsyncConsumer
+    end
+    topic :'record-hr-organization-code' do
+      consumer HrmOrganizationInfoConsumer
+    end
+    topic :'user-system-module-status' do
+      consumer UserSystemModuleStatusConsumer
+    end
+    # ... 20여 개 더
+  end
+end</code></pre>
+
+  <p>
+    토픽 하나 = 이벤트 종류 하나. <code>optimiz-async</code>엔 사람/조직/발령 관련 이벤트가,
+    <code>record-hr-organization-code</code>엔 "조직 코드가 바뀌었다"는 이벤트만 온다.
+    REST처럼 "리소스"로 나누는 게 아니라, <strong>"무슨 일이 일어났는지"</strong>로 나눈다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. 카프카 토픽을 가장 잘 설명한 것은?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 특정 서버가 응답을 돌려주는 REST 엔드포인트다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 이름이 붙은 이벤트 채널이며, 발행자와 구독자는 서로를 몰라도 된다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 하나의 데이터베이스 테이블과 1:1로 대응하는 저장소다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 서비스 간 직접 함수 호출을 대신하는 RPC 채널이다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>토픽 이름은 곧 컨벤션이다</h2>
+
+  <p>
+    이 프로젝트에서 특히 흥미로웠던 건 <strong>토픽 이름에 "누가 발행했는지"를 박아넣는 규칙</strong>이었다.
+    사용자의 모듈 활성/비활성 이벤트를 예로 들면:
+  </p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">토픽 이름</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">발행 주체</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.4rem 0.5rem;"><code>user-performance-module-status</code></td><td style="padding:0.4rem 0.5rem;">Performance(theplus-back / people-sync)가 발행</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.4rem 0.5rem;"><code>user-system-module-status</code></td><td style="padding:0.4rem 0.5rem;">System(optimiz-system)이 발행</td></tr>
+      <tr><td style="padding:0.4rem 0.5rem;"><code>user-time-module-status</code></td><td style="padding:0.4rem 0.5rem;">Time(optimiz-time)이 발행</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    처음엔 이름이 너무 비슷해서 오타나 네이밍 버그처럼 보였다.
+    실제로는 <code>optimiz-system</code>의 <code>CONST_SYSTEM_TOPIC.java</code>에
+    이 셋이 나란히 상수로 정의돼 있었다 — 의도된 컨벤션이었다.
+    <strong>토픽 이름만 보고 "누가 이걸 썼는지" 유추할 수 있게</strong> 설계한 것.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. <code>user-performance-module-status</code>와 <code>user-system-module-status</code>가 둘 다 존재하는 이유는?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 둘 중 하나는 오래된 토픽이라 곧 삭제될 예정이다</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. 각 모듈(Performance, System)이 각자 발행하는 토픽이라 이름에 모듈명이 들어간다</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. 카프카는 토픽 이름에 하이픈을 최대 3개까지만 허용해서 나눈 것이다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 완전히 같은 토픽이고 로드밸런싱을 위해 이름만 다르게 만들었다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>토픽과 "-fail" 짝</h2>
+
+  <p>
+    theplus-back의 토픽은 대부분 <code>-fail</code>이 붙은 짝을 가진다
+    (<code>optimiz-async</code> / <code>optimiz-fail</code>,
+    <code>record-hr-organization-code</code> / <code>record-hr-organization-code-fail</code>).
+    이건 실패한 메시지를 격리하는 DLQ(Dead Letter Queue) 패턴인데,
+    자세한 내용은 레슨 29에서 다룬다. 지금은 "토픽은 실패 처리용으로도 하나 더 만들 수 있다"는 것만 기억하면 된다.
+  </p>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">개념</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">역할</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Topic</td>
+        <td style="padding:0.4rem 0.5rem;">이름 붙은 이벤트 채널. 발행자/구독자를 서로 몰라도 되게 만드는 접점</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">토픽 분리 기준</td>
+        <td style="padding:0.4rem 0.5rem;">리소스가 아니라 "무슨 일이 일어났는지"(이벤트 종류) 기준</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">네이밍 컨벤션</td>
+        <td style="padding:0.4rem 0.5rem;">이 프로젝트는 토픽 이름에 발행 모듈명을 넣는다 (예: <code>user-{모듈}-module-status</code>)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고:
+    <a href="https://kafka.apache.org/documentation/#intro_topics" target="_blank">Apache Kafka 공식 문서 — Topics</a>
+    &nbsp;·&nbsp;
+    <a href="https://karafka.io/docs/Getting-Started/" target="_blank">Karafka 공식 문서</a>
+  </p>
+
+  <div class="nav-links">
+    <a href="0024-transaction-atomicity-bulk-approval-bug.html">← 레슨 24 — 트랜잭션과 원자성</a>
+    <a href="0026-kafka-producer.html">레슨 26 — Producer →</a>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "토픽 이름은 누가 정하나요? 아무 문자열이나 되나요?" 같은 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 토픽은 응답을 돌려주지 않고, 특정 테이블과 1:1도 아닙니다. 발행자·구독자를 갈라놓는 이름 붙은 채널입니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. optimiz-system의 CONST_SYSTEM_TOPIC.java에 세 토픽이 나란히 상수로 정의돼 있습니다 — 모듈별로 이름을 다르게 짓는 컨벤션입니다.';
+  }
+}
+</script>
+
+</body>
+</html>

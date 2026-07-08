@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 31 — 원자성 vs 멱등성</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>원자성(Atomicity) vs 멱등성(Idempotency)</h1>
+  <div class="lesson-meta">
+    <span>레슨 031</span>
+    <span>Atomicity · Idempotency · find_or_initialize_by · MSA 장애</span>
+    <span>~20분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 "연동이 가끔 뻑난다"는 한 문장 안에 사실은 서로 다른 두 종류의 버그가 섞여 있다는 걸 구분한다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>같은 "실패"인데 원인이 다르다</h2>
+
+  <p>
+    Performance Plus의 카프카 연동 이슈를 팀 시니어(juhoLee)와 이야기하다가 나온 구분인데,
+    정리하고 나니 앞으로 장애를 볼 때마다 계속 쓸 것 같은 프레임이라 레슨으로 남긴다.
+    실제 대화는 이랬다:
+  </p>
+
+  <div class="analogy">
+    "가끔 연동 뻑나거나(user_id null로 연동), 일부만 되거나" → <strong>원자성</strong> 문제<br>
+    "반만 돌았는데 다시 연동요청 하거나" → <strong>멱등성</strong> 문제<br><br>
+    — 겉보기엔 둘 다 "연동이 이상하게 됐다"는 같은 증상이지만, 원인과 고치는 방법이 완전히 다르다.
+  </div>
+
+  <h2>원자성(Atomicity) — "하다 만 상태"가 생기는 문제</h2>
+
+  <p>
+    원자성은 <strong>하나의 작업 단위가 전부 성공하거나 전부 실패해야 한다</strong>는 원칙이다.
+    <code>user_id</code>가 <code>null</code>인 채로 연동됐다는 건, 레코드 저장 로직 중간 어딘가에서
+    실패했는데 그 실패가 앞서 저장된 부분까지 되돌리지(rollback) 못하고 "일부만 반영된 상태"로 끝났다는 뜻이다.
+    이건 레슨 24에서 다룬 <code>transaction do ... end</code> + <code>save!</code>/<code>update!</code>로
+    고치는 문제다 — <strong>"쓰기 하나 안에서" 일부만 저장되는 걸 막는다.</strong>
+  </p>
+
+  <h2>멱등성(Idempotency) — "같은 요청을 또 받아도" 안전한가</h2>
+
+  <p>
+    멱등성은 다른 축이다. <strong>같은 요청(또는 같은 카프카 메시지)이 한 번 더 도착해도,
+    결과가 처음 한 번 처리했을 때와 똑같아야 한다</strong>는 원칙이다.
+    "반만 돌았는데 다시 연동요청" 상황을 떠올려보자 — 처리 중간에 타임아웃이 나서 클라이언트(또는 카프카 Consumer)가
+    재시도를 했는데, 만약 처리 로직이 매번 <strong>새 레코드를 생성</strong>하는 방식이라면
+    같은 멤버가 두 번 생성되는 중복 데이터가 만들어진다.
+  </p>
+
+  <div class="analogy">
+    프론트에서 "저장" 버튼을 급하게 두 번 눌렀을 때를 생각하면 된다.
+    <code>POST /orders</code>가 멱등하지 않으면 주문이 두 개 생긴다.
+    반면 <code>PUT /orders/42</code>(같은 ID로 덮어쓰기)는 몇 번을 다시 보내도 결과가 같다 — 이게 멱등성이다.
+    카프카에서는 이 "재전송"이 사용자의 실수가 아니라 <strong>Kafka Consumer의 재시도, 재배포로 인한 재시작,
+    at-least-once 전달 보장</strong> 때문에 자연스럽게 일어난다는 게 다를 뿐이다.
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. "결제 승인 메시지를 처리하다가 DB write 하나가 실패했는데, 이미 처리한 다른 write는 롤백되지 않고 남아있다." 이건 어떤 문제인가?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',true)">A. 원자성 문제 — 하나의 작업 단위가 전부 반영되지 않고 일부만 반영됨</button></li>
+      <li><button onclick="answer(this,'q1',false)">B. 멱등성 문제 — 같은 메시지를 두 번 받아서 생긴 중복</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 네트워크 문제 — 재시도하면 저절로 해결됨</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 인증 문제 — 권한이 없어서 생긴 에러</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. "Consumer가 재시작되면서 이미 처리했던 메시지를 오프셋 문제로 한 번 더 받았는데, 그 결과로 똑같은 멤버 레코드가 두 개 생겼다." 이건 어떤 문제인가?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 원자성 문제 — 트랜잭션이 걸려있지 않아서 생긴 문제</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. 멱등성 문제 — 같은 메시지를 두 번 처리해도 결과가 같아야 하는데 그렇지 않음</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. DLQ 문제 — 실패한 메시지가 DLQ로 안 가서 생긴 문제</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. MSK 인증 문제</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>이미 멱등하게 짜여 있던 실제 코드</h2>
+
+  <p>
+    theplus-back의 <code>OrganizationMemberConsume</code>를 다시 보면, 이미 멱등성을 신경 쓴 흔적이 있다:
+  </p>
+
+<pre><code># theplus-back/app/services/consume/organization_member_consume.rb (요약)
+org_member = member.organization_members.kept.find_or_initialize_by(organization_id: organization.id)
+# ... 값 설정
+org_member.save!</code></pre>
+
+  <p>
+    <code>find_or_initialize_by</code>는 "있으면 찾아서 쓰고, 없으면 새로 만든다"는 upsert 방식이다.
+    같은 <code>Appointment</code> 이벤트가 재시도로 두 번 들어와도, 두 번째는 이미 존재하는 <code>org_member</code>를
+    찾아서 값만 다시 덮어쓸 뿐 중복 레코드를 만들지 않는다. <strong>이게 멱등성을 만족시키는 가장 흔한 패턴이다</strong> —
+    "생성"이 아니라 "있으면 갱신, 없으면 생성"으로 짜는 것.
+  </p>
+
+  <p>
+    반대로 만약 어딘가에 <code>Organization.create!(...)</code>처럼 무조건 새로 만드는 코드가 있다면,
+    그 경로는 멱등하지 않다 — 재시도가 곧 중복 생성이 된다.
+    실제 코드를 볼 때 "이 메시지가 두 번 들어오면 어떻게 되지?"라고 스스로 물어보는 습관이 여기서 나온다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q3. Kafka Consumer 코드에서 멱등성을 확인하려면 어떤 질문을 던져야 하는가?</div>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">A. 이 코드가 트랜잭션으로 감싸져 있는가?</button></li>
+      <li><button onclick="answer(this,'q3',true)">B. 같은 메시지를 이 코드가 두 번 처리하면 결과(DB 상태)가 처음과 같은가?</button></li>
+      <li><button onclick="answer(this,'q3',false)">C. 이 코드가 DLQ 토픽을 갖고 있는가?</button></li>
+      <li><button onclick="answer(this,'q3',false)">D. 이 코드가 MSK에 SASL_SSL로 접속하는가?</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">축</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">질문</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">해결 도구</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">원자성</td>
+        <td style="padding:0.4rem 0.5rem;">이 작업이 중간에 실패하면, 이미 된 부분도 같이 롤백되는가?</td>
+        <td style="padding:0.4rem 0.5rem;"><code>transaction do</code> + 뱅 메서드</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">멱등성</td>
+        <td style="padding:0.4rem 0.5rem;">같은 요청/메시지가 한 번 더 오면, 결과가 처음과 똑같은가?</td>
+        <td style="padding:0.4rem 0.5rem;"><code>find_or_initialize_by</code> 등 upsert 패턴, 멱등키 확인</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고:
+    <a href="https://kafka.apache.org/documentation/#semantics" target="_blank">Apache Kafka 공식 문서 — Message Delivery Semantics</a>
+    &nbsp;·&nbsp;
+    <a href="https://stripe.com/blog/idempotency" target="_blank">Stripe 엔지니어링 블로그 — Idempotency Keys</a>
+  </p>
+
+  <div class="nav-links">
+    <a href="0030-aws-msk.html">← 레슨 30 — MSK</a>
+    <a href="0032-distributed-transaction-2pc-saga-outbox.html">레슨 32 — 분산 트랜잭션: 2PC → Saga → Outbox →</a>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "멱등키(idempotency key)는 실제로 어떻게 구현하나요?" 같은 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. "일부만 반영되고 롤백이 안 됐다"는 건 원자성이 깨진 것입니다. 멱등성은 같은 요청의 반복 처리와 관련된 문제입니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 같은 메시지를 두 번 처리해서 중복이 생겼다는 건 멱등성이 깨진 것입니다. 트랜잭션(원자성)이 있어도 멱등하지 않은 로직이면 중복이 생길 수 있습니다.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. 멱등성은 "반복 처리에도 결과가 같은가"를 묻는 것이지, 트랜잭션이나 DLQ 여부와는 별개의 축입니다.';
+  }
+}
+</script>
+
+</body>
+</html>

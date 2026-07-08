@@ -188,6 +188,40 @@ end</code></pre>
     <div class="quiz-result" id="q3-result"></div>
   </div>
 
+  <h2>실전에서 또 만난 사례 — theplus-back PR #1294</h2>
+
+  <p>
+    이 레슨을 쓴 뒤, 카프카 Consume 서비스를 개편하는 <a href="https://github.com/hcgtheplus/theplus-back/pull/1294" target="_blank">PR #1294</a>에서
+    똑같은 문제를 또 만났다. 이번엔 승인 이력이 아니라, <strong>DB 저장과 카프카 이벤트 발행 사이의 원자성</strong>이었다.
+  </p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;"></th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">문제</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Before</td>
+        <td style="padding:0.4rem 0.5rem;">DB 저장 도중 실패해도 Sync 이벤트가 먼저 발행될 수 있음 → 일부 데이터만 저장된 채 다른 서비스(pe-optimiz)엔 "다 됐다"는 이벤트가 나감</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">After</td>
+        <td style="padding:0.4rem 0.5rem;">트랜잭션 내 저장이 <strong>커밋되어 탈출한 뒤에만</strong> Sync 이벤트 발행. 저장 중엔 뱅 메서드(<code>save!</code>류)로 실패 시 바로 <code>raise</code> → 롤백</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    구조는 이 레슨의 <code>update</code> vs <code>update!</code> 예시와 완전히 같다.
+    다른 점은 트랜잭션 블록 <strong>바깥</strong>에 "다른 서비스에 전파되는 부수효과"(카프카 발행)가 하나 더 있다는 것 —
+    그래서 "그 부수효과를 트랜잭션 안에 넣을 것이냐, 커밋 뒤로 뺄 것이냐"라는 순서 문제가 새로 생긴다.
+    이 순서 문제와 "그래도 발행 직전에 프로세스가 죽으면?"이라는 다음 질문은
+    레슨 32(분산 트랜잭션: 2PC → Saga → Outbox)에서 이어서 다룬다.
+  </p>
+
   <h2>핵심 요약</h2>
 
   <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
@@ -219,6 +253,7 @@ end</code></pre>
 
   <div class="nav-links">
     <a href="0023-rails-resources-routing-cases.html">← 레슨 23 — Rails 리소스 라우팅의 경우의 수</a>
+    <a href="0025-kafka-topic.html">레슨 25 — Topic →</a>
   </div>
 
   <div class="ask-teacher">

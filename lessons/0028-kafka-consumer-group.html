@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 28 — Consumer Group</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>Consumer Group</h1>
+  <div class="lesson-meta">
+    <span>레슨 028</span>
+    <span>Consumer Group · Partition · 오프셋 · 경쟁 소비</span>
+    <span>~20분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 "서버를 여러 대 띄우면 같은 메시지를 두 번 처리하지 않을까?" — 카프카가 중복 처리를 막는 방식을 이해한다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>Consumer Group이란</h2>
+
+  <p>
+    theplus-back의 <code>karafka.rb</code>를 보면 모든 토픽이 하나의
+    <code>consumer_group :perpl</code> 블록 안에 등록돼 있다:
+  </p>
+
+<pre><code># theplus-back/karafka.rb
+routes.draw do
+  consumer_group :perpl do
+    topic :'optimiz-async' do
+      consumer OptimizAsyncConsumer
+    end
+    topic :'record-hr-organization-code' do
+      consumer HrmOrganizationInfoConsumer
+    end
+    # ... 20여 개 더
+  end
+end</code></pre>
+
+  <p>
+    Consumer Group은 <strong>"같은 이름표를 단 Consumer 프로세스들의 묶음"</strong>이다.
+    카프카 브로커는 그룹 이름(<code>perpl</code>) 단위로 "이 그룹이 각 토픽을 어디까지 읽었는지"(오프셋)를 기록한다.
+    theplus-back 서버가 한 대든 여러 대든, 전부 <code>perpl</code>이라는 그룹으로 접속하면
+    브로커가 메시지를 <strong>중복 없이 나눠서</strong> 배분해준다.
+  </p>
+
+  <div class="analogy">
+    일반적인 이벤트 발행/구독(Pub/Sub)과 헷갈리기 쉬운 지점이다.<br><br>
+    <code>window.addEventListener</code>를 두 군데서 걸어두면, 이벤트가 발생했을 때
+    <strong>둘 다</strong> 실행된다 (fan-out). 카프카의 Consumer Group은 정반대다 —
+    같은 그룹에 속한 Consumer들은 <strong>서로 경쟁</strong>해서 메시지를 나눠 가진다
+    (하나의 메시지는 그룹 안에서 딱 한 번만 처리된다). 마치 여러 명의 작업자가
+    하나의 작업 큐에서 서로 다른 티켓을 꺼내가는 것과 같다 — 같은 티켓을 두 사람이 동시에 처리하지 않는다.
+  </div>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. theplus-back 서버 프로세스가 3대 떠 있고 모두 Consumer Group <code>perpl</code>에 속해 있다. <code>optimiz-async</code> 토픽에 메시지 하나가 도착하면?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 3대 모두 이 메시지를 각각 처리한다 (3번 처리됨)</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 그룹 안의 3대 중 한 대만 이 메시지를 처리한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 3대 중 임의로 하나가 죽을 때까지 아무도 처리하지 않는다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 메시지가 3등분되어 3대가 나눠서 처리한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>같은 토픽을 여러 그룹이 각자 읽을 수도 있다</h2>
+
+  <p>
+    반대로, <strong>다른 그룹 이름</strong>을 쓰면 완전히 독립적으로 같은 토픽 전체를 읽을 수 있다.
+    예를 들어 theplus-back이 <code>perpl</code> 그룹으로 <code>optimiz-async</code>를 읽어서
+    실제 DB를 갱신하는 동안, 만약 별도로 <code>perpl-analytics</code>라는 그룹을 만들어
+    같은 토픽을 구독하면 그 그룹은 자기 페이스대로 전체 메시지를 처음부터 다시 읽을 수도 있다.
+    "그룹이 다르면 서로 다른 시점(오프셋)에서 독립적으로 읽는다"가 핵심이다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. 같은 토픽을 서로 다른 두 Consumer Group이 구독하면?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 둘 중 먼저 연결한 그룹만 메시지를 받을 수 있다</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. 두 그룹은 서로 독립적으로, 각자 토픽 전체를 자기 페이스로 읽는다</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. 카프카는 토픽당 그룹을 하나만 허용하므로 불가능하다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. 두 그룹이 메시지를 절반씩 나눠 갖는다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>이 프로젝트에서는 왜 그룹이 하나뿐인가</h2>
+
+  <p>
+    theplus-back은 지금 <code>perpl</code> 그룹 하나로 20여 개 토픽 전부를 소비한다.
+    <code>karafka.rb</code>의 <code>config.concurrency = 5</code>는 "그룹 안에서 몇 개의 워커 스레드가
+    동시에 메시지를 처리할지"를 정하는 값이다 — 여러 그룹을 만드는 것과는 별개로,
+    한 그룹 안에서도 병렬 처리 정도를 조절할 수 있다.
+    지금 구조는 "하나의 애플리케이션 = 하나의 그룹" 형태라, 그룹을 여러 개로 쪼갤 필요가
+    아직 없었던 것으로 보인다 (트래픽이 늘거나, 토픽별로 배포 주기를 분리해야 할 때 나눌 수 있다).
+  </p>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">개념</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">역할</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Consumer Group</td>
+        <td style="padding:0.4rem 0.5rem;">같은 이름표를 단 Consumer들의 묶음. 브로커가 이 단위로 오프셋을 추적</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">그룹 내부</td>
+        <td style="padding:0.4rem 0.5rem;">경쟁 소비 — 메시지 하나는 그룹 안에서 한 번만 처리 (중복 방지)</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">그룹 사이</td>
+        <td style="padding:0.4rem 0.5rem;">완전 독립 — 서로 다른 그룹은 같은 토픽을 각자 페이스로 읽을 수 있다</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고:
+    <a href="https://kafka.apache.org/documentation/#intro_consumers" target="_blank">Apache Kafka 공식 문서 — Consumers &amp; Consumer Groups</a>
+  </p>
+
+  <div class="nav-links">
+    <a href="0027-kafka-consumer-karafka.html">← 레슨 27 — Consumer / Karafka</a>
+    <a href="0029-kafka-dlq.html">레슨 29 — DLQ →</a>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "그룹 안에 Consumer가 토픽 수보다 많으면 어떻게 되나요?" 같은 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 같은 Consumer Group에 속한 프로세스들은 서로 경쟁해서 메시지를 나눠 가지므로, 하나의 메시지는 그룹 안에서 딱 한 번만 처리됩니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. 그룹이 다르면 오프셋도 따로 관리되기 때문에, 서로 완전히 독립적으로 같은 토픽 전체를 읽을 수 있습니다.';
+  }
+}
+</script>
+
+</body>
+</html>

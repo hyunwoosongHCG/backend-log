@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 29 — DLQ(Dead Letter Queue)</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>DLQ(Dead Letter Queue)</h1>
+  <div class="lesson-meta">
+    <span>레슨 029</span>
+    <span>DLQ · Dead Letter Queue · mark_as_consumed · 재시도</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 "메시지 하나가 계속 에러를 내면 뒤에 쌓인 메시지들은 어떻게 되나?" — 실패가 파이프라인 전체를 막지 않게 하는 법을 이해한다
+    — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>왜 DLQ가 필요한가</h2>
+
+  <p>
+    카프카 토픽은 메시지를 <strong>순서대로</strong> 처리한다. 만약 특정 메시지 처리 중 예외가 나서
+    Consumer가 계속 재시도만 한다면, 그 메시지 뒤에 쌓인 모든 메시지는 처리되지 못하고 무한정 대기하게 된다.
+    잘못된 데이터 하나가 파이프라인 전체를 멈춰 세우는 것이다.
+  </p>
+
+  <p>
+    DLQ(Dead Letter Queue)는 이 문제를 푸는 패턴이다:
+    <strong>몇 번 재시도해도 계속 실패하는 메시지는 원래 흐름에서 빼내 별도 토픽으로 옮기고,
+    나머지 메시지는 계속 처리를 이어간다.</strong>
+  </p>
+
+  <div class="analogy">
+    프론트에서 실패한 API 요청을 다루는 방식과 비슷하다.
+    보통 <code>fetch</code>가 실패하면 몇 번 재시도(retry with backoff)하다가,
+    그래도 안 되면 에러 토스트를 띄우고 다음 사용자 액션으로 넘어간다 — 그 요청 하나 때문에
+    앱 전체가 멈추지 않는다.<br><br>
+    DLQ는 여기서 한 걸음 더 나아간 것이다: 에러 토스트만 띄우고 끝내는 게 아니라,
+    "실패한 요청"을 별도 채널(Sentry, 로그, DLQ 토픽)에 <strong>기록</strong>해서
+    나중에 사람이 들여다볼 수 있게 남겨둔다.
+  </div>
+
+  <h2>theplus-back의 DLQ 구조</h2>
+
+  <p>
+    theplus-back의 거의 모든 토픽은 <code>-fail</code>이 붙은 짝 토픽을 가진다:
+  </p>
+
+<pre><code># theplus-back/karafka.rb
+topic :'record-hr-organization-code' do
+  consumer HrmOrganizationInfoConsumer
+  dead_letter_queue(
+    topic: 'record-hr-organization-code-fail',
+    max_retries: 2,
+    dispatch_method: :produce_sync
+  )
+end
+topic :'record-hr-organization-code-fail' do
+  consumer HrmOrganizationInfoFailConsumer
+end</code></pre>
+
+  <p>흐름은 이렇다:</p>
+
+  <div class="flow">
+    <div class="flow-step">① <code>HrmOrganizationInfoConsumer#consume</code>에서 예외 발생</div>
+    <div class="flow-arrow">↓ mark_as_consumed를 호출하지 않고 그대로 raise</div>
+    <div class="flow-step">② Karafka가 같은 메시지를 <code>max_retries</code>(2)번까지 재시도</div>
+    <div class="flow-arrow">↓ 그래도 실패하면</div>
+    <div class="flow-step">③ 메시지를 <code>record-hr-organization-code-fail</code> 토픽으로 옮김 (DLQ)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">④ <code>HrmOrganizationInfoFailConsumer</code>가 몇 번 더 재시도 후, 계속 실패하면 <code>Sentry.capture_message</code> + <code>mark_as_consumed</code>로 종료</div>
+  </div>
+
+  <p>
+    핵심은 ④번이다 — Fail Consumer는 "포기할 때 조용히 사라지지 않고, Sentry에 남긴 뒤
+    명시적으로 <code>mark_as_consumed</code>를 호출한다". 이걸 안 하면 이 메시지도 계속 큐에 남아
+    똑같은 문제를 반복한다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q1. Consumer가 예외를 계속 던지기만 하고 DLQ 설정이 없다면 어떻게 되는가?</div>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">A. 그 메시지만 자동으로 삭제되고 다음 메시지로 넘어간다</button></li>
+      <li><button onclick="answer(this,'q1',true)">B. 그 메시지가 계속 재시도되면서, 뒤에 쌓인 메시지들도 처리되지 못하고 막힌다</button></li>
+      <li><button onclick="answer(this,'q1',false)">C. 카프카가 알아서 순서를 바꿔 다음 메시지부터 처리한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">D. 브로커가 재시작되면서 모든 토픽이 초기화된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>이번 조사에서 발견한 "구멍 난 DLQ"</h2>
+
+  <p>
+    theplus-back의 <code>system-account-updated</code> 토픽은 DLQ 대상(<code>system-account-updated-fail</code>)이
+    선언은 되어 있는데, 정작 그 <code>-fail</code> 토픽을 처리할 Consumer/라우팅이 <code>karafka.rb</code>에 없다.
+    즉 DLQ로 옮겨지긴 하는데, 거기서 처리해줄 사람이 없는 상태 — "죽은 편지함이 하나 더 있는" 셈이다.
+    실전 코드도 완벽하지 않을 수 있다는 걸 보여주는 실제 사례라 기록해둔다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q2. DLQ 토픽으로 옮겨진 메시지를 아무도 구독하지 않으면?</div>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">A. 카프카가 자동으로 원래 토픽으로 되돌린다</button></li>
+      <li><button onclick="answer(this,'q2',true)">B. DLQ 토픽에 계속 쌓이기만 하고, 아무도 확인하지 않으면 그 실패는 눈에 띄지 않게 묻힌다</button></li>
+      <li><button onclick="answer(this,'q2',false)">C. 브로커가 에러를 던지며 애플리케이션을 종료시킨다</button></li>
+      <li><button onclick="answer(this,'q2',false)">D. DLQ는 구독자가 없어도 상관없이 자동으로 Sentry에 보고된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>심화 — 모든 실패가 똑같이 재시도할 가치가 있는 건 아니다</h2>
+
+  <p>
+    <a href="https://github.com/hcgtheplus/theplus-back/pull/1294" target="_blank">PR #1294</a>는 이 레슨이 다룬
+    "일단 <code>max_retries</code>번 재시도하고 안 되면 DLQ"보다 한 단계 더 정교한 구조를 도입했다.
+    <code>KafkaErrorClassifier</code>로 에러를 두 종류로 나눈 것이다:
+  </p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">분류</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">예시</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">처리</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Transient (일시적)</td>
+        <td style="padding:0.4rem 0.5rem;">DB 커넥션 타임아웃, 락 경합</td>
+        <td style="padding:0.4rem 0.5rem;">re-raise → Karafka가 재시도 → 그래도 안 되면 DLQ</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">Non-transient (구조적)</td>
+        <td style="padding:0.4rem 0.5rem;"><code>InvalidPayloadError</code>, <code>ResourceNotFoundError</code> 같은 데이터 자체의 문제</td>
+        <td style="padding:0.4rem 0.5rem;">재시도 없이 바로 DLQ 직행</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    잘못된 형식의 페이로드는 100번 재시도해도 여전히 잘못된 형식이다 — 재시도는 "곧 나아질 수도 있는 문제"에만 의미가 있다.
+    이 구분이 없으면, 구조적으로 절대 성공할 수 없는 메시지 때문에 <code>max_retries</code>번만큼 브로커에 불필요한 부하를 주고
+    DLQ 도달까지의 시간만 늘어난다.
+  </p>
+
+  <p>
+    또 하나 바뀐 건 실패 기록 방식이다. 원래는 Consume 서비스 안에서 에러가 날 때마다 <code>Sentry.capture_message</code>를 직접 호출했는데,
+    이러면 재시도할 때마다 같은 메시지로 알림이 중복 발송된다. PR #1294는 이걸 <strong>DLQ에 도달한 시점 딱 한 번</strong>으로 모으고,
+    실패 이력을 Sentry(휘발성 알림)뿐 아니라 <code>KafkaFailedMessage</code>라는 <strong>DB 테이블</strong>에도 남긴다 —
+    나중에 개발자가 검색하고, 수기로 처리 완료 표시(<code>resolve!</code>)까지 할 수 있는 영구 기록으로 바꾼 것이다.
+  </p>
+
+  <div class="quiz">
+    <div class="quiz-q">Q3. 페이로드 형식 자체가 잘못된 메시지(예: 필수 필드 누락)를 만났을 때 가장 합리적인 처리는?</div>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">A. max_retries만큼 똑같이 재시도한 뒤 DLQ로 보낸다</button></li>
+      <li><button onclick="answer(this,'q3',true)">B. 재시도해도 결과가 달라지지 않으므로, 재시도 없이 바로 DLQ로 보낸다</button></li>
+      <li><button onclick="answer(this,'q3',false)">C. 무한정 재시도해서 데이터가 고쳐질 때까지 기다린다</button></li>
+      <li><button onclick="answer(this,'q3',false)">D. 에러를 무시하고 mark_as_consumed만 호출한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">개념</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">역할</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">DLQ</td>
+        <td style="padding:0.4rem 0.5rem;">계속 실패하는 메시지를 별도 토픽으로 옮겨, 나머지 처리를 막지 않게 하는 패턴</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">max_retries</td>
+        <td style="padding:0.4rem 0.5rem;">원래 토픽에서 몇 번 재시도한 뒤 DLQ로 넘길지 정하는 값</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Fail Consumer</td>
+        <td style="padding:0.4rem 0.5rem;">DLQ 토픽을 받아 최종적으로 로그를 남기고 mark_as_consumed로 마무리하는 쪽</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">Transient vs Non-transient</td>
+        <td style="padding:0.4rem 0.5rem;">일시적 에러만 재시도, 구조적 에러는 바로 DLQ — 에러를 분류해야 재시도가 의미 있다</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고:
+    <a href="https://karafka.io/docs/Dead-Letter-Queue/" target="_blank">Karafka 공식 문서 — Dead Letter Queue</a>
+    &nbsp;·&nbsp;
+    <a href="https://karafka.io/docs/Error-handling-and-back-off-policy/" target="_blank">Karafka 공식 문서 — Error Handling</a>
+  </p>
+
+  <div class="nav-links">
+    <a href="0028-kafka-consumer-group.html">← 레슨 28 — Consumer Group</a>
+    <a href="0030-aws-msk.html">레슨 30 — MSK →</a>
+  </div>
+
+  <div class="ask-teacher">
+    개념이 헷갈리거나 더 파고 싶은 부분이 있으면 질문하세요.
+    "재시도 중에는 뒤 메시지가 아예 안 읽히나요, 순서만 지켜지나요?" 같은 질문도 환영합니다.
+  </div>
+
+<script>
+function answer(btn, qid, correct) {
+  const container = document.getElementById(qid);
+  if (correct) {
+    container.querySelectorAll('button').forEach(b => b.disabled = true);
+  } else {
+    btn.disabled = true;
+  }
+  btn.classList.add(correct ? 'correct' : 'wrong');
+  const result = document.getElementById(qid + '-result');
+  if (correct) {
+    result.style.color = 'var(--correct)';
+    result.textContent = '정답입니다.';
+  } else {
+    result.style.color = 'var(--wrong)';
+    if (qid === 'q1') result.textContent = '다시 생각해보세요. 카프카는 파티션 안에서 메시지를 순서대로 처리하므로, DLQ 없이 계속 실패하면 그 메시지가 뒤쪽 메시지들의 처리까지 막습니다.';
+    if (qid === 'q2') result.textContent = '다시 생각해보세요. DLQ도 결국 하나의 토픽일 뿐이라, 구독하는 Consumer가 없으면 그냥 쌓이기만 하고 아무도 처리하지 않습니다.';
+    if (qid === 'q3') result.textContent = '다시 생각해보세요. 페이로드 형식 문제는 시간이 지난다고 저절로 고쳐지지 않으므로, 재시도는 브로커 부하와 지연만 늘릴 뿐입니다. 바로 DLQ로 보내는 게 합리적입니다.';
+  }
+}
+</script>
+
+</body>
+</html>
