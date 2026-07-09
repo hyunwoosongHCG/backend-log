@@ -98,6 +98,7 @@
 - [ ] Proc과 Lambda
 - [ ] `&method` 심볼을 블록으로 넘기기
 - [ ] `freeze`, `dup`, `clone`
+- [x] 동적 메서드 디스패치 (`send`, 메타프로그래밍) → [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
 - [ ] Gem이란? Bundler와 Gemfile
 
 ---
@@ -115,9 +116,11 @@
 - [x] 모델(Model)이란? 테이블과의 관계 → [레슨](lessons/0011-activerecord-base-and-model-layer.html)
 - [x] 마이그레이션(Migration)이란? → [정리](concepts/migration.md) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
 - [x] 연관관계 (`belongs_to`, `has_many`, `has_one`, `has_many :through`) → [레슨](lessons/0008-active-record-associations.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
+- [x] 폴리모픽 연관관계 (`belongs_to ..., polymorphic: true`) → [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
 - [ ] 유효성 검사 (`validates`)
 - [ ] 스코프(Scope)란?
 - [x] 콜백 (`before_save`, `after_create` 등) → [레슨](lessons/0019-timestamps-and-hidden-callbacks.html) | [정리](concepts/timestamps-and-callbacks.md) | [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)
+- [x] `after_commit`과 `after_save`/`after_create`의 차이 (트랜잭션 커밋 시점) → [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
 - [x] Dirty Tracking이란? (`changed?`, `attribute_changed?`, partial writes) → [레슨](lessons/0020-dirty-tracking-and-partial-writes.html) | [정리](concepts/dirty-tracking.md) | [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)
 - [x] 쿼리 메서드 (`where`, `find`, `find_by`, `includes`, `joins`) → [배운 작업](work-log/2026-07-07-delete-workspace-self-find.md)
 - [x] N+1 문제란? `includes`로 해결하기 → [레슨](lessons/0009-n-plus-1.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
@@ -152,7 +155,7 @@
 - [ ] Grape란? Rails 컨트롤러와의 차이
 - [x] 엔티티(Entity)란? (Grape::Entity) → [레슨](lessons/0010-grape-entity-and-n-plus-1-trace.html)
 - [ ] `present`로 응답 만들기
-- [ ] `params do` 블록으로 파라미터 정의
+- [x] `params do` 블록으로 파라미터 정의 → [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
 - [x] `desc`와 Swagger 문서 자동 생성 → [레슨](lessons/0022-data-wrapper-and-swagger.html) | [정리](concepts/data-wrapper-and-swagger.md) | [배운 작업](work-log/2026-07-03-pr-5489-review-and-data-wrapper.md)
 - [ ] `before` 블록과 인증 처리
 
