@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 36 — 폴리모픽 연관관계, History 하나로 여러 모델 가리키기</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>폴리모픽 연관관계 — <code>History</code> 하나로 여러 모델 가리키기</h1>
+  <div class="lesson-meta">
+    <span>레슨 036</span>
+    <span>Polymorphic Association · target_type · target_id</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 코드를 보고 "이 요청이 어떤 경로로 흘러가는지" 머릿속에 그릴 수 있다 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>출발점: 알림은 다 다른데, 테이블은 하나</h2>
+
+  <p>
+    Performance Plus에는 Review 리마인드, Objective 변경, Task 배정 등 "알림을 보내야 하는 이벤트"가
+    수십 종류 있다. 그런데 이 모든 이벤트를 기록하는 테이블은 <code>histories</code> 딱 하나다.
+    Review 관련 알림 이력도, Objective 관련 알림 이력도 전부 같은 테이블에 쌓인다.
+  </p>
+
+  <p>레슨 8에서 배운 <code>belongs_to</code>는 항상 <strong>고정된 하나의 테이블</strong>을 가리켰다:</p>
+
+<pre><code>class Comment < ApplicationRecord
+  belongs_to :task  # comments.task_id → tasks.id 로 고정
+end</code></pre>
+
+  <p>
+    그런데 <code>History</code>는 어떤 레코드는 Review를, 어떤 레코드는 Objective를, 어떤 레코드는
+    Task를 가리켜야 한다. <code>review_id</code>, <code>objective_id</code>, <code>task_id</code>를
+    전부 컬럼으로 만들면 한 레코드에 하나만 값이 있고 나머지는 항상 <code>NULL</code>인
+    낭비 구조가 된다. 이럴 때 쓰는 것이 <strong>폴리모픽 연관관계(polymorphic association)</strong>다.
+  </p>
+
+  <h2>실제로 본 코드</h2>
+
+  <p><code>app/models/history.rb</code>에서 이런 선언을 봤다:</p>
+
+<pre><code># app/models/history.rb
+class History < ApplicationRecord
+  belongs_to :target, polymorphic: true
+  #                    ^^^^^^^^^^^^^^^^^ 고정된 테이블이 없다는 선언
+
+  ABLE_TYPE = %w[Review Objective Task Feedback ...] # target_type 화이트리스트
+end</code></pre>
+
+  <p>
+    <code>polymorphic: true</code>가 붙으면 Rails는 FK 컬럼 하나(<code>target_id</code>) 대신
+    <strong>두 개의 컬럼</strong>을 쓴다:
+  </p>
+
+  <ul style="margin: 0.5rem 0 0.5rem 1.5rem;">
+    <li><code>target_id</code> — 가리키는 레코드의 PK (예: review.id)</li>
+    <li><code>target_type</code> — 가리키는 <strong>모델 클래스 이름을 문자열로</strong> 저장 (예: <code>"Review"</code>)</li>
+  </ul>
+
+  <p>즉 <code>histories</code> 테이블의 한 로우는 이렇게 생겼다:</p>
+
+<pre><code>| id | target_type | target_id | event_type      |
+|----|-------------|-----------|------------------|
+| 1  | "Review"    | 42        | "ReviewReminded" |
+| 2  | "Objective"  | 7         | "ObjectiveCreated" |
+| 3  | "Task"      | 15        | "TaskAssigned"   |</code></pre>
+
+  <p>
+    같은 테이블, 같은 컬럼 두 개로 Review 42번도, Objective 7번도, Task 15번도 전부 가리킬 수 있다.
+    <code>history.target</code>을 호출하면 Rails가 <code>target_type</code> 값을 보고
+    <code>Review.find(42)</code> 같은 걸 자동으로 실행해준다.
+  </p>
+
+  <div class="analogy">
+    TypeScript의 discriminated union과 거의 같은 아이디어다.
+<pre><code>// TS: type 필드로 어떤 모양인지 구분
+type Target =
+  | { type: 'Review'; id: number }
+  | { type: 'Objective'; id: number }
+  | { type: 'Task'; id: number };
+
+function loadTarget(t: Target) {
+  switch (t.type) {          // target_type과 동일한 역할
+    case 'Review': return fetchReview(t.id);
+    case 'Objective': return fetchObjective(t.id);
+  }
+}</code></pre>
+    <code>target_type</code>이 TS의 <code>type</code> 판별 필드, <code>target_id</code>가
+    각 분기의 <code>id</code>와 같은 역할을 한다. 다만 Rails는 이 switch 분기를 직접 안 써도
+    <code>target_type</code> 문자열 그대로 <code>constantize</code>해서 클래스를 찾아준다는 점이 다르다.
+  </div>
+
+  <h2>왜 이렇게까지 하나 — 트레이드오프</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">방식</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">장점</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">단점</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">모델별 컬럼<br><code>review_id, objective_id, ...</code></td>
+        <td style="padding:0.4rem 0.5rem;">DB 레벨 FK 제약(참조 무결성) 가능</td>
+        <td style="padding:0.4rem 0.5rem;">모델 늘어날 때마다 마이그레이션, 항상 대부분 컬럼이 NULL</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">폴리모픽<br><code>target_type + target_id</code></td>
+        <td style="padding:0.4rem 0.5rem;">컬럼 2개로 무한히 확장 가능</td>
+        <td style="padding:0.4rem 0.5rem;">DB가 <code>target_type</code>이 실제 존재하는 클래스인지 보장 못 함 → 애플리케이션 레벨 검증 필요</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    그 "애플리케이션 레벨 검증"이 바로 <code>ABLE_TYPE</code> 상수다. <code>target_type</code>에
+    아무 문자열이나 들어갈 수 없도록 화이트리스트로 막아둔 것 — DB가 못 해주는 무결성 검사를
+    코드가 대신 하고 있는 것이다.
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — 왜 review_id 컬럼을 안 쓰나</h3>
+    <p class="quiz-q">
+      History가 Review, Objective, Task를 각각 <code>review_id</code>, <code>objective_id</code>,
+      <code>task_id</code> 컬럼으로 따로 가리키지 않고 <code>target_type</code> + <code>target_id</code>로
+      합친 이유는?
+    </p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">Rails가 belongs_to를 2개 이상 쓰지 못하게 막아서</button></li>
+      <li><button onclick="answer(this,'q1',true)">가리킬 모델 종류가 늘어나도 컬럼 추가 없이 확장하기 위해서</button></li>
+      <li><button onclick="answer(this,'q1',false)">MySQL이 여러 FK 컬럼을 지원하지 않아서</button></li>
+      <li><button onclick="answer(this,'q1',false)">쿼리 속도를 높이기 위해서</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — ABLE_TYPE의 역할</h3>
+    <p class="quiz-q">
+      <code>ABLE_TYPE</code> 화이트리스트가 없다면 어떤 문제가 생길 수 있을까?
+    </p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">History 레코드를 아예 생성할 수 없다</button></li>
+      <li><button onclick="answer(this,'q2',true)">존재하지 않거나 의도하지 않은 클래스 이름이 target_type에 저장될 수 있다</button></li>
+      <li><button onclick="answer(this,'q2',false)">target_id가 자동으로 문자열로 바뀐다</button></li>
+      <li><button onclick="answer(this,'q2',false)">N+1 쿼리가 발생한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <p class="source">
+    참고: <a href="https://guides.rubyonrails.org/association_basics.html#polymorphic-associations" target="_blank">Rails Guides — Polymorphic Associations</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 궁금한 점이 있으면 바로 물어보세요. "polymorphic 컬럼에 인덱스는 어떻게 거나요?"
+    같은 심화 질문도 환영합니다.
+  </div>
+
+  <div class="nav-links">
+    <a href="0035-ruby-instance-variable-and-annotation-confusion.html">← 레슨 35: Ruby 인스턴스 변수</a>
+    <a href="0037-dynamic-dispatch-send.html">레슨 37: 동적 메서드 디스패치 (send) →</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. target_type + target_id 두 컬럼만 있으면 새 모델이 추가돼도 마이그레이션 없이 바로 가리킬 수 있어요.",
+        wrong: "아니에요. Rails가 belongs_to를 여러 개 못 쓰는 것도, MySQL이 FK를 여러 개 못 받는 것도 아니에요. 핵심은 '모델 종류가 늘어날 때 컬럼을 추가하지 않아도 되는 확장성'입니다."
+      },
+      q2: {
+        correct: "맞아요. DB가 target_type의 유효성을 보장해주지 않기 때문에, 애플리케이션 코드(ABLE_TYPE)가 그 역할을 대신합니다.",
+        wrong: "아니에요. ABLE_TYPE이 없어도 레코드 생성 자체는 됩니다. 문제는 DB가 막아주지 않는 '아무 문자열이나 target_type에 들어갈 수 있다'는 무결성 위험입니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>

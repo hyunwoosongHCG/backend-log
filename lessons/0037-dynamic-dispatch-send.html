@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 37 — 동적 메서드 디스패치, send로 메서드 이름을 조립한다</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>동적 메서드 디스패치 — <code>send</code>로 메서드 이름을 조립한다</h1>
+  <div class="lesson-meta">
+    <span>레슨 037</span>
+    <span>send · 메타프로그래밍 · 화이트리스트</span>
+    <span>~12분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 코드를 보고 "이 요청이 어떤 경로로 흘러가는지" 머릿속에 그릴 수 있다 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>실제로 본 코드</h2>
+
+  <p>
+    레슨 36에서 본 <code>History#target</code>은 Review, Objective, Task 등 여러 모델을 가리킬 수 있었다.
+    문제는 "가리키는 대상에 따라 다른 알림 로직을 실행해야 한다"는 것. 코드가 이렇게 생겼다:
+  </p>
+
+<pre><code># app/models/history.rb
+def notify
+  send("notify_#{target_type.underscore}")
+  #    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ target_type이 "Review"면 notify_review 호출
+end
+
+def notify_review
+  ...
+end
+
+def notify_objective
+  ...
+end</code></pre>
+
+  <p>
+    <code>target_type</code>이 <code>"Review"</code>면 <code>"notify_review"</code>라는 문자열이
+    만들어지고, <code>send</code>가 그 이름의 메서드를 <strong>실행 시점에</strong> 호출한다.
+    소스 코드 어디에도 <code>notify_review</code>를 직접 호출하는 줄이 없다 — 이름이 런타임에
+    문자열 조합으로 결정된다.
+  </p>
+
+  <h2>send란 무엇인가</h2>
+
+  <p>
+    Ruby에서 보통 메서드는 <code>객체.메서드명</code>처럼 <strong>이름을 코드에 직접 적어서</strong> 호출한다.
+    <code>send</code>는 그 이름을 <strong>문자열이나 심볼로 대신 넘겨서</strong> 호출하게 해준다.
+  </p>
+
+<pre><code>history.notify_review        # 보통 호출 — 이름이 소스에 그대로 적혀있음
+history.send("notify_review") # send 호출 — 이름이 문자열로 전달됨, 같은 결과</code></pre>
+
+  <p>
+    두 줄은 결과가 완전히 같다. 다른 점은 <strong>메서드 이름을 변수로 다룰 수 있다</strong>는 것 —
+    그래서 <code>"notify_#{target_type.underscore}"</code>처럼 런타임에 조립한 이름도 호출할 수 있다.
+    이런 걸 <strong>메타프로그래밍(metaprogramming)</strong>이라고 부른다 — "코드가 코드를 다루는 코드".
+  </p>
+
+  <div class="analogy">
+    JS에서 객체의 속성에 문자열로 접근하는 것과 같은 아이디어다.
+<pre><code>// JS: 대괄호 표기법으로 동적 접근
+const key = 'notifyReview';
+obj[key]();               // obj.notifyReview()와 동일
+
+// JS: 문자열 조합으로 핸들러 이름 결정
+const handler = `handle${eventType}`;
+this[handler](event);     // Ruby의 send와 정확히 같은 패턴</code></pre>
+    <code>obj[key]()</code>가 Ruby의 <code>obj.send(key)</code>와 1:1로 대응한다. 프론트에서
+    이벤트 타입별로 핸들러 이름을 조합해 호출해본 경험이 있다면 이미 써본 패턴이다.
+  </div>
+
+  <h2>왜 이렇게 짜는가 — case/when 대신 send</h2>
+
+  <p>
+    같은 걸 <code>case</code>로 짤 수도 있었다:
+  </p>
+
+<pre><code>def notify
+  case target_type
+  when 'Review' then notify_review
+  when 'Objective' then notify_objective
+  when 'Task' then notify_task
+  # ABLE_TYPE에 새 모델이 추가될 때마다 여기도 한 줄씩 늘어난다
+  end
+end</code></pre>
+
+  <p>
+    <code>send</code> 버전은 <code>ABLE_TYPE</code>에 새 모델이 추가돼도 <code>notify_새모델</code>
+    메서드만 정의하면 끝난다 — <code>notify</code> 메서드 자체는 안 바뀐다. 분기문이 늘어나는 걸
+    막아주는 대신, "이 메서드가 실제로 어디서 호출되는지"가 소스 코드만 봐서는 안 보이게 된다는
+    비용을 지불한다.
+  </p>
+
+  <h2>메타프로그래밍의 위험 — 왜 화이트리스트가 필요한가</h2>
+
+  <p>
+    <code>send</code>는 <code>private</code> 메서드까지도 호출할 수 있을 만큼 강력하다. 만약
+    <code>target_type</code>이 사용자 입력에서 그대로 온 값이었다면, <code>send</code>는
+    개발자가 의도하지 않은 임의의 메서드(예: <code>delete_all</code>, <code>destroy</code> 등)를
+    실행하는 통로가 될 수 있다. 레슨 36에서 본 <code>ABLE_TYPE</code> 화이트리스트가
+    <code>target_type</code>을 미리 정해진 값으로만 제한하는 것이 바로 이 위험을 막는 장치다.
+  </p>
+
+  <div class="quote">
+    <span class="quote-who">기억할 규칙</span>
+    <code>send</code>에 넘기는 문자열이 외부 입력에서 왔다면, 반드시 화이트리스트로
+    검증한 뒤에 호출한다. 검증 없이 그대로 넘기면 <code>eval</code>과 비슷한 위험을 갖게 된다.
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — send가 하는 일</h3>
+    <p class="quiz-q">
+      <code>obj.send("foo")</code>와 <code>obj.foo</code>의 차이는?
+    </p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">send는 비동기로 실행되고 foo는 동기로 실행된다</button></li>
+      <li><button onclick="answer(this,'q1',true)">호출 결과는 같고, 메서드 이름을 문자열/변수로 넘길 수 있다는 점만 다르다</button></li>
+      <li><button onclick="answer(this,'q1',false)">send는 클래스 메서드만 호출할 수 있다</button></li>
+      <li><button onclick="answer(this,'q1',false)">send는 예외를 발생시키지 않는다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — 왜 화이트리스트가 필요한가</h3>
+    <p class="quiz-q">
+      <code>send("notify_#{target_type.underscore}")</code>에서 <code>target_type</code>을
+      <code>ABLE_TYPE</code>으로 검증하지 않으면 생기는 위험은?
+    </p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">쿼리 성능이 느려진다</button></li>
+      <li><button onclick="answer(this,'q2',false)">N+1 문제가 발생한다</button></li>
+      <li><button onclick="answer(this,'q2',true)">검증되지 않은 문자열로 의도하지 않은 메서드가 호출될 수 있다</button></li>
+      <li><button onclick="answer(this,'q2',false)">DB 마이그레이션이 자동 실행된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <p class="source">
+    참고: <a href="https://ruby-doc.org/core/Object.html#method-i-send" target="_blank">Ruby 공식 문서 — Object#send</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 궁금한 점이 있으면 바로 물어보세요. <code>public_send</code>와 <code>send</code>의 차이,
+    <code>method_missing</code>과의 관계 같은 심화 질문도 환영합니다.
+  </div>
+
+  <div class="nav-links">
+    <a href="0036-polymorphic-association.html">← 레슨 36: 폴리모픽 연관관계</a>
+    <a href="0038-after-commit-vs-after-create.html">레슨 38: after_commit vs after_create →</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. 실행 결과는 완전히 같습니다. 차이는 메서드 이름을 소스에 고정할지, 문자열/변수로 런타임에 결정할지 뿐이에요.",
+        wrong: "아니에요. send와 일반 호출 모두 동기적으로 실행되고, 인스턴스 메서드도 호출할 수 있으며, 예외도 그대로 발생합니다. 유일한 차이는 메서드 이름을 동적으로 넘길 수 있다는 것입니다."
+      },
+      q2: {
+        correct: "맞아요. send는 검증 없이 넘긴 문자열 그대로 메서드를 실행하기 때문에, 그 문자열의 출처를 신뢰할 수 없다면 임의 코드 실행과 비슷한 위험이 생깁니다.",
+        wrong: "아니에요. 이건 성능이나 쿼리 문제가 아니라 보안 문제입니다. send에 넘기는 문자열이 검증되지 않으면 의도하지 않은 메서드가 호출될 수 있어요."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>
