@@ -158,6 +158,8 @@
 - [x] `params do` 블록으로 파라미터 정의 → [레슨](lessons/0018-grape-params.html) | [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
 - [x] `desc`와 Swagger 문서 자동 생성 → [레슨](lessons/0022-data-wrapper-and-swagger.html) | [정리](concepts/data-wrapper-and-swagger.md) | [배운 작업](work-log/2026-07-03-pr-5489-review-and-data-wrapper.md)
 - [ ] `before` 블록과 인증 처리
+- [x] Grape 파라미터 상호 검증 (`at_least_one_of`)과 `default:`의 실행 순서 충돌 → [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
+- [x] Grape는 top-level JSON 배열 body를 못 읽는다 (`Formatter#read_rack_input`의 `body.is_a?(Hash)` 체크) → [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
 
 ### 권한
 
