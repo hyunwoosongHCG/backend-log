@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 39 — 스레드 풀과 트랜잭션 경계, 비동기 부수효과가 커밋을 앞지르는 문제</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>스레드 풀과 트랜잭션 경계 — 비동기 부수효과가 커밋을 앞지르는 문제</h1>
+  <div class="lesson-meta">
+    <span>레슨 039</span>
+    <span>스레드 풀 · 트랜잭션 경계 · Sidekiq</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 코드를 보고 "이 요청이 어떤 경로로 흘러가는지" 머릿속에 그릴 수 있다 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>출발점 — "이건 굳이 동기로 안 해도 되지 않나?"</h2>
+
+  <p>
+    "판매자에게 판매 건수를 채웠다고 푸시 알림 보내기", "로그인 시 포인트 적립"처럼,
+    요청을 처리하는 핵심 흐름(로그인 성공, 판매 건수 갱신)과 <strong>결과가 달라도 되는</strong>
+    부수효과가 있다. 이런 걸 별도 스레드로 보내면 메인 흐름은 그 부수효과를 기다리지 않고
+    바로 응답할 수 있다 — 디버깅은 어려워지지만 인터랙션은 빨라진다는 직관은 맞다.
+  </p>
+
+  <p>
+    그런데 여기서 "특정 로직을 별도 스레드로 보내면, 그 안에서 난 예외는 원래 스레드의
+    <code>rescue</code>로 안 잡힌다"는 걸 알게 됐다면 — 정확히 봤다. 다만 이유가 하나 더
+    있다. 이번 레슨에서는 스레드 풀이 정확히 무엇이고, 왜 트랜잭션과 스레드를 함께 생각해야
+    하는지를 정리한다.
+  </p>
+
+  <h2>스레드 풀(Thread Pool)이란 무엇인가</h2>
+
+  <p>
+    OS 스레드를 만들고 없애는 건 공짜가 아니다 — 커널이 컨텍스트 전환, 스택 메모리 할당을
+    해야 한다. 요청이 들어올 때마다 <code>Thread.new</code>로 새 스레드를 만들면, 트래픽이
+    몰릴 때 스레드가 무한정 늘어나서 메모리와 CPU가 고갈될 수 있다.
+  </p>
+
+  <p>
+    <strong>스레드 풀은 미리 정해진 개수(N개)의 워커 스레드를 만들어두고, 작업을 큐에
+    쌓아뒀다가 노는 스레드가 꺼내서 처리 → 끝나면 스레드를 죽이지 않고 풀에 반납해서
+    재사용</strong>하는 자원 관리 장치다. "비동기로 실행돼서 빠르다"는 그 결과지, 스레드
+    풀이 존재하는 목적 자체는 아니다 — 목적은 스레드 생성 비용과 자원 고갈을 막는 것이다.
+  </p>
+
+  <p>
+    실무 스택에서 이 스레드 풀이 실체화된 것이 <strong>Sidekiq</strong>이다. Sidekiq
+    프로세스는 내부에 워커 스레드 풀(기본 concurrency 5~25개)을 두고, Redis 큐에서 job을
+    꺼내 각 스레드가 처리한다. 웹 요청을 처리하는 프로세스와는 완전히 분리된 프로세스이자
+    스레드 집합이다.
+  </p>
+
+  <h2>트랜잭션은 "스레드" 단위로 스코프된다</h2>
+
+  <p>
+    레슨 24에서 트랜잭션을 "여러 DB 작업을 하나의 단위로 묶어서 전부 성공하거나 전부
+    실패하게 만드는 것"이라고 배웠다. 이 트랜잭션이 실제로 걸리는 대상은 <strong>DB
+    커넥션</strong>이다. Rails는 커넥션 풀에서 스레드마다 자기만의 커넥션을 체크아웃한다
+    (스레드 로컬). 그래서 다음 코드는 겉보기와 다르게 동작한다.
+  </p>
+
+<pre><code>ActiveRecord::Base.transaction do
+  sale.update!(count: sale.count + 1)     # ① 커넥션 A, 아직 커밋 전
+
+  Thread.new do
+    PushNotifier.notify(seller)           # ② 별도 스레드 → 별도 커넥션(B) 또는 DB 커넥션 없이 실행
+  end
+end
+# ③ 여기서 커밋 (또는 롤백)</code></pre>
+
+  <p>
+    ②는 ①과 <strong>같은 트랜잭션에 속하지 않는다</strong> — 아예 다른 커넥션이거나,
+    DB 접근이 없다면 트랜잭션 개념 자체가 적용되지 않는다. 게다가 스레드 생성은 매우
+    빠르기 때문에, 보통 부모 스레드가 ③의 커밋을 먼저 끝내버리는 순서로 실행된다(레이스).
+    문제는 <strong>③이 실패해서 롤백되는 경우</strong>다 — ①은 취소되지만, 이미 나가버린
+    ②의 푸시 알림은 취소할 수 없다. "판매 달성" 알림은 사용자에게 도착했는데 실제 DB에는
+    반영이 안 된 상태가 남는다. 이건 원자성(Atomicity)이 깨지는 문제이지, 아직 예외
+    캐치 이야기는 시작도 안 했다.
+  </p>
+
+  <h2>거기에 더해 — 예외는 스레드 경계를 못 넘는다</h2>
+
+  <p>
+    Ruby에서 각 스레드는 자기만의 call stack을 가진다. 자식 스레드에서 발생한 예외는
+    부모 스레드의 <code>begin/rescue</code>로 전파되지 않는다 — 자식 스레드 내부에서
+    직접 잡아야 한다. 안 잡으면 스레드가 조용히 죽고, 로그도 안 남아서 디버깅이 매우
+    어려워진다.
+  </p>
+
+<pre><code>begin
+  Thread.new do
+    raise "푸시 발송 실패"   # 부모의 rescue로 전파되지 않는다
+  end
+rescue => e
+  # 여기 안 걸림
+end
+
+Thread.new do
+  begin
+    PushNotifier.notify(seller)
+  rescue => e
+    Rails.logger.error("push notify failed: #{e.message}")  # 반드시 스레드 내부에서 처리
+  end
+end</code></pre>
+
+  <div class="analogy">
+    JavaScript의 <code>setTimeout</code>과 정확히 같은 모양이다. <code>setTimeout</code>
+    콜백은 별도의 매크로태스크로 이벤트 루프에 다시 들어가기 때문에, 그걸 감싼
+    <code>try/catch</code>는 콜백 안에서 던진 에러를 못 잡는다.
+<pre><code>try {
+  setTimeout(() => { throw new Error('fail'); }, 0);
+} catch (e) {
+  // 여기 안 잡힘 — setTimeout 콜백은 분리된 실행 컨텍스트에서 돈다
+}
+
+setTimeout(() => {
+  try {
+    riskyPush();
+  } catch (e) {
+    console.error('push failed', e);   // 콜백 안에서 직접 잡아야 함
+  }
+}, 0);</code></pre>
+    "밖에서 감싼 try/catch가 안 먹힌다"는 감각을 이미 프론트에서 겪어봤다면, 스레드
+    경계도 똑같이 생각하면 된다 — 실행 컨텍스트가 분리되면 예외 전파 경로도 끊긴다.
+  </div>
+
+  <h2>그래서 실무에서는 어떻게 하나 — after_commit</h2>
+
+  <p>
+    레슨 38에서 배운 <code>after_commit</code>이 정확히 이 문제를 위한 관용구다.
+    "부모 트랜잭션이 실제로 COMMIT된 뒤에만" 비동기 작업(Sidekiq job enqueue)을
+    실행하도록 걸면, 롤백될 데이터에 대해 알림이 먼저 나가는 레이스 자체가 성립하지
+    않는다.
+  </p>
+
+<pre><code>class Sale < ApplicationRecord
+  after_commit :notify_seller, on: :create   # 커밋 이후에만 실행 — 롤백되면 아예 호출 안 됨
+
+  def notify_seller
+    PushNotificationJob.perform_async(id)    # Sidekiq 스레드 풀에 위임, 실패는 Sidekiq 재시도가 처리
+  end
+end</code></pre>
+
+  <p>
+    정리하면 역할 분담은 이렇다 — <strong>"언제 실행할지"는 <code>after_commit</code>이
+    보장</strong>하고(부모 트랜잭션 커밋 확정 후에만), <strong>"실패하면 어떻게 할지"는
+    실행하는 쪽(Sidekiq job)이 자기 안에서 직접 처리</strong>한다(재시도, 로깅). 원 요청의
+    트랜잭션이 그 실패를 대신 잡아줄 방법은 없다 — 이미 분리된 실행 컨텍스트이기 때문이다.
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — 스레드 풀의 목적</h3>
+    <p class="quiz-q">스레드 풀이 존재하는 핵심 목적은?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">모든 작업을 비동기로만 실행하기 위해서</button></li>
+      <li><button onclick="answer(this,'q1',true)">스레드 생성/삭제 비용과 자원 고갈을 막기 위해 워커 스레드를 재사용하려고</button></li>
+      <li><button onclick="answer(this,'q1',false)">트랜잭션을 여러 개로 자동 분할하기 위해서</button></li>
+      <li><button onclick="answer(this,'q1',false)">예외를 자동으로 잡아서 로깅해주기 위해서</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — 트랜잭션과 스레드</h3>
+    <p class="quiz-q">
+      트랜잭션 안에서 <code>Thread.new</code>로 DB 작업을 실행하면 위험한 가장 근본적인
+      이유는?
+    </p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">Ruby는 멀티스레드에서 DB 접근 자체를 지원하지 않기 때문</button></li>
+      <li><button onclick="answer(this,'q2',true)">별도 스레드는 별도 DB 커넥션을 쓰기 때문에 애초에 부모 트랜잭션에 속하지 않아 원자성이 깨지기 때문</button></li>
+      <li><button onclick="answer(this,'q2',false)">별도 스레드에서는 SQL 문법이 다르게 해석되기 때문</button></li>
+      <li><button onclick="answer(this,'q2',false)">after_commit 콜백이 두 번 실행되기 때문</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 3 — 예외 전파</h3>
+    <p class="quiz-q">
+      <code>setTimeout(() => { throw e }, 0)</code>을 감싼 <code>try/catch</code>가 그 에러를
+      못 잡는 것과 가장 비슷한 백엔드 현상은?
+    </p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',true)">자식 스레드에서 던진 예외가 부모 스레드의 rescue로 전파되지 않는 것</button></li>
+      <li><button onclick="answer(this,'q3',false)">DB 커넥션 풀이 가득 차서 타임아웃 나는 것</button></li>
+      <li><button onclick="answer(this,'q3',false)">N+1 쿼리가 발생하는 것</button></li>
+      <li><button onclick="answer(this,'q3',false)">after_commit이 테스트에서 실행되지 않는 것</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <p class="source">
+    참고: <a href="https://guides.rubyonrails.org/threading_and_code_execution.html" target="_blank">Rails Guides — Threading and Code Execution in Rails</a> ·
+    <a href="https://github.com/sidekiq/sidekiq/wiki/Best-Practices" target="_blank">Sidekiq — Best Practices (transactional job enqueueing)</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 궁금한 점이 있으면 바로 물어보세요. <code>with_lock</code>/<code>SELECT ... FOR UPDATE</code>로
+    동시성을 제어하는 법, Sidekiq job이 <code>perform_async</code> 직후 아직 커밋 안 된 레코드를
+    조회하려다 실패하는 케이스 같은 심화 질문도 환영합니다.
+  </div>
+
+  <div class="nav-links">
+    <a href="0038-after-commit-vs-after-create.html">← 레슨 38: after_commit vs after_create</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. 스레드 풀의 목적은 스레드를 미리 만들어두고 재사용해서 생성/삭제 비용과 자원 고갈을 막는 것입니다. 비동기 실행은 그 결과일 뿐입니다.",
+        wrong: "아니에요. 스레드 풀의 핵심 목적은 워커 스레드를 미리 만들어두고 재사용해서 생성/삭제 비용과 자원 고갈을 막는 것입니다."
+      },
+      q2: {
+        correct: "맞아요. 각 스레드는 커넥션 풀에서 자기만의 DB 커넥션을 체크아웃하기 때문에, 별도 스레드의 쿼리는 애초에 부모 트랜잭션에 속하지 않습니다 — 원자성이 깨집니다.",
+        wrong: "아니에요. 문법 문제나 콜백 중복 실행 문제가 아니라, 스레드마다 별도의 DB 커넥션을 쓰기 때문에 애초에 같은 트랜잭션이 아니라는 게 핵심입니다."
+      },
+      q3: {
+        correct: "맞아요. setTimeout 콜백과 자식 스레드 모두 분리된 실행 컨텍스트(call stack)에서 돌기 때문에, 바깥의 try/catch나 rescue가 그 안의 예외를 잡지 못합니다.",
+        wrong: "아니에요. 이건 실행 컨텍스트가 분리되어 예외 전파 경로가 끊기는 문제입니다 — 커넥션 풀 타임아웃이나 N+1, after_commit 테스트 이슈와는 다른 현상입니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>
