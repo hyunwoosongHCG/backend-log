@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 41 — CDK 배포 가드 패턴과 CodePipeline의 ECS 배포 방식</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>CDK 배포 가드 패턴과 CodePipeline의 ECS 배포 방식</h1>
+  <div class="lesson-meta">
+    <span>레슨 041</span>
+    <span>CDK · Context · CodePipeline · 배포 가드</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 코드를 보고 "이 요청이 어떤 경로로 흘러가는지" 머릿속에 그릴 수 있다 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>출발점 — "allowProductionPhase2Deployment, 이거 임의로 지은 이름인가?"</h2>
+
+  <p>
+    PR 리뷰 중 이 코드를 보고 궁금해졌다.
+  </p>
+
+<pre><code>const allowProductionPhase2Deployment = app.node.tryGetContext('allowProductionPhase2Deployment')
+if (isDeploymentExplicitlyAllowed(allowProductionPhase2Deployment)) {
+  const perplProduction = new PerformancePlusStack(app, 'ProductionPerformancePlusStack', { ... })
+}</code></pre>
+
+  <p>
+    "이 문자열, CDK가 정해놓은 예약어인가 아니면 아무렇게나 지어도 되는 건가?" — 답부터
+    말하면 <strong>완전히 임의의 이름</strong>이다. 이 레슨은 CDK Context가 뭐고, 왜 이런
+    "위험한 스택은 명시적으로 켜야만 배포되게" 만드는 패턴을 쓰는지 정리한다.
+  </p>
+
+  <h2>CDK Context — 두 종류를 구분해야 한다</h2>
+
+  <p>
+    <code>app.node.tryGetContext(key)</code>는 CDK 앱에 전달된 컨텍스트 값에서 그 문자열
+    키를 그대로 조회하는 것뿐이다. 여기엔 두 종류가 있다.
+  </p>
+
+  <ul>
+    <li>
+      <strong>CDK가 정의한 예약된 feature flag</strong> — <code>cdk.json</code>의
+      <code>context</code> 블록에 있는 <code>@aws-cdk/aws-lambda:recognizeLayerVersion</code>
+      같은 값들. <code>@aws-cdk/&lt;모듈&gt;:&lt;플래그명&gt;</code> 네임스페이스를 CDK
+      프레임워크 자체가 정의해두고, 특정 버전 이후 동작 방식을 바꿀 때 쓴다. 이건 임의로
+      짓는 게 아니라 CDK 공식 문서에 등록된 값이다.
+    </li>
+    <li>
+      <strong>사용자가 임의로 짓는 커스텀 키</strong> — <code>allowDemoDeployment</code>,
+      <code>allowProductionPhase2Deployment</code> 같은 것들. CDK는 이런 키에 대해 아무
+      스키마도 강제하지 않는다. CLI에서 <code>-c allowProductionPhase2Deployment=true</code>로
+      넘길 때와 코드에서 <code>tryGetContext('allowProductionPhase2Deployment')</code>로
+      읽을 때, 문자열만 정확히 일치하면 된다. 이름 자체는 팀이 정한 컨벤션일 뿐이다.
+    </li>
+  </ul>
+
+  <h2>배포 가드 패턴 — 위험한 스택은 opt-in으로</h2>
+
+  <p>
+    이 커스텀 컨텍스트 키가 실제로 쓰이는 곳은 "이 스택은 기본적으로 배포 대상에서 빼고,
+    명시적으로 플래그를 줬을 때만 포함시킨다"는 안전장치다.
+  </p>
+
+<pre><code>// deployment-guard.ts
+export function isDeploymentExplicitlyAllowed(value: unknown): boolean {
+  return value === true || value === 'true'
+}
+
+// bin/performance-plus.ts
+const allowDemoDeployment = app.node.tryGetContext('allowDemoDeployment')
+if (isDeploymentExplicitlyAllowed(allowDemoDeployment)) {
+  const perplDemo = new PerformancePlusStack(app, 'Demo-PerformancePlusStack', { ... })
+}</code></pre>
+
+  <p>
+    이렇게 해두면 <code>cdk deploy --all</code>을 실행해도 demo나 production Phase 2처럼
+    "지금 잘못 배포하면 실서비스에 위험한" 스택은 아예 CDK 앱에 등록조차 되지 않는다.
+    반드시 <code>cdk deploy -c allowDemoDeployment=true Demo-PerformancePlusStack</code>처럼
+    사람이 의도적으로 플래그를 켠 경우에만 그 스택이 존재한다. "실수로 배포됨"이라는
+    사고 자체가 코드 레벨에서 원천 차단된다 — 리뷰나 문서로 "조심하세요"라고 적어두는 것보다
+    훨씬 강한 안전장치다.
+  </p>
+
+  <p>
+    이 레포에서는 이 패턴을 <strong>한 헬퍼 함수를 재사용</strong>해서 demo(#273)와
+    production Phase 2(#274) 두 곳에 똑같이 적용했다 — 같은 문제(위험한 스택의 실수 배포)에
+    같은 해법을 반복 검증 없이 재사용한 셈이다.
+  </p>
+
+  <h2>CodePipeline이 ECS에 배포하는 방식 — imageDef.json 아티팩트</h2>
+
+  <p>
+    파이프라인이 빌드한 이미지를 실제로 어느 ECS 서비스에 배포할지는
+    <code>EcsDeployAction</code>이 결정한다.
+  </p>
+
+<pre><code>const sidekiqDeployAction = new codepipeline_actions.EcsDeployAction({
+  actionName: 'SidekiqDeploy',
+  service: props.x.sidekiqService,
+  imageFile: buildOutput.atPath("sidekiqImageDef.json")   // ← CodeBuild가 만든 아티팩트 안의 파일
+});</code></pre>
+
+  <p>
+    <code>sidekiqImageDef.json</code>은 "이 서비스에 배포할 이미지의 ECR URI가 이거다"라고
+    적힌 JSON 파일이고, 이 파일 자체는 CodeBuild의 buildspec(<code>aws/buildspec-deploy.yml</code>)이
+    빌드 단계에서 만들어낸다. 중요한 건 그 buildspec은 인프라 레포(CDK 코드)가 아니라
+    <strong>애플리케이션 레포</strong>(theplus-back)에 있다는 것 — "왜 이 태스크가 파이프라인을
+    안 타지?"를 조사할 때, 인프라 레포만 봐서는 절반만 확인할 수 있다는 걸 이번에 배웠다.
+  </p>
+
+  <h2><code>triggerOnPush</code> — GitHub push가 자동으로 파이프라인을 돌리는가</h2>
+
+<pre><code>const sourceAction = new codepipeline_actions.CodeStarConnectionsSourceAction({
+  actionName: 'GithubSourceActionV2',
+  owner: 'hcgtheplus',
+  repo: props.x.repo,
+  connectionArn: "...",
+  triggerOnPush: false,   // ← GitHub push가 파이프라인을 자동 실행하지 않는다
+  output: sourceOutput,
+});</code></pre>
+
+  <p>
+    <code>triggerOnPush</code>는 소스 액션이 GitHub push 이벤트에 대해 AWS가 자동으로
+    파이프라인 실행을 걸어줄지(<code>true</code>) 아니면 push가 일어나도 가만히 있고 수동
+    또는 다른 외부 트리거를 기다릴지(<code>false</code>)를 결정한다. 이 레포는 계속
+    <code>false</code>였다 — 즉 push한다고 바로 배포되지 않는다.
+  </p>
+
+  <div class="analogy">
+    <code>triggerOnPush</code>는 GitHub Actions의 <code>on: push</code>(자동 트리거) vs
+    <code>on: workflow_dispatch</code>(수동 트리거) 차이와 정확히 같은 개념이다. 그리고
+    "위험한 스택은 opt-in context로만 배포 가능"한 패턴은, 프론트에서 프로덕션 배포 전에
+    별도 승인 스텝(manual approval gate)을 두는 것과 같은 발상 — "실수로 자동 실행되면
+    안 되는 것"을 코드/설정 레벨에서 강제로 막아두는 것이다.
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — CDK Context 키</h3>
+    <p class="quiz-q"><code>allowProductionPhase2Deployment</code> 같은 컨텍스트 키에 대한 설명으로 옳은 것은?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">CDK 프레임워크가 정의해놓은 예약된 feature flag라 이름을 마음대로 바꾸면 안 된다</button></li>
+      <li><button onclick="answer(this,'q1',true)">팀이 임의로 지은 커스텀 키이며, CLI에서 넘기는 값과 코드에서 읽는 문자열만 일치하면 된다</button></li>
+      <li><button onclick="answer(this,'q1',false)">반드시 <code>@aws-cdk/</code>로 시작해야 CDK가 인식한다</button></li>
+      <li><button onclick="answer(this,'q1',false)"><code>cdk.json</code>에 등록하지 않으면 존재할 수 없는 값이다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — 배포 가드 패턴의 목적</h3>
+    <p class="quiz-q">위험한 스택을 opt-in context flag 뒤에 두는 패턴의 핵심 목적은?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">CDK 빌드 속도를 높이기 위해서</button></li>
+      <li><button onclick="answer(this,'q2',true)"><code>cdk deploy --all</code> 같은 일반 배포 명령에서 그 스택이 아예 등록조차 안 되게 해서 실수로 배포되는 사고를 코드 레벨에서 원천 차단하기 위해서</button></li>
+      <li><button onclick="answer(this,'q2',false)">CloudFormation 리소스 개수 제한을 피하기 위해서</button></li>
+      <li><button onclick="answer(this,'q2',false)">테스트 커버리지를 올리기 위해서</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 3 — imageDef.json과 레포 경계</h3>
+    <p class="quiz-q"><code>sidekiqImageDef.json</code>을 실제로 만들어내는 곳은 어디인가?</p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">인프라 레포(CDK 코드)의 <code>codepipeline-stack.ts</code></button></li>
+      <li><button onclick="answer(this,'q3',true)">애플리케이션 레포의 CodeBuild buildspec — 인프라 레포는 그 파일 경로를 참조만 한다</button></li>
+      <li><button onclick="answer(this,'q3',false)"><code>EcsDeployAction</code>이 배포 시점에 자동 생성한다</button></li>
+      <li><button onclick="answer(this,'q3',false)">CloudFormation이 스택 배포 시 자동으로 만든다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <p class="source">
+    참고: <a href="https://docs.aws.amazon.com/cdk/v2/guide/context.html" target="_blank">AWS CDK 공식 문서 — Context values and the CDK</a> ·
+    <a href="https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_codepipeline_actions.EcsDeployAction.html" target="_blank">AWS CDK 공식 문서 — EcsDeployAction</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 궁금한 점이 있으면 바로 물어보세요. CodeBuild buildspec.yml이 정확히 어떻게
+    imageDef.json 포맷을 만드는지, <code>cdk.context.json</code> 캐시가 오프라인 synth를
+    가능하게 하는 원리 같은 심화 질문도 환영합니다.
+  </div>
+
+  <div class="nav-links">
+    <a href="0040-ecs-ec2-vs-fargate.html">← 레슨 40: ECS 기초 — EC2 vs Fargate</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. 이런 커스텀 키는 CDK가 강제하는 스키마가 없습니다. -c 키=값으로 넘길 때와 tryGetContext로 읽을 때 문자열만 일치하면 동작합니다.",
+        wrong: "아니에요. @aws-cdk/... 형태는 CDK가 정의한 예약된 feature flag 네임스페이스이고, allowProductionPhase2Deployment 같은 건 팀이 임의로 지은 커스텀 키라 이름 규칙이 없습니다."
+      },
+      q2: {
+        correct: "맞아요. 이 패턴의 핵심은 위험한 스택을 기본 CDK 앱 조립(assembly)에서 아예 빼버려서, 실수로 배포 명령을 잘못 내려도 그 스택 자체가 존재하지 않게 만드는 것입니다.",
+        wrong: "아니에요. 빌드 속도나 리소스 제한, 테스트 커버리지와는 무관합니다. 핵심은 '실수로 배포되는 사고'를 코드 레벨에서 원천 차단하는 안전장치입니다."
+      },
+      q3: {
+        correct: "맞아요. imageDef.json은 애플리케이션 레포의 CodeBuild buildspec이 빌드 단계에서 만들어내는 아티팩트입니다. 인프라 레포의 EcsDeployAction은 그 파일 경로만 참조합니다.",
+        wrong: "아니에요. 인프라 레포(codepipeline-stack.ts)나 EcsDeployAction, CloudFormation은 이 파일을 만들지 않습니다 — 애플리케이션 레포 쪽 buildspec이 만들어내는 아티팩트입니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>

@@ -589,7 +589,7 @@ const TRACKS = [
   {
     key: 'backend',
     label: '백엔드 실무',
-    sections: ['Ruby 기초', 'Grape API', '엔티티·도메인', 'ActiveRecord', 'Controller·라우팅', '트랜잭션·동시성', '실무 패턴', 'Kafka·메시지 큐', 'MSA·분산 아키텍처']
+    sections: ['Ruby 기초', 'Grape API', '엔티티·도메인', 'ActiveRecord', 'Controller·라우팅', '트랜잭션·동시성', '실무 패턴', 'Kafka·메시지 큐', 'MSA·분산 아키텍처', 'AWS 인프라·CDK']
   },
   {
     key: 'network',
@@ -649,6 +649,8 @@ const LESSONS = [
   { id: '0037', title: '레슨 37 — 동적 메서드 디스패치, send로 메서드 이름을 조립한다', short: 'send · 메타프로그래밍 · 화이트리스트', file: 'lessons/0037-dynamic-dispatch-send.html', track: 'backend', category: 'Ruby 메타프로그래밍' },
   { id: '0038', title: '레슨 38 — after_save, after_create, after_commit의 차이와 트랜잭션 커밋 시점', short: 'after_commit · after_save · 콜백 타이밍', file: 'lessons/0038-after-commit-vs-after-create.html', track: 'backend', category: 'ActiveRecord' },
   { id: '0039', title: '레슨 39 — 스레드 풀과 트랜잭션 경계, 비동기 부수효과가 커밋을 앞지르는 문제', short: '스레드 풀 · 트랜잭션 경계 · Sidekiq', file: 'lessons/0039-thread-pool-and-transaction-boundary.html', track: 'backend', category: '트랜잭션·동시성' },
+  { id: '0040', title: '레슨 40 — ECS 기초: EC2 vs Fargate, Task Definition과 Service', short: 'ECS · EC2 vs Fargate · Task Definition', file: 'lessons/0040-ecs-ec2-vs-fargate.html', track: 'backend', category: 'AWS 인프라·CDK' },
+  { id: '0041', title: '레슨 41 — CDK 배포 가드 패턴과 CodePipeline의 ECS 배포 방식', short: 'CDK Context · 배포 가드 · CodePipeline', file: 'lessons/0041-cdk-deployment-guard-and-codepipeline.html', track: 'backend', category: 'AWS 인프라·CDK' },
 
   /* ── 네트워크 트랙 — 김영한「모든 개발자를 위한 HTTP 웹 기본 지식」(스텁) ── */
   { id:'net-01', short:'인터넷 통신', title:'인터넷 통신', file:'lessons/net-01-internet-communication.html', track:'network', category:'인터넷 네트워크', duration:'01:51', num:4 },

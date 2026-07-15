@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 40 — ECS 기초: EC2 vs Fargate, Task Definition과 Service</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>ECS 기초 — EC2 vs Fargate, Task Definition과 Service</h1>
+  <div class="lesson-meta">
+    <span>레슨 040</span>
+    <span>ECS · EC2 · Fargate · Task Definition</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 코드를 보고 "이 요청이 어떤 경로로 흘러가는지" 머릿속에 그릴 수 있다 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>출발점 — "ECS는 뭐고, EC2랑 Fargate는 뭐가 다른데?"</h2>
+
+  <p>
+    aws-infra-architecture 레포의 performance-plus 스택을 리뷰하다가 브랜치 이름부터
+    막혔다 — <code>feat/ecs-migrate-ec2-to-fargate</code>. ECS가 뭔지, EC2가 뭔지,
+    Fargate가 뭔지 하나도 몰랐다. 이 레슨은 그 세 단어를 코드에 나온 순서 그대로 정리한다.
+  </p>
+
+  <h2>ECS(Elastic Container Service) — 컨테이너 오케스트레이터</h2>
+
+  <p>
+    ECS는 Docker 컨테이너를 "몇 개 띄울지, 죽으면 다시 살릴지, 로드밸런서에 어떻게
+    연결할지"를 관리해주는 AWS 서비스다. 계층 구조는 이렇다.
+  </p>
+
+  <ul>
+    <li><strong>클러스터(Cluster)</strong> — 컨테이너들이 모여 사는 논리적 그룹. 실제 배포 대상의 최상위 단위.</li>
+    <li><strong>서비스(Service)</strong> — 클러스터 안에서 "이 태스크를 N개 계속 띄워놔라"를 관리하는 컨트롤러. 죽으면 재시작, ALB 연결, 오토스케일링이 여기 붙는다.</li>
+    <li><strong>태스크 정의(Task Definition)</strong> — "어떤 이미지를, CPU/메모리 얼마로, 어떤 커맨드로 띄울지" 적은 설계도. 컨테이너 자체가 아니라 blueprint.</li>
+  </ul>
+
+  <p>
+    실제 코드로 보면 이 셋이 그대로 대응된다.
+  </p>
+
+<pre><code>// Task Definition — 설계도 (people-sidekiq-task.ts)
+this.sidekiqServerTask = new ecs.TaskDefinition(this, 'PESidekiqTaskDef', {
+  family: `${env}-PeopleSidekiq-Task`,
+  compatibility: ecs.Compatibility.FARGATE,
+  cpu: '2048',
+  memoryMiB: '4096',
+})
+
+// Service — 그 설계도로 N개를 계속 띄워놓는 관리자 (ecs-service.ts)
+this.sidekiqService = new ecs.FargateService(this, 'SidekiqService', {
+  cluster: this.cluster,
+  taskDefinition: ecsInfo.sidekiqTask,   // ← 위 Task Definition
+  ...
+})</code></pre>
+
+  <h2>EC2 launch type vs Fargate launch type</h2>
+
+  <p>
+    ECS가 "무엇을 몇 개 띄울지"를 정한다면, launch type은 "그걸 어디서(어떤 컴퓨팅 위에서)
+    돌릴지"를 정한다. 둘 다 같은 ECS 서비스/태스크 개념 위에서 동작하지만, 밑단이 완전히 다르다.
+  </p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size: 0.88rem; margin-top: 0.5rem;">
+    <thead>
+      <tr style="border-bottom: 2px solid var(--border);">
+        <th style="text-align:left; padding: 0.5rem;"></th>
+        <th style="text-align:left; padding: 0.5rem;">EC2 launch type</th>
+        <th style="text-align:left; padding: 0.5rem;">Fargate launch type</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom: 1px solid var(--border);">
+        <td style="padding: 0.5rem;">컨테이너가 도는 곳</td>
+        <td style="padding: 0.5rem;">내가 띄운 EC2 인스턴스</td>
+        <td style="padding: 0.5rem;">AWS가 관리하는 서버리스 인프라</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border);">
+        <td style="padding: 0.5rem;">인스턴스 타입/AMI 선택</td>
+        <td style="padding: 0.5rem;">직접 (LaunchTemplate)</td>
+        <td style="padding: 0.5rem;">필요 없음</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border);">
+        <td style="padding: 0.5rem;">패치·보안 업데이트</td>
+        <td style="padding: 0.5rem;">직접</td>
+        <td style="padding: 0.5rem;">AWS 책임</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border);">
+        <td style="padding: 0.5rem;">용량 스케일링</td>
+        <td style="padding: 0.5rem;">ASG + CapacityProvider 직접 구성</td>
+        <td style="padding: 0.5rem;">Fargate가 태스크 단위로 자동 확보</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border);">
+        <td style="padding: 0.5rem;">배치(Placement) 전략</td>
+        <td style="padding: 0.5rem;">여러 인스턴스 중 어디에 놓을지 지정 가능</td>
+        <td style="padding: 0.5rem;">지원 안 함 — AWS가 서브넷 간 자동 분산</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--border);">
+        <td style="padding: 0.5rem;">SSH 접속</td>
+        <td style="padding: 0.5rem;">키페어로 인스턴스 SSH</td>
+        <td style="padding: 0.5rem;">불가 — ECS Exec(SSM)로 컨테이너 직접 접속</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    이번 마이그레이션(Phase 1: #273)에서 <code>Ec2Service</code> → <code>FargateService</code>로
+    바꾸고, Phase 2(#274)에서 EC2 launch type을 위해 존재하던 LaunchTemplate/ASG/
+    AsgCapacityProvider 코드(<code>ecs.ts</code>)를 통째로 삭제했다. Fargate는 그런 걸
+    아예 요구하지 않기 때문이다.
+  </p>
+
+  <h2>Fargate로 바꿔도 "여전히 우리가 정하는 것"</h2>
+
+  <p>
+    여기서 착각하기 쉬운 지점 — Fargate가 "서버"를 대신 관리해준다고 해서 모든 설정이
+    사라지는 건 아니다. 정확히는 <strong>"호스트 레벨" 결정은 Fargate가 가져가고,
+    "태스크 레벨" 스펙은 여전히 우리가 지정</strong>한다.
+  </p>
+
+  <ul>
+    <li>CPU/메모리 크기 — <code>cpu: '2048', memoryMiB: '4096'</code> (Task Definition)</li>
+    <li>CPU 아키텍처(ARM64 vs x86) — <code>runtimePlatform</code></li>
+    <li>서비스가 몇 개 떠 있을지, 오토스케일링 임계치 — <code>ServiceMinCapacity</code>/<code>cpuScaling</code> 등 (Service)</li>
+  </ul>
+
+  <h2>ARM64/Graviton은 EC2 → Fargate 전환과 무관하게 유지된다</h2>
+
+  <p>
+    이 레포는 이미 ARM64(Graviton) 아키텍처로 이미지를 빌드해서 쓰고 있었다. Phase 2에서
+    삭제된 건 "M7G(Graviton3) EC2 인스턴스 타입을 고르는 LaunchTemplate"뿐이고, Task
+    Definition의 아키텍처 지정은 그대로 남았다.
+  </p>
+
+<pre><code>// people-sidekiq-task.ts — Phase 2 이후에도 그대로 남아있는 부분
+runtimePlatform: {
+  cpuArchitecture: ecs.CpuArchitecture.ARM64,   // 이미지가 ARM64 빌드이므로 명시 필수
+  operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
+},</code></pre>
+
+  <p>
+    Fargate도 ARM64 runtime을 지원하고, x86보다 vCPU/메모리당 더 저렴하다 — EC2 시절
+    Graviton을 쓰던 이유(비용·성능)가 Fargate에서도 그대로 이어진다. 바뀐 건 "그 ARM64
+    워크로드를 누가 호스팅하느냐"일 뿐, "ARM으로 포팅해둔 작업 자체"는 여전히 이득을 보고
+    있다.
+  </p>
+
+  <div class="analogy">
+    EC2 launch type은 "내가 서버를 사서 Node.js 앱을 직접 배포·운영"하는 것과 비슷하고,
+    Fargate는 Vercel/Netlify에 배포하는 것과 비슷하다 — 인스턴스 타입도, OS 패치도,
+    스케일링 설정도 신경 안 쓰고 "이 빌드를 얼마의 메모리로 실행해줘"만 지정하면 나머지는
+    플랫폼이 알아서 한다. 다만 Vercel도 "함수 메모리/타임아웃"은 여전히 내가 지정하는 것처럼,
+    Fargate도 "태스크 CPU/메모리"는 여전히 우리 몫이다.
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — Task Definition vs Service</h3>
+    <p class="quiz-q">Task Definition과 Service의 역할 차이를 가장 정확히 설명한 것은?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">Task Definition이 실행 중인 컨테이너이고 Service는 그 로그를 보여주는 대시보드다</button></li>
+      <li><button onclick="answer(this,'q1',true)">Task Definition은 "무엇을 어떻게 띄울지" 적은 설계도이고, Service는 그 설계도대로 N개를 계속 띄워두고 관리하는 컨트롤러다</button></li>
+      <li><button onclick="answer(this,'q1',false)">Task Definition은 EC2 전용이고 Service는 Fargate 전용이다</button></li>
+      <li><button onclick="answer(this,'q1',false)">둘은 같은 것을 가리키는 다른 이름일 뿐이다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — EC2 vs Fargate</h3>
+    <p class="quiz-q">Fargate launch type으로 전환하면서 없어지는 것은?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">Task Definition에 CPU/메모리를 지정하는 것</button></li>
+      <li><button onclick="answer(this,'q2',true)">LaunchTemplate/ASG/CapacityProvider처럼 컨테이너를 올릴 EC2 인스턴스를 직접 관리하는 것</button></li>
+      <li><button onclick="answer(this,'q2',false)">Task Definition에 CPU 아키텍처(ARM64/x86)를 지정하는 것</button></li>
+      <li><button onclick="answer(this,'q2',false)">Service의 오토스케일링 설정</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 3 — ARM64/Graviton의 지속성</h3>
+    <p class="quiz-q">EC2에서 Fargate로 전환할 때 ARM64(Graviton) 아키텍처 선택은 어떻게 되는가?</p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">Fargate는 ARM64를 지원하지 않아 x86으로 강제 전환해야 한다</button></li>
+      <li><button onclick="answer(this,'q3',false)">EC2 인스턴스 타입 선택과 함께 의미가 없어진다</button></li>
+      <li><button onclick="answer(this,'q3',true)">Fargate도 ARM64 runtime을 지원하므로, Task Definition의 runtimePlatform 지정은 그대로 유지되고 비용·성능 이점도 이어진다</button></li>
+      <li><button onclick="answer(this,'q3',false)">ARM64는 CodeBuild 빌드 단계에서만 의미가 있고 ECS와는 무관하다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <p class="source">
+    참고: <a href="https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate.html" target="_blank">AWS 공식 문서 — AWS Fargate</a> ·
+    <a href="https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_definition_parameters.html" target="_blank">AWS 공식 문서 — Task Definition Parameters</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 궁금한 점이 있으면 바로 물어보세요. ECS Exec로 Fargate 컨테이너에 접속하는 법,
+    Application Auto Scaling이 CPU/메모리 알람 기준으로 태스크 개수를 조정하는 원리 같은
+    심화 질문도 환영합니다.
+  </div>
+
+  <div class="nav-links">
+    <a href="0039-thread-pool-and-transaction-boundary.html">← 레슨 39: 스레드 풀과 트랜잭션 경계</a>
+    <a href="0041-cdk-deployment-guard-and-codepipeline.html">레슨 41: CDK 배포 가드와 CodePipeline →</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. Task Definition은 설계도(이미지·CPU·메모리·커맨드), Service는 그 설계도대로 여러 개를 계속 띄워두고 재시작·로드밸런서 연결·오토스케일링까지 관리하는 컨트롤러입니다.",
+        wrong: "아니에요. Task Definition은 '무엇을 어떻게 띄울지' 적은 설계도이고, Service는 그 설계도대로 N개를 계속 띄워두고 관리하는 쪽입니다."
+      },
+      q2: {
+        correct: "맞아요. Fargate는 '서버(호스트) 레벨' 관리(인스턴스 타입, ASG, 용량 관리)를 대신해줍니다. CPU/메모리 크기, 아키텍처 지정, 오토스케일링 설정 같은 '태스크·서비스 레벨' 스펙은 Fargate에서도 여전히 우리가 정합니다.",
+        wrong: "아니에요. Fargate에서도 CPU/메모리, 아키텍처, 오토스케일링 같은 태스크·서비스 레벨 설정은 그대로 우리가 지정합니다. 없어지는 건 EC2 인스턴스를 직접 관리하는 부분입니다."
+      },
+      q3: {
+        correct: "맞아요. Fargate도 ARM64 runtime을 지원하고 x86보다 저렴해서, EC2 시절 Graviton을 쓰던 이유가 그대로 이어집니다. 바뀐 건 '호스팅 주체'뿐입니다.",
+        wrong: "아니에요. Fargate는 ARM64 runtime을 지원하며, Task Definition의 runtimePlatform 지정은 EC2→Fargate 전환과 무관하게 그대로 유지됩니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>

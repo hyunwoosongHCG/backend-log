@@ -218,3 +218,43 @@
 - [ ] 오프셋 커밋 시점 (`mark_as_consumed` 타이밍)
 - [ ] Saga의 Choreography vs Orchestration 구현 방식 차이
 - [ ] Bounded Context가 실제 코드/레포 경계에서 어떻게 드러나는지
+
+---
+
+## 섹션 6. AWS 인프라 / CDK
+
+> aws-infra-architecture 레포(performance-plus, CDK/TypeScript)의 ECS EC2→Fargate 마이그레이션 PR(#273 Phase 1, #274 Phase 2)을 리뷰하며 처음 마주친 개념들.
+
+### ECS 기본 개념
+
+- [x] ECS(Elastic Container Service)란? → [레슨](lessons/0040-ecs-ec2-vs-fargate.html) | [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md)
+- [x] EC2 launch type vs Fargate launch type → [레슨](lessons/0040-ecs-ec2-vs-fargate.html) | [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md)
+- [x] Task Definition(설계도) vs Service(실행·재시작·LB 연결 관리자) → [레슨](lessons/0040-ecs-ec2-vs-fargate.html) | [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md) · [배운 작업](work-log/2026-07-15-pr-274-ecs-ec2-removal-review.md)
+- [x] Task Definition의 `compatibility`/`RequiresCompatibilities` → [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md)
+- [x] Fargate CPU/메모리 quantization (256/512/1024... 단위 제약) → [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md)
+- [x] `runtimePlatform`(CPU 아키텍처 명시)과 ARM64/Graviton 선택이 EC2→Fargate 전환과 독립적으로 유지된다는 것 → [레슨](lessons/0040-ecs-ec2-vs-fargate.html) | [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md) · [배운 작업](work-log/2026-07-15-pr-274-ecs-ec2-removal-review.md)
+- [x] Placement Strategy는 Fargate 미지원(AWS가 서브넷 간 자동 분산) → [레슨](lessons/0040-ecs-ec2-vs-fargate.html) | [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md)
+- [x] ECS Exec — SSM 세션 관리로 SSH 없이 컨테이너 접속 → [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md)
+- [x] Deployment Circuit Breaker — 배포 실패 시 즉시 롤백 → [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md)
+- [ ] AWS Application Auto Scaling — CPU/메모리 알람 기준 태스크 개수 조정 원리
+- [ ] IAM Role의 `assumedBy` vs managed/inline policy, taskRole vs executionRole vs serverRole 차이
+
+### CloudFormation / CDK
+
+- [x] CloudFormation의 in-place Update vs Replacement → [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md)
+- [x] CDK L1 escape hatch (`node.defaultChild`로 L2가 안 감싸는 속성에 직접 접근) → [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md)
+- [x] CDK Nested Stack vs Construct (논리 ID 계층 차이) → [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md)
+- [x] CDK Context — `tryGetContext`로 읽는 임의 커스텀 키 vs `cdk.json`의 `@aws-cdk/<모듈>:<플래그>` 예약된 feature flag → [레슨](lessons/0041-cdk-deployment-guard-and-codepipeline.html) | [배운 작업](work-log/2026-07-15-pr-274-ecs-ec2-removal-review.md)
+- [x] 배포 가드 패턴 — opt-in context flag로 위험한 스택(production/demo)을 기본 assembly에서 제외 → [레슨](lessons/0041-cdk-deployment-guard-and-codepipeline.html) | [배운 작업](work-log/2026-07-15-pr-274-ecs-ec2-removal-review.md)
+- [ ] `CfnParameter`(배포 시점 파라미터) vs CDK context(합성 시점 값)의 차이
+- [ ] `cdk.context.json` 캐시가 정확히 뭘 저장하길래 AWS 자격증명 없이 오프라인 synth가 가능한지
+
+### CI/CD (CodePipeline/CodeBuild)
+
+- [x] CodePipeline `EcsDeployAction` + `imageDef.json` 아티팩트로 서비스별 배포 이미지 지정 → [레슨](lessons/0041-cdk-deployment-guard-and-codepipeline.html) | [배운 작업](work-log/2026-07-15-pr-274-ecs-ec2-removal-review.md)
+- [x] `CodeStarConnectionsSourceAction`의 `triggerOnPush` — GitHub push 자동 트리거 여부 → [레슨](lessons/0041-cdk-deployment-guard-and-codepipeline.html) | [배운 작업](work-log/2026-07-15-pr-274-ecs-ec2-removal-review.md)
+- [ ] CodeBuild buildspec.yml 문법과 `*ImageDef.json` 아티팩트 생성 방식
+
+### 개발 도구
+
+- [x] git worktree로 로컬 브랜치 안 건드리고 다른 브랜치 격리 테스트 → [배운 작업](work-log/2026-07-15-pr-274-ecs-ec2-removal-review.md)
