@@ -34,6 +34,9 @@
 - DataWrapper / grape-swagger 응답 스키마 자동 생성 — 2026-07-03
 - Read Replica 라우팅 (connects_to/connected_to, 멀티 DB) — 2026-07-03
 - Rails 리소스 라우팅 (resources, canonical actions, collection/member/new, only/except, nested) — 2026-07-03
+- 행 잠금(Row Locking)과 동시성 제어 (with_lock, SELECT ... FOR UPDATE, 데드락) — 2026-07-15
+- 인덱스(Index)와 복합 인덱스 Leftmost-Prefix 규칙 — 2026-07-15
+- 트랜잭션 격리 수준(Isolation Level), Dirty/Non-Repeatable/Phantom Read, Lost Update — 2026-07-16
 
 ## 주의사항
 

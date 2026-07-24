@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 43 — 인덱스(Index)란 무엇이고, 복합 인덱스는 왜 순서가 중요한가</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>인덱스란 무엇인가 — 그리고 복합 인덱스의 Leftmost-Prefix 규칙</h1>
+  <div class="lesson-meta">
+    <span>레슨 043</span>
+    <span>Index · Composite Index · Leftmost-Prefix</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 레슨 42(데드락)에서 남긴 질문 — "with_lock 안의 update_all이 왜 하필 넓은 범위를 잠갔나"에
+    대한 답 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>출발점 — 인덱스가 없는 컬럼으로 조회하면?</h2>
+
+  <p>
+    레슨 42에서 본 데드락의 진짜 원인은 이 한 줄이었다.
+  </p>
+
+<pre><code># app/services/objective_approve_update.rb:78
+KeyResult.where(super_key_result_id: value[:prev][:id]).update_all(super_key_result_id: nil)</code></pre>
+
+  <p>
+    이 쿼리가 "행 몇 개만 딱 짚어서" 잠그면 문제가 없다. 그런데 실제로는 <code>key_results</code>
+    테이블을 훨씬 넓게 훑으면서 잠갔다 — 그 이유가 인덱스에 있다.
+  </p>
+
+  <h2>인덱스(Index)란 무엇인가</h2>
+
+  <p>
+    테이블에 인덱스가 없으면, 조건에 맞는 행을 찾기 위해 DB는 <strong>모든 행을 처음부터
+    끝까지 확인</strong>해야 한다 — 이걸 풀 테이블 스캔(Full Table Scan)이라고 한다. 행이
+    100만 개면 100만 개를 다 본다.
+  </p>
+
+  <div class="analogy">
+    JS로 치면 <code>array.find(x => x.id === target)</code>과 <code>map.get(target)</code>의
+    차이다. <code>Array#find</code>는 조건에 맞는 게 나올 때까지 앞에서부터 순서대로
+    본다 — O(n). <code>Map#get</code>은 내부적으로 해시 구조를 이용해 바로 그 위치로
+    찾아간다 — O(1)에 가깝다. <strong>인덱스는 DB 버전의 Map/해시 구조</strong>다 — 특정
+    컬럼 값으로 "이 값은 어느 행에 있다"를 미리 정렬된 자료구조(보통 B-Tree)로 만들어두고,
+    조회할 때 그 구조를 타고 바로 찾아간다.
+  </div>
+
+  <p>
+    대가는 있다 — 인덱스도 데이터이므로 저장 공간을 차지하고, 데이터가 바뀔 때마다(INSERT,
+    UPDATE, DELETE) 인덱스도 같이 갱신해야 해서 쓰기 성능이 조금 느려진다. 그래서 "자주
+    <code>WHERE</code>/<code>JOIN</code>/<code>ORDER BY</code>에 쓰이는 컬럼"에만 선별적으로 건다.
+  </p>
+
+  <h2>복합 인덱스(Composite Index)와 컬럼 순서</h2>
+
+  <p>
+    <code>key_results</code> 테이블의 실제 스키마를 보자.
+  </p>
+
+<pre><code># db/schema.rb:1685
+t.index ["active", "super_key_result_id"], name: "child_key_result_index"</code></pre>
+
+  <p>
+    이건 <code>active</code> 컬럼과 <code>super_key_result_id</code> 컬럼을
+    <strong>이 순서 그대로</strong> 묶어서 만든 복합 인덱스다. 책의 색인(index)에 비유하면,
+    "가나다순으로 첫 글자 → 둘째 글자" 순서로 정렬된 것과 같다 — 첫 글자를 모르는 채
+    둘째 글자만으로 책을 뒤지면 색인을 제대로 활용할 수 없다.
+  </p>
+
+  <h2>Leftmost-Prefix 규칙</h2>
+
+  <p>
+    복합 인덱스 <code>(A, B)</code>는 <strong>A로 시작하는 조회</strong>에서만 온전히
+    활용된다. 이걸 leftmost-prefix(최좌측 접두사) 규칙이라 부른다.
+  </p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">쿼리 조건</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">인덱스 <code>(active, super_key_result_id)</code> 활용?</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>WHERE active = true</code></td>
+        <td style="padding:0.4rem 0.5rem;">✅ 가능 — 맨 앞 컬럼(A)만 써도 leftmost prefix</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>WHERE active = true AND super_key_result_id = 5</code></td>
+        <td style="padding:0.4rem 0.5rem;">✅ 가능 — (A, B) 둘 다 순서대로 사용</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;"><code>WHERE super_key_result_id = 5</code> ← 우리 코드</td>
+        <td style="padding:0.4rem 0.5rem;">⚠️ 비효율적 — 맨 앞 컬럼(A) 없이 B만 쓰면 이 인덱스로 바로 찾아갈 수 없다</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    <code>KeyResult.where(super_key_result_id: value[:prev][:id])</code>는 <code>active</code>
+    조건이 없다. 색인의 "둘째 글자"만 들고 책을 뒤지는 것과 같아서, MySQL은 이 인덱스를
+    깔끔하게 타지 못하고 훨씬 많은 행(최악의 경우 테이블 전체)을 훑어야 한다. 그 과정에서
+    <code>UPDATE</code>가 잠그는 행(과 인덱스 갭)도 함께 넓어진다 — 이게 레슨 42에서 본
+    데드락의 락 범위가 넓어진 진짜 이유다.
+  </p>
+
+  <div class="analogy">
+    TypeScript 타입으로 억지로 비유하면, 복합 인덱스는 중첩 객체 키 순서와 비슷하다.
+    <code>{ [active: string]: { [superKeyResultId: number]: Row[] } }</code> 구조가 있다고
+    하자. <code>data['true']</code>는 바로 꺼낼 수 있지만, "active 값에 상관없이
+    <code>superKeyResultId</code>가 5인 것만 다 찾아줘"는 바깥 키를 모르니 모든
+    <code>active</code> 값을 순회하며 안쪽을 뒤져야 한다 — 정확히 같은 비대칭이다.
+  </div>
+
+  <p>
+    반대로 <code>objectives</code> 테이블은 어떨까.
+  </p>
+
+<pre><code># db/schema.rb:2273
+t.index ["super_key_result_id"], name: "index_objectives_on_super_key_result_id"</code></pre>
+
+  <p>
+    여긴 <code>super_key_result_id</code> 단독 인덱스가 따로 있다. 그래서 같은 서비스
+    코드의 <code>Objective.where(super_key_result_id: ...).update_all(...)</code>은
+    <code>key_results</code> 쪽보다 훨씬 좁게 잠긴다 — 같은 패턴의 코드인데 테이블마다
+    안전도가 다르다는 뜻이다.
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — 인덱스의 목적</h3>
+    <p class="quiz-q">인덱스가 존재하는 근본 목적은?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">데이터를 압축해서 저장 공간을 줄이기 위해서</button></li>
+      <li><button onclick="answer(this,'q1',true)">조건에 맞는 행을 풀 테이블 스캔 없이 빠르게 찾기 위해서</button></li>
+      <li><button onclick="answer(this,'q1',false)">INSERT/UPDATE 속도를 높이기 위해서</button></li>
+      <li><button onclick="answer(this,'q1',false)">외래키 제약을 자동으로 걸어주기 위해서</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — Leftmost-Prefix</h3>
+    <p class="quiz-q">
+      복합 인덱스가 <code>["active", "super_key_result_id"]</code> 순서로 걸려 있다.
+      <code>WHERE super_key_result_id = 5</code>만으로 조회하면?
+    </p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">인덱스가 그대로 온전히 활용되어 매우 빠르다</button></li>
+      <li><button onclick="answer(this,'q2',true)">맨 앞 컬럼(active) 조건이 없어 이 인덱스를 효율적으로 타지 못하고, 더 많은 행을 훑게 될 수 있다</button></li>
+      <li><button onclick="answer(this,'q2',false)">에러가 나서 쿼리 자체가 실패한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">MySQL이 자동으로 컬럼 순서를 바꿔서 인덱스를 재구성한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 3 — 인덱스와 락의 관계</h3>
+    <p class="quiz-q">
+      <code>UPDATE</code>/<code>DELETE</code>가 인덱스를 효율적으로 타지 못하고 더 많은 행을
+      훑게 되면, 동시성 관점에서 어떤 위험이 커지는가?
+    </p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">아무 영향 없다 — 락은 인덱스와 무관하게 항상 같은 범위로 걸린다</button></li>
+      <li><button onclick="answer(this,'q3',true)">스캔한 행(과 갭)만큼 락 범위가 넓어져, 다른 트랜잭션과 겹쳐 잠글 확률(데드락 위험)이 커진다</button></li>
+      <li><button onclick="answer(this,'q3',false)">인덱스가 없으면 오히려 락이 아예 걸리지 않는다</button></li>
+      <li><button onclick="answer(this,'q3',false)">쿼리가 자동으로 트랜잭션 밖에서 실행된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">항목</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">설명</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">인덱스</td>
+        <td style="padding:0.4rem 0.5rem;">특정 컬럼 값 → 행 위치를 미리 정렬해둔 자료구조(B-Tree). 풀 테이블 스캔을 피하게 해줌</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">복합 인덱스</td>
+        <td style="padding:0.4rem 0.5rem;">여러 컬럼을 정해진 순서로 묶은 인덱스. 순서가 곧 정렬 기준이 됨</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Leftmost-Prefix 규칙</td>
+        <td style="padding:0.4rem 0.5rem;">복합 인덱스 (A, B)는 A(또는 A+B)로 조회할 때만 온전히 활용됨. B만으로는 비효율적</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">이번 버그의 교훈</td>
+        <td style="padding:0.4rem 0.5rem;">잘 안 맞는 인덱스로 <code>update_all</code>을 돌리면 락 범위가 넓어지고, 동시 요청과 겹쳐 데드락(레슨 42) 위험이 커진다</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고: <a href="https://dev.mysql.com/doc/refman/8.4/en/multiple-column-indexes.html" target="_blank">MySQL 8.4 Reference — Multiple-Column Indexes</a> ·
+    <a href="https://use-the-index-luke.com/sql/where-clause/the-equals-operator/concatenated-keys" target="_blank">Use The Index, Luke! — Concatenated Keys</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 궁금한 점이 있으면 바로 물어보세요. <code>super_key_result_id</code> 단독 인덱스를
+    추가하는 게 정말 안전한 해결책인지, 인덱스가 늘어나면 쓰기 성능에 어떤 트레이드오프가
+    생기는지 같은 심화 질문도 환영합니다.
+  </div>
+
+  <div class="nav-links">
+    <a href="0042-row-locking-and-deadlock.html">← 레슨 42: 행 잠금과 데드락</a>
+    <a href="0044-transaction-isolation-level.html">레슨 44: 트랜잭션 격리 수준 →</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. 인덱스의 핵심 목적은 조건에 맞는 행을 풀 테이블 스캔 없이 빠르게 찾는 것입니다.",
+        wrong: "아니에요. 압축이나 쓰기 속도 향상이 목적이 아닙니다 — 오히려 인덱스가 늘면 쓰기는 조금 느려집니다. 목적은 조회 시 풀 테이블 스캔을 피하는 것입니다."
+      },
+      q2: {
+        correct: "맞아요. 복합 인덱스 (active, super_key_result_id)는 active 조건 없이 super_key_result_id만으로 조회하면 leftmost-prefix 규칙 때문에 온전히 활용되지 못합니다.",
+        wrong: "아니에요. 에러가 나거나 자동 재구성되지 않습니다 — 다만 맨 앞 컬럼 조건이 없으면 이 인덱스를 효율적으로 타지 못해 더 많은 행을 훑게 됩니다."
+      },
+      q3: {
+        correct: "맞아요. 인덱스를 잘 타지 못해 더 많은 행을 스캔하면, UPDATE/DELETE가 그만큼 넓게 락을 걸게 되고 다른 트랜잭션과 겹칠 확률(데드락 위험)이 커집니다.",
+        wrong: "아니에요. 락 범위는 실제로 스캔한 행(과 인덱스 갭)에 비례합니다 — 인덱스를 잘 타지 못하면 락도 그만큼 넓어집니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>

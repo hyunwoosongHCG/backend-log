@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 44 — 트랜잭션 격리 수준(Isolation Level)이란</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>트랜잭션 격리 수준(Isolation Level) — 동시 트랜잭션은 서로에게 무엇을 감추는가</h1>
+  <div class="lesson-meta">
+    <span>레슨 044</span>
+    <span>Isolation Level · Dirty Read · Phantom Read · REPEATABLE READ</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 레슨 24 마지막에 남겨둔 질문 — "트랜잭션 격리 수준(Isolation Level)이 동시 요청엔 어떤 영향을
+    주나요?"에 대한 답. 레슨 42(행 잠금)와 이어지는 심화 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>레슨 24는 "트랜잭션 하나 안"의 이야기였다</h2>
+
+  <p>
+    레슨 24에서 다룬 원자성(Atomicity)은 <strong>하나의 트랜잭션 내부</strong>의 이야기였다 —
+    그 안의 여러 쓰기가 전부 성공하거나 전부 실패하거나. 그런데 ACID에는 원자성 말고
+    <strong>격리성(Isolation)</strong>도 있다. 이건 완전히 다른 질문이다 — "동시에 실행 중인
+    <strong>서로 다른</strong> 트랜잭션들이 서로에게 어디까지 보이는가?"
+  </p>
+
+  <div class="analogy">
+    두 명의 매니저가 동시에 같은 Objective 상세 페이지를 열어놓고, 한 명은 진행률을 조회하고
+    다른 한 명은 그 진행률을 수정해서 저장하는 상황을 생각해보자. 프론트에서는 "낙관적 UI
+    업데이트" 정도로 생각하고 넘어갈 수 있지만, DB 입장에서는 이게 정확히 격리 수준이 다루는
+    문제다 — 두 트랜잭션이 겹치는 순간, 한쪽이 다른 쪽의 "아직 커밋 안 된" 또는 "방금 바뀐"
+    데이터를 보게 해줄 것이냐를 DB가 결정해야 한다.
+  </div>
+
+  <h2>격리가 느슨하면 생기는 3가지 읽기 이상현상</h2>
+
+  <p>
+    격리 수준이 낮을수록 아래 현상들이 일어날 수 있다. SQL 표준이 정의하는 3가지다.
+  </p>
+
+  <h3>① Dirty Read — 커밋 전 데이터를 읽어버림</h3>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">시점</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">트랜잭션 A</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">트랜잭션 B</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">t1</td>
+        <td style="padding:0.4rem 0.5rem;"><code>UPDATE objectives SET stage='open' WHERE id=1</code> (아직 커밋 안 함)</td>
+        <td style="padding:0.4rem 0.5rem;">—</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">t2</td>
+        <td style="padding:0.4rem 0.5rem;">—</td>
+        <td style="padding:0.4rem 0.5rem;"><code>SELECT stage FROM objectives WHERE id=1</code> → <code>'open'</code>을 읽음</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">t3</td>
+        <td style="padding:0.4rem 0.5rem;"><code>ROLLBACK</code> (A가 취소됨!)</td>
+        <td style="padding:0.4rem 0.5rem;">이미 <strong>존재한 적 없는 값</strong>을 읽고 그걸로 뭔가 처리해버림</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>② Non-Repeatable Read — 같은 행을 두 번 읽었는데 값이 다름</h3>
+
+  <p>
+    한 트랜잭션 안에서 같은 행을 두 번 조회했는데, 그 사이에 다른 트랜잭션이 값을 바꾸고
+    커밋해버려서 <strong>두 번째 조회 결과가 첫 번째와 달라지는</strong> 현상.
+  </p>
+
+  <h3>③ Phantom Read — 같은 조건인데 행의 개수가 달라짐</h3>
+
+  <p>
+    한 트랜잭션 안에서 같은 <code>WHERE</code> 조건으로 두 번 조회했는데, 그 사이에 다른
+    트랜잭션이 조건에 맞는 행을 <code>INSERT</code>해버려서 <strong>두 번째 조회에서 없던
+    행(유령, phantom)이 나타나는</strong> 현상. Non-Repeatable Read가 "같은 행의 값 변화"라면,
+    Phantom Read는 "같은 조건의 행 개수 변화"다.
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — 현상 구분</h3>
+    <p class="quiz-q">
+      트랜잭션 A가 <code>WHERE status='pending'</code>으로 두 번 조회했다. 첫 번째는 5건,
+      두 번째는 6건이었다 (그 사이 B가 새 pending 행을 커밋함). 이건 어떤 현상인가?
+    </p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">Dirty Read</button></li>
+      <li><button onclick="answer(this,'q1',false)">Non-Repeatable Read</button></li>
+      <li><button onclick="answer(this,'q1',true)">Phantom Read</button></li>
+      <li><button onclick="answer(this,'q1',false)">Lost Update</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>SQL 표준 4단계 격리 수준</h2>
+
+  <p>
+    이 3가지 현상을 각각 어디까지 막아주느냐로 SQL 표준은 4단계 격리 수준을 정의한다.
+    아래로 갈수록 더 엄격하고 안전하지만, 그만큼 락을 더 많이/오래 걸어서 <strong>동시
+    처리량(throughput)은 떨어진다</strong> — 안전성과 동시성은 항상 트레이드오프다.
+  </p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">격리 수준</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">Dirty Read</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">Non-Repeatable Read</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">Phantom Read</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">READ UNCOMMITTED</td>
+        <td style="padding:0.4rem 0.5rem;">발생 가능</td>
+        <td style="padding:0.4rem 0.5rem;">발생 가능</td>
+        <td style="padding:0.4rem 0.5rem;">발생 가능</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">READ COMMITTED</td>
+        <td style="padding:0.4rem 0.5rem;">✅ 방지</td>
+        <td style="padding:0.4rem 0.5rem;">발생 가능</td>
+        <td style="padding:0.4rem 0.5rem;">발생 가능</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">REPEATABLE READ</td>
+        <td style="padding:0.4rem 0.5rem;">✅ 방지</td>
+        <td style="padding:0.4rem 0.5rem;">✅ 방지</td>
+        <td style="padding:0.4rem 0.5rem;">표준상 발생 가능 (MySQL은 실제로 대부분 방지 — 아래 참고)</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">SERIALIZABLE</td>
+        <td style="padding:0.4rem 0.5rem;">✅ 방지</td>
+        <td style="padding:0.4rem 0.5rem;">✅ 방지</td>
+        <td style="padding:0.4rem 0.5rem;">✅ 방지</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>MySQL(InnoDB)의 기본값은 REPEATABLE READ</h2>
+
+  <p>
+    여기서 실무 함정 하나 — <strong>PostgreSQL, Oracle, SQL Server는 기본 격리 수준이
+    READ COMMITTED</strong>다. Performance Plus가 쓰는 MySQL만 기본값이 REPEATABLE READ다.
+    다른 DB를 먼저 써본 사람이 MySQL로 넘어오면 "어? 왜 이 값이 안 바뀌어 보이지"하고
+    헷갈리는 지점이 바로 여기다.
+  </p>
+
+<pre><code>SELECT @@transaction_isolation;
+-- MySQL 기본값: REPEATABLE-READ</code></pre>
+
+  <p>
+    그리고 표에서 "표준상 발생 가능"이라고 써둔 Phantom Read — MySQL의 InnoDB는 MVCC(다중
+    버전 동시성 제어)와 Next-Key Lock이라는 자체 구현 덕분에 REPEATABLE READ에서도 실제로는
+    Phantom Read 대부분을 막아준다. 이건 SQL 표준이 요구하는 최소 보장을 MySQL이 자체
+    구현으로 더 얹어준 것이다 — 표준 이론과 특정 DB의 실제 동작이 다를 수 있다는 걸 보여주는
+    좋은 예다. (레슨 43에서 본 Next-Key Lock의 "갭 락(gap lock)"이 바로 이 방지 메커니즘의
+    일부다.)
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — MySQL 기본 격리 수준</h3>
+    <p class="quiz-q">Performance Plus가 쓰는 MySQL(InnoDB)의 기본 격리 수준은?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">READ UNCOMMITTED</button></li>
+      <li><button onclick="answer(this,'q2',false)">READ COMMITTED (PostgreSQL/Oracle과 같음)</button></li>
+      <li><button onclick="answer(this,'q2',true)">REPEATABLE READ</button></li>
+      <li><button onclick="answer(this,'q2',false)">SERIALIZABLE</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>그런데 격리 수준만으로는 못 막는 것 — Lost Update</h2>
+
+  <p>
+    Lost Update(유실된 업데이트)는 SQL 표준의 3대 현상 목록엔 없지만, 실무에서 가장 자주
+    만나는 동시성 버그다. 레슨 42 도입부에서 든 재고 예시가 정확히 이거였다 — 애플리케이션
+    코드가 <strong>읽고(SELECT) → 계산 → 쓰는(UPDATE)</strong> 두 단계로 나뉘어 있을 때 생긴다.
+  </p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">시점</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">트랜잭션 A</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">트랜잭션 B</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">t1</td>
+        <td style="padding:0.4rem 0.5rem;"><code>progress</code> 읽음 → <code>5</code></td>
+        <td style="padding:0.4rem 0.5rem;"><code>progress</code> 읽음 → <code>5</code></td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">t2</td>
+        <td style="padding:0.4rem 0.5rem;">앱 코드에서 <code>5 + 1 = 6</code> 계산 → <code>UPDATE ... SET progress = 6</code> 커밋</td>
+        <td style="padding:0.4rem 0.5rem;">—</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">t3</td>
+        <td style="padding:0.4rem 0.5rem;">—</td>
+        <td style="padding:0.4rem 0.5rem;">앱 코드에서 <code>5 + 1 = 6</code> 계산 (A의 변경을 모름) → <code>UPDATE ... SET progress = 6</code> 커밋. <strong>A의 +1이 사라짐</strong> (실제로는 7이어야 함)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    핵심은 이거다 — REPEATABLE READ든 뭐든, <strong>격리 수준은 "한 트랜잭션 안에서 읽은 값이
+    일관돼 보이는가"를 보장할 뿐, "다른 트랜잭션이 그 사이 값을 바꿨는지 앱 코드가 알아채게
+    해주는 것"은 아니다.</strong> A와 B는 각자 자기 트랜잭션 관점에서 "5를 읽고 6으로 바꿨다"고
+    믿지만, 두 UPDATE가 순서대로 실행되면서 B가 A를 그냥 덮어써버린다. 이걸 막으려면
+    격리 수준을 SERIALIZABLE까지 올리거나(동시성 대가가 큼), 레슨 42에서 배운
+    <strong><code>with_lock</code>(비관적 락)</strong>으로 애초에 두 번째 트랜잭션이 첫 번째가
+    끝날 때까지 기다리게 만들어야 한다.
+  </p>
+
+  <div class="analogy">
+    레슨 42에서 든 <code>setCount(count + 1)</code> vs <code>setCount(prev =&gt; prev + 1)</code>
+    비유를 다시 가져오면 — Lost Update는 정확히 <code>setCount(count + 1)</code> 패턴이 DB
+    버전으로 일어난 것이다. "오래된 값(count, progress)을 들고 계산해서 덮어쓰기" 자체가
+    문제의 근원이고, 이건 격리 수준이라는 "읽기 규칙"이 아니라 "쓰기 시점에 최신값을 다시
+    확인하거나 잠그는" 별도의 장치로만 막을 수 있다.
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 3 — 격리 수준의 한계</h3>
+    <p class="quiz-q">
+      REPEATABLE READ(MySQL 기본값)만으로 애플리케이션의 "SELECT로 읽고 계산해서 UPDATE로
+      쓰는" 패턴에서 Lost Update를 완전히 막을 수 있는가?
+    </p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">그렇다. REPEATABLE READ는 이름 그대로 재읽기를 보장하므로 Lost Update도 자동으로 막아준다</button></li>
+      <li><button onclick="answer(this,'q3',true)">아니다. 격리 수준은 "읽기의 일관성"을 보장할 뿐, 두 트랜잭션의 read-modify-write 경쟁까지는 못 막는다 — with_lock 같은 명시적 잠금이나 낙관적 락이 별도로 필요하다</button></li>
+      <li><button onclick="answer(this,'q3',false)">그렇다. MySQL은 REPEATABLE READ에서 모든 UPDATE를 자동으로 SERIALIZABLE처럼 처리한다</button></li>
+      <li><button onclick="answer(this,'q3',false)">아니다. 애초에 REPEATABLE READ에서는 UPDATE 자체가 금지된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>Rails에서 격리 수준 지정하기</h2>
+
+  <p>
+    거의 안 쓰지만, 정말 필요하면 트랜잭션 블록 단위로 격리 수준을 올릴 수 있다.
+  </p>
+
+<pre><code>ActiveRecord::Base.transaction(isolation: :serializable) do
+  # 이 블록만 SERIALIZABLE로 실행됨
+end</code></pre>
+
+  <p>
+    단, <strong>이미 열려 있는(중첩된) 트랜잭션 안에서는 격리 수준을 새로 지정할 수 없다</strong> —
+    격리 수준은 트랜잭션이 "시작되는 시점"에만 정할 수 있는 값이기 때문이다. 이미 시작된
+    트랜잭션에 합류(join)하면서 격리 수준을 바꾸려 하면 Rails가 에러를 던진다(정확한 에러
+    메시지는 Rails 버전마다 다를 수 있음).
+  </p>
+
+  <p>
+    실무에서는 격리 수준 자체를 건드리기보다, 기본값(REPEATABLE READ)을 그대로 두고 진짜
+    동시성 경쟁이 생기는 지점만 <code>with_lock</code>으로 좁게 잠그는 쪽이 훨씬 흔한 패턴이다 —
+    SERIALIZABLE로 전체를 올리면 안전하지만 그만큼 모든 요청의 처리량이 떨어지기 때문이다.
+  </p>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">항목</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">설명</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">격리성(Isolation)</td>
+        <td style="padding:0.4rem 0.5rem;">동시에 실행되는 서로 다른 트랜잭션이 서로에게 어디까지 보이는지를 결정하는 ACID의 I</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">3대 이상현상</td>
+        <td style="padding:0.4rem 0.5rem;">Dirty Read(커밋 전 읽기) · Non-Repeatable Read(같은 행 재조회 시 값 변화) · Phantom Read(같은 조건 재조회 시 행 개수 변화)</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">MySQL 기본값</td>
+        <td style="padding:0.4rem 0.5rem;">REPEATABLE READ (PostgreSQL/Oracle 기본값인 READ COMMITTED와 다름)</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">격리 수준의 한계</td>
+        <td style="padding:0.4rem 0.5rem;">Lost Update(read-modify-write 경쟁)는 격리 수준만으로는 못 막음 — with_lock(레슨 42) 또는 낙관적 락이 별도로 필요</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html" target="_blank">MySQL 8.4 Reference — InnoDB Transaction Isolation Levels</a> ·
+    <a href="https://api.rubyonrails.org/classes/ActiveRecord/Transactions/ClassMethods.html" target="_blank">Rails API — ActiveRecord::Transactions::ClassMethods</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 궁금한 점이 있으면 바로 물어보세요. 낙관적 락(Optimistic Locking, <code>lock_version</code>,
+    <code>ActiveRecord::StaleObjectError</code>)은 비관적 락과 언제 나눠 쓰는지, 그리고
+    <code>transaction do</code>를 중첩했을 때 안쪽 블록이 왜 진짜 별도 트랜잭션이 아닌지
+    (<code>requires_new: true</code>와 Savepoint) 같은 심화 질문도 환영합니다.
+  </div>
+
+  <div class="nav-links">
+    <a href="0043-index-and-leftmost-prefix.html">← 레슨 43: 인덱스와 Leftmost-Prefix 규칙</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. 같은 조건으로 두 번 조회했는데 행의 개수가 달라졌다면 Phantom Read입니다 — 같은 행의 값이 바뀐 게 아니라 조건에 맞는 행 자체가 늘어난(또는 줄어든) 경우죠.",
+        wrong: "아니에요. Dirty Read는 커밋 전 데이터를 읽는 것, Non-Repeatable Read는 같은 행의 값이 바뀌는 것, Lost Update는 두 트랜잭션의 쓰기 경쟁으로 업데이트가 사라지는 것입니다. 여기선 '행 개수'가 달라졌으므로 Phantom Read입니다."
+      },
+      q2: {
+        correct: "맞아요. MySQL(InnoDB)의 기본 격리 수준은 REPEATABLE READ입니다. PostgreSQL/Oracle/SQL Server는 기본값이 READ COMMITTED라는 점과 헷갈리지 않도록 주의하세요.",
+        wrong: "아니에요. MySQL(InnoDB)의 기본 격리 수준은 REPEATABLE READ입니다. READ COMMITTED는 오히려 PostgreSQL/Oracle 쪽 기본값입니다."
+      },
+      q3: {
+        correct: "맞아요. 격리 수준은 '한 트랜잭션 안에서 읽는 값이 일관돼 보이는가'를 다룰 뿐, 서로 다른 트랜잭션의 read-modify-write 경쟁(Lost Update)까지 막아주진 않습니다. with_lock 같은 명시적 잠금이나 낙관적 락이 별도로 필요합니다.",
+        wrong: "아니에요. REPEATABLE READ는 '같은 행을 다시 읽어도 값이 바뀌지 않는다'는 보장이지, 서로 다른 트랜잭션의 쓰기 경쟁(Lost Update)까지 막아주는 건 아닙니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>

@@ -43,9 +43,10 @@
 - [x] 기본키(PK)와 외래키(FK) → [레슨](lessons/0004-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [x] 공개 식별자(Public ID)와 내부 PK 분리 패턴 → [정리](concepts/public-id-vs-primary-key.md) | [배운 작업](work-log/2026-07-07-delete-workspace-self-find.md)
 - [ ] 1:1, 1:N, N:M 관계
-- [ ] 인덱스(Index)란? 왜 필요한가
-- [x] 트랜잭션(Transaction)과 ACID → [레슨](lessons/0024-transaction-atomicity-bulk-approval-bug.html) | [배운 작업](work-log/2026-07-03-sentry-batch-approval-atomicity-bug.md)
-- [ ] 행 잠금(Row Locking)과 동시성 제어 (`with_lock`, `SELECT ... FOR UPDATE`)
+- [x] 인덱스(Index)란? 왜 필요한가 → [레슨](lessons/0043-index-and-leftmost-prefix.html)
+- [x] 트랜잭션(Transaction)과 ACID → [레슨](lessons/0024-transaction-atomicity-bulk-approval-bug.html) | [배운 작업](work-log/2026-07-03-sentry-batch-approval-atomicity-bug.md) · [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
+- [x] 행 잠금(Row Locking)과 동시성 제어 (`with_lock`, `SELECT ... FOR UPDATE`) → [레슨](lessons/0042-row-locking-and-deadlock.html)
+- [x] 트랜잭션 격리 수준(Isolation Level)이란 (Dirty/Non-Repeatable/Phantom Read, MySQL 기본값) → [레슨](lessons/0044-transaction-isolation-level.html)
 - [ ] SQL 기본 (SELECT, INSERT, UPDATE, DELETE)
 - [x] JOIN이란? → [레슨](lessons/0004-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 
@@ -125,6 +126,8 @@
 - [x] 쿼리 메서드 (`where`, `find`, `find_by`, `includes`, `joins`) → [배운 작업](work-log/2026-07-07-delete-workspace-self-find.md)
 - [x] N+1 문제란? `includes`로 해결하기 → [레슨](lessons/0009-n-plus-1.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [x] Read Replica 라우팅 (멀티 DB, `connects_to`/`connected_to`) → [정리](concepts/read-replica-routing.md) | [배운 작업](work-log/2026-07-03-controller-routing-and-read-replica.md)
+- [x] `accepts_nested_attributes_for` — 부모 생성/수정 시 자식 레코드 배열을 한 번에 생성/수정/삭제 → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
+- [x] 자기참조 관계(Self-referential Association)와 순환 참조 방지 (closure_tree gem, `cycle_is_not_permitted`) → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
 
 ### Controller
 
@@ -143,6 +146,7 @@
 
 - [ ] RSpec 기초 (`describe`, `it`, `expect`)
 - [ ] `let`과 `let!`의 차이
+- [x] `let_it_be`(test-prof)와 `let`/`let!`의 차이 — 같은 example group 안에서 객체를 재사용하므로, 저장 없는 인메모리 속성 변경 시 다른 예제로 오염될 수 있음 → [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-api-exposure-review.md)
 - [ ] Factory Bot으로 테스트 데이터 만들기
 - [ ] Request spec vs Model spec
 
@@ -160,17 +164,20 @@
 - [ ] `before` 블록과 인증 처리
 - [x] Grape 파라미터 상호 검증 (`at_least_one_of`)과 `default:`의 실행 순서 충돌 → [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
 - [x] Grape는 top-level JSON 배열 body를 못 읽는다 (`Formatter#read_rack_input`의 `body.is_a?(Hash)` 체크) → [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
+- [x] Grape custom validator 작성 (`Grape::Validations::Validators::Base`, `register_validator`, `validate_param!`) — 파라미터 타입 검증을 넘어 "지금 이 값을 써도 되는 상태인가"까지 처리 → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
+- [x] Grape::Entity의 `if:` 조건부 expose — 성능/페이로드 최적화용 게이팅과, 특정 분기에서만 SELECT되는 가상 컬럼 접근 시 `MissingAttributeError`를 막는 정합성 게이팅은 서로 다른 이유일 수 있음 → [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-api-exposure-review.md)
 
 ### 권한
 
-- [ ] Pundit 정책(Policy)이란?
+- [x] Pundit 정책(Policy)이란? → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
 - [ ] `policy_scope`란?
-- [ ] `authorize`란?
+- [x] `authorize`란? (실패 시 `record.errors.add`로 사유 기록 → `errors.empty? && 조건`으로 최종 판정하는 패턴) → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
 
 ### 백그라운드 잡
 
 - [ ] Sidekiq란?
-- [x] 워커(Worker) 작성법 → [정리](concepts/sidekiq-job-argument-pipeline.md) | [배운 작업](work-log/2026-07-03-sidekiq-job-args-and-slack-investigation.md)
+- [x] 워커(Worker) 작성법 → [정리](concepts/sidekiq-job-argument-pipeline.md) | [배운 작업](work-log/2026-07-03-sidekiq-job-args-and-slack-investigation.md) · [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
+- [x] `Sidekiq::Status` gem — `total`/`at`/`store`/`retrieve`로 벌크 job 진행률을 Redis에 기록하고 `job_id`로 폴링 조회 → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
 - [ ] 큐(Queue) 종류와 우선순위
 - [ ] 실패한 잡 재시도
 - [x] job 인자 직렬화 (Marshal vs JSON, `on_complex_arguments`) → [정리](concepts/sidekiq-marshal-vs-json-serialization.md) | [배운 작업](work-log/2026-07-03-sidekiq-job-args-and-slack-investigation.md)
