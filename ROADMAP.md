@@ -44,6 +44,7 @@
 - [x] 공개 식별자(Public ID)와 내부 PK 분리 패턴 → [정리](concepts/public-id-vs-primary-key.md) | [배운 작업](work-log/2026-07-07-delete-workspace-self-find.md)
 - [ ] 1:1, 1:N, N:M 관계
 - [x] 인덱스(Index)란? 왜 필요한가 → [레슨](lessons/0043-index-and-leftmost-prefix.html)
+- [x] 조건부(Partial) 유니크 인덱스 — Postgres의 `WHERE` 조건부 인덱스와, MySQL이 생성 컬럼 + NULL 중복 허용으로 이를 흉내내는 법 → [레슨](lessons/0050-mysql-conditional-unique-index-via-generated-column.html) | [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
 - [x] 트랜잭션(Transaction)과 ACID → [레슨](lessons/0024-transaction-atomicity-bulk-approval-bug.html) | [배운 작업](work-log/2026-07-03-sentry-batch-approval-atomicity-bug.md) · [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
 - [x] 행 잠금(Row Locking)과 동시성 제어 (`with_lock`, `SELECT ... FOR UPDATE`) → [레슨](lessons/0042-row-locking-and-deadlock.html)
 - [x] 트랜잭션 격리 수준(Isolation Level)이란 (Dirty/Non-Repeatable/Phantom Read, MySQL 기본값) → [레슨](lessons/0044-transaction-isolation-level.html)
@@ -120,7 +121,7 @@
 - [x] 연관관계 (`belongs_to`, `has_many`, `has_one`, `has_many :through`) → [레슨](lessons/0008-active-record-associations.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [x] 폴리모픽 연관관계 (`belongs_to ..., polymorphic: true`) → [레슨](lessons/0036-polymorphic-association.html) | [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
 - [x] 유효성 검사 (`validates`) → [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
-- [x] 스코프(Scope)란? → [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
+- [x] 스코프(Scope)란? → [레슨](lessons/0049-where-not-nor-vs-and.html) | [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
 - [x] 콜백 (`before_save`, `after_create` 등) → [레슨](lessons/0019-timestamps-and-hidden-callbacks.html) | [정리](concepts/timestamps-and-callbacks.md) | [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)
 - [x] `after_commit`과 `after_save`/`after_create`의 차이 (트랜잭션 커밋 시점) → [레슨](lessons/0038-after-commit-vs-after-create.html) | [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
 - [x] Dirty Tracking이란? (`changed?`, `attribute_changed?`, partial writes) → [레슨](lessons/0020-dirty-tracking-and-partial-writes.html) | [정리](concepts/dirty-tracking.md) | [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)

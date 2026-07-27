@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 50 — MySQL 조건부 유니크 인덱스, 생성 컬럼으로 흉내내기</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>MySQL엔 조건부 유니크 인덱스가 없다 — 생성 컬럼으로 흉내낸다</h1>
+  <div class="lesson-meta">
+    <span>레슨 050</span>
+    <span>MySQL · Generated Column · Unique Index · Migration</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 ppback PR #5506 리뷰 — 애플리케이션 검증만으로는 못 막는 경쟁 상태(TOCTOU)를 DB 제약으로 완전히 틀어막는 설계를 이해한다 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>풀어야 했던 문제</h2>
+
+  <p>
+    <code>appraisal_appraisers</code> 테이블에는 "한 피평가자(appraisee)에게 같은 프로세스의
+    평가자가 1명만 배정돼야 한다"는 규칙이 있다 — 단, <code>multi</code>(다면평가)만 예외로
+    여러 명이 정상이다. 이 규칙은 이미 모델 검증(<code>validate :single_appraiser_per_appraisee</code>)으로
+    있었지만, 검증만으로는 못 막는 구멍이 셋 있었다.
+  </p>
+
+  <ul>
+    <li><strong>insert_all</strong> — 대량 등록 시 쓰는 벌크 insert는 모델 콜백/검증을 아예 건너뛴다.</li>
+    <li><strong>nested attributes 동시 저장</strong> — 한 <code>update!</code> 안에서 여러 자식 레코드가 같이 저장되면 순서에 따라 검증이 서로의 존재를 못 볼 수 있다.</li>
+    <li><strong>진짜 동시 요청(TOCTOU)</strong> — "검증 시 조회"와 "실제 저장" 사이에 다른 요청이 끼어들면, 둘 다 통과한 뒤 저장되어 중복이 생긴다.</li>
+  </ul>
+
+  <p>
+    이런 구멍을 완전히 막는 유일한 방법은 <strong>DB 유니크 제약</strong>이다. 그런데 규칙이
+    "무조건 유니크"가 아니라 "<code>multi</code>만 제외하고 유니크"라는 게 문제였다.
+  </p>
+
+  <h2>Postgres였다면 — Partial Unique Index</h2>
+
+  <p>
+    Postgres는 <code>WHERE</code> 절이 붙은 부분(partial) 유니크 인덱스를 그대로 지원한다.
+  </p>
+
+<pre><code>-- Postgres라면 이렇게 한 줄로 끝난다
+CREATE UNIQUE INDEX ON appraisal_appraisers (appraisal_process_id, appraisee_id)
+  WHERE process_is_multi = FALSE;</code></pre>
+
+  <p>
+    "<code>process_is_multi</code>가 false인 행끼리만" 유니크를 강제하고, true인 행은 인덱스
+    대상에서 아예 빠진다. 그런데 <strong>MySQL(InnoDB)엔 이 문법 자체가 없다.</strong>
+  </p>
+
+  <h2>MySQL의 우회로 — "생성 컬럼 + NULL은 유니크 인덱스에서 중복 허용된다"는 성질</h2>
+
+  <p>
+    MySQL 유니크 인덱스에는 한 가지 성질이 있다 — <strong>NULL 값은 서로 "다르다"고 취급되어
+    몇 개가 있든 충돌하지 않는다.</strong> 이 성질을 이용하면 "조건부 유니크"를 흉내낼 수 있다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">① multi 여부를 컬럼으로 비정규화<br><code>process_is_multi</code></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">② "제외하고 싶은 행만 NULL"인<br>생성 컬럼을 만든다</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">③ (process_id, 그 생성 컬럼)에<br>유니크 인덱스</div>
+  </div>
+
+<pre><code># db/migrate/..._add_single_appraiser_unique_index...rb
+add_column :appraisal_appraisers, :process_is_multi, :boolean, default: false, null: false
+
+add_column :appraisal_appraisers,
+           :single_appraiser_appraisee_id,
+           :bigint,
+           as: 'CASE WHEN process_is_multi = TRUE THEN NULL ELSE appraisee_id END',
+           stored: false
+
+add_index :appraisal_appraisers,
+          [:appraisal_process_id, :single_appraiser_appraisee_id],
+          unique: true,
+          name: 'uniq_single_appraiser_per_appraisee_process'</code></pre>
+
+  <p>
+    <code>single_appraiser_appraisee_id</code>는 "실제 저장되는 값"이 아니라
+    <strong>계산식(<code>as: '...'</code>)으로 정의된 생성 컬럼</strong>이다 — multi 행이면 NULL,
+    non-multi 행이면 진짜 <code>appraisee_id</code> 값을 갖는다. 그러면:
+  </p>
+
+  <ul>
+    <li><strong>multi 행끼리</strong>는 이 컬럼 값이 전부 NULL → 유니크 인덱스가 NULL끼리는 충돌시키지 않음 → 몇 명이든 허용</li>
+    <li><strong>non-multi 행끼리</strong>는 이 컬럼 값이 실제 <code>appraisee_id</code> → 같은 (process, appraisee) 조합이 2개면 진짜 유니크 위반으로 막힘</li>
+  </ul>
+
+  <p>
+    "조건부"라는 SQL 문법 없이, <strong>조건을 컬럼 값으로 바꿔서(NULL이냐 아니냐) 평범한
+    유니크 인덱스에 넘기는</strong> 트릭이다.
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — 이 트릭이 성립하는 이유</h3>
+    <p class="quiz-q">MySQL 유니크 인덱스에서 이 트릭이 통하는 핵심 성질은?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">생성 컬럼은 인덱스를 걸 수 없다</button></li>
+      <li><button onclick="answer(this,'q1',true)">유니크 인덱스에서 NULL 값끼리는 서로 다르다고 취급되어 중복이 허용된다</button></li>
+      <li><button onclick="answer(this,'q1',false)">MySQL은 NULL을 인덱스에서 자동으로 제외한다(값 자체가 없음)</button></li>
+      <li><button onclick="answer(this,'q1',false)">복합 인덱스는 항상 두 번째 컬럼부터 NULL을 무시한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>STORED로 만들면 벌어지는 일 — FK CASCADE와의 충돌</h2>
+
+  <p>
+    생성 컬럼은 <code>STORED</code>(디스크에 값을 실제로 저장, 조회 시 그대로 읽음)와
+    <code>VIRTUAL</code>(저장하지 않고 조회·인덱스 시점에 매번 계산) 두 방식이 있다. 처음엔
+    STORED로 시도했다가 이런 에러를 만났다.
+  </p>
+
+<pre><code>ERROR 1215 (HY000): Cannot add foreign key constraint</code></pre>
+
+  <p>
+    원인은 <code>appraisee_id</code>에 <code>ON DELETE CASCADE</code> FK가 걸려 있다는 것이다.
+    부모 행이 삭제되면 MySQL은 이 FK를 cascade로 처리하면서, <strong>STORED 생성 컬럼이
+    참조하는 값도 다시 계산해서 디스크에 반영</strong>해야 하는데, MySQL은 이 조합(STORED 생성
+    컬럼이 CASCADE 대상 컬럼을 참조)을 아예 거부한다. <code>VIRTUAL</code>은 애초에 아무것도
+    저장하지 않고 필요할 때마다 계산하기 때문에 이 문제가 없다 — 유니크 인덱스 강제력은
+    STORED와 동일하게 유지된다.
+  </p>
+
+  <div class="analogy">
+    프론트의 computed property(Vue) / useMemo(React)로 비유하면, STORED는 "계산 결과를 변수에
+    캐싱해두는 것"이고 VIRTUAL은 "렌더링할 때마다 다시 계산하는 것"에 가깝다. 캐싱된 값이 있으면
+    그 값이 참조하는 원본이 바뀔 때 캐시도 다시 계산해서 저장해야 하는데, 여기선 그 "재계산 후
+    재저장" 스텝 자체가 CASCADE 삭제 상황과 맞물려 MySQL 내부적으로 지원되지 않는 조합이 된 것이다.
+  </div>
+
+  <h2>덤으로 걸린 문제 — MySQL DDL은 트랜잭션이 안 걸린다</h2>
+
+  <p>
+    이 마이그레이션은 <code>add_column</code> 두 번 + 백필 + <code>add_index</code> 여러 단계로
+    구성된다. MySQL의 DDL(<code>ALTER TABLE</code> 등)은 <strong>트랜잭션으로 묶이지 않는다</strong> —
+    중간(예: <code>add_index</code>)에서 실패해도 그 전에 실행된 <code>add_column</code>들은
+    롤백되지 않고 그대로 남는다. 이 상태에서 마이그레이션을 단순 재실행하면 <code>add_column</code>이
+    "컬럼이 이미 존재한다"는 에러로 또 실패해 재시도 자체가 막힌다. 그래서 이 마이그레이션은
+    <code>up</code>/<code>down</code> 양쪽에 <code>column_exists?</code>/<code>index_exists?</code>
+    가드를 넣어, 몇 번을 재실행해도 "이미 되어 있으면 건너뛰고 안 된 부분만 마저 진행"하도록
+    멱등하게 만들었다.
+  </p>
+
+<pre><code>def up
+  add_column :appraisal_appraisers, :process_is_multi, :boolean, default: false, null: false unless column_exists?(:appraisal_appraisers, :process_is_multi)
+  # ... 백필은 재실행마다 항상 다시 돌려서, 이전 시도 이후 새로 생긴 잘못된 행까지 바로잡는다 ...
+  return if index_exists?(:appraisal_appraisers, name: 'uniq_single_appraiser_per_appraisee_process')
+  add_index ...
+end
+
+def down
+  remove_index ... if index_exists?(...)
+  remove_column ... if column_exists?(...)
+end</code></pre>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — STORED가 거부되는 이유</h3>
+    <p class="quiz-q">이 생성 컬럼을 STORED로 만들면 왜 실패하는가?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">STORED 생성 컬럼은 유니크 인덱스를 아예 지원하지 않아서</button></li>
+      <li><button onclick="answer(this,'q2',true)">생성식이 참조하는 컬럼에 ON DELETE CASCADE FK가 있어, cascade 시 저장된 값을 재계산해 다시 써야 하는데 MySQL이 이 조합을 거부해서</button></li>
+      <li><button onclick="answer(this,'q2',false)">CASE WHEN 식 자체를 STORED가 지원하지 않아서</button></li>
+      <li><button onclick="answer(this,'q2',false)">STORED는 bigint 타입을 지원하지 않아서</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">항목</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">설명</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Postgres partial index</td>
+        <td style="padding:0.4rem 0.5rem;"><code>CREATE UNIQUE INDEX ... WHERE 조건</code>으로 조건부 유니크를 직접 지원</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">MySQL의 우회법</td>
+        <td style="padding:0.4rem 0.5rem;">"제외 조건이면 NULL"인 생성 컬럼을 만들고, 유니크 인덱스의 NULL 중복 허용 성질을 이용</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">STORED vs VIRTUAL</td>
+        <td style="padding:0.4rem 0.5rem;">STORED는 디스크 저장(FK CASCADE 대상 참조 시 거부될 수 있음), VIRTUAL은 매번 계산(제약 없음, 인덱스는 동일하게 강제)</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">멱등한 마이그레이션</td>
+        <td style="padding:0.4rem 0.5rem;">MySQL DDL은 트랜잭션이 안 걸리므로, 부분 실패 후 재시도가 가능하도록 <code>up</code>/<code>down</code> 모두 존재 여부 가드 필요</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고: <a href="https://dev.mysql.com/doc/refman/8.4/en/create-table-generated-columns.html" target="_blank">MySQL 8.4 Reference — Generated Columns</a> ·
+    <a href="https://dev.mysql.com/doc/refman/8.4/en/create-index.html" target="_blank">MySQL 8.4 Reference — CREATE INDEX (Unique Index와 NULL)</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 Postgres의 partial index를 실제로 써본 적 있으면, 이번 MySQL 우회법과 나란히 비교해보는
+    것도 좋은 다음 스텝입니다. 궁금하면 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="0049-where-not-nor-vs-and.html">← 레슨 49: where.not의 다중 조건은 AND가 아니라 NOR다</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. MySQL 유니크 인덱스는 NULL을 '알 수 없는 값'으로 취급해 NULL끼리는 서로 다르다고 간주합니다. 그래서 NULL 값을 가진 행이 여러 개 있어도 유니크 위반이 아닙니다.",
+        wrong: "아니에요. 핵심은 MySQL 유니크 인덱스가 NULL 값끼리는 충돌시키지 않는다는 성질입니다. 생성 컬럼 자체는 인덱스를 걸 수 있고, NULL도 인덱스에 포함되지만 서로 다르다고 취급될 뿐입니다."
+      },
+      q2: {
+        correct: "맞아요. appraisee_id에 ON DELETE CASCADE FK가 걸려 있어서, cascade 삭제 시 STORED 생성 컬럼의 저장된 값도 재계산해 다시 써야 하는데 MySQL이 이 조합 자체를 거부합니다(ERROR 1215).",
+        wrong: "아니에요. 원인은 생성식이 참조하는 appraisee_id 컬럼에 ON DELETE CASCADE FK가 걸려 있어, STORED 생성 컬럼이 cascade 시 값을 재계산·재저장해야 하는 상황을 MySQL이 지원하지 않기 때문입니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>

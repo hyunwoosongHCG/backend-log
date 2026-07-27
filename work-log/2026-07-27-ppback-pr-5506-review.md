@@ -27,4 +27,4 @@
 
 ## 참고 — ROADMAP.md 대조 결과
 
-"ActiveRecord (Model)" 섹션의 "유효성 검사 (`validates`)", "스코프(Scope)란?" 두 항목을 이번 작업 링크로 체크했다. "행 잠금과 동시성 제어"는 이미 체크되어 있어 그대로 뒀다. MySQL 조건부 유니크 인덱스(생성 컬럼 우회) 자체는 아직 대응하는 ROADMAP 항목이 없어 링크 없이 개념만 기록 — "데이터베이스 기초" 섹션에 관련 항목을 추가할지는 다음에 논의.
+"ActiveRecord (Model)" 섹션의 "유효성 검사 (`validates`)", "스코프(Scope)란?" 두 항목을 체크했다. "스코프"는 `where.not` NOR/AND 함정을 다룬 레슨 49(`0049-where-not-nor-vs-and.html`)까지 연결했다. "데이터베이스 기초" 섹션에는 "조건부(Partial) 유니크 인덱스" 항목을 새로 추가하고, MySQL 생성 컬럼 우회법을 다룬 레슨 50(`0050-mysql-conditional-unique-index-via-generated-column.html`)으로 체크했다. "행 잠금과 동시성 제어"는 이미 체크되어 있어 그대로 뒀다.
