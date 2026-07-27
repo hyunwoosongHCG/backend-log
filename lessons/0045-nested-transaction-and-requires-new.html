@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 45 — 중첩 트랜잭션은 진짜 트랜잭션이 아니다</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>중첩 트랜잭션 — <code>transaction do end</code>을 두 번 쓰면 뭐가 달라지는가</h1>
+  <div class="lesson-meta">
+    <span>레슨 045</span>
+    <span>Nested Transaction · SAVEPOINT · requires_new</span>
+    <span>~12분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 핵심성과 자동 반영 기능에 "반영으로 완료된 상위 목표도 자동 마감"을 추가하면서, "트랜잭션이 너무
+    길어지지 않을까"라는 질문에 답하려다 발견한 것. 레슨 24(트랜잭션 원자성)·42(행 잠금)와 이어지는
+    심화 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>겉보기엔 똑같은 코드인데</h2>
+
+  <p>
+    아래 두 코드는 똑같이 생겼다. 하나는 이미 트랜잭션이 열려있는 상태에서 호출되고, 하나는
+    아무것도 없는 상태에서 호출된다.
+  </p>
+
+<pre><code>ActiveRecord::Base.transaction do
+  reflect_values_up_the_chain     # 이미 바깥에서 transaction do가 열려있는 상태
+end
+
+ActiveRecord::Base.transaction do
+  reflect_values_up_the_chain     # 아무것도 없는 상태 (이 호출이 최상위)
+end</code></pre>
+
+  <p>
+    직관적으로는 "<code>transaction do end</code>이라고 썼으니 여기서 새 트랜잭션이 시작되겠지"라고
+    생각하기 쉽다. 하지만 <strong>첫 번째 코드는 새 트랜잭션을 시작하지 않는다</strong> — 이미 열려있는
+    바깥 트랜잭션에 그냥 <strong>합류(join)</strong>할 뿐이다. 실제로 BEGIN도, COMMIT도 일어나지 않는다.
+  </p>
+
+  <div class="analogy">
+    회의실을 하나 빌리는 상황으로 생각해보자. "회의실 예약해줘"라고 했을 때, 이미 내가 그 회의실에
+    들어가 있는 상태라면 새로 예약이 잡히는 게 아니라 그냥 "이미 내가 쓰고 있는 회의실"로 처리된다.
+    회의가 끝나는 시점(COMMIT)은 내가 처음 들어갔을 때 잡은 예약이 끝나는 시점이지, 두 번째로
+    "예약해줘"라고 말한 시점이 아니다.
+  </div>
+
+  <h2>직접 재현해보기</h2>
+
+  <p>이걸 직접 눈으로 확인하는 가장 쉬운 방법은, 중첩된 블록 안에서 예외를 던져보는 것이다.</p>
+
+<pre><code>ActiveRecord::Base.transaction do
+  puts "1. transaction 진입"
+  raise "실패!"
+  puts "2. 이 줄은 절대 실행 안됨"
+end
+puts "3. 여기 도달하면 안됨"</code></pre>
+
+  <p>
+    실제로 <code>rails runner</code>로 실행해보면 <strong>"3. 여기 도달하면 안됨"도 출력되지
+    않는다</strong>. <code>transaction do end</code> 블록 안에서 예외가 발생하면, Rails가 내부적으로
+    ROLLBACK을 실행한 뒤 <strong>그 예외를 그대로 다시 던진다(re-raise)</strong>. 그리고 Ruby의
+    순차 실행 규칙상, 예외가 던져진 지점 이후의 코드는 같은 메서드 안이든 밖이든 실행되지 않는다.
+    즉 <strong>"트랜잭션 블록이 끝난 뒤에 실행되는 코드"는 별도의 <code>rescue</code>나 플래그
+    체크 없이도, 반영 자체가 실패하면 자동으로 스킵된다.</strong>
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — 중첩 트랜잭션의 정체</h3>
+    <p class="quiz-q">
+      이미 <code>transaction do end</code>이 열려있는 상태에서, 그 안에서 다시
+      <code>ActiveRecord::Base.transaction do end</code>을 호출했다. 이 안쪽 블록은 기본적으로
+      어떻게 동작하는가?
+    </p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">별도의 새 트랜잭션이 시작되고, 독립적으로 COMMIT/ROLLBACK된다</button></li>
+      <li><button onclick="answer(this,'q1',true)">새 트랜잭션을 시작하지 않고, 이미 열려있는 바깥 트랜잭션에 그냥 합류한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">에러가 발생해서 애플리케이션이 즉시 종료된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>진짜 독립된 서브 트랜잭션이 필요하다면 — <code>requires_new: true</code></h2>
+
+  <p>
+    "A라는 항목을 처리하다 실패해도, B라는 항목이나 바깥 트랜잭션 전체는 롤백시키고 싶지 않다"는
+    상황이 실무에서 자주 나온다 — 예를 들어 반영으로 진행률이 100%가 된 상위 목표들을 자동으로
+    마감하는데, 그중 하나가 실패해도 다른 목표나 원래 체크인 자체는 영향받지 않아야 하는 경우다.
+    이럴 땐 <code>requires_new: true</code>를 준다.
+  </p>
+
+<pre><code>ActiveRecord::Base.transaction do          # ① 바깥 트랜잭션
+  reflect_values_up_the_chain
+end
+
+reflected_objectives.each do |objective|
+  ActiveRecord::Base.transaction(requires_new: true) do   # ② 진짜 SAVEPOINT
+    AutoCloseObjectiveIfProgressCompleteService.call(objective:)
+  end
+rescue StandardError => e
+  Rails.logger.error("자동 마감 실패: #{e.message}")   # ②만 롤백, ①과 다른 objective는 안전
+end</code></pre>
+
+  <p>
+    <code>requires_new: true</code>를 주면 MySQL(InnoDB)이 실제로 <code>SAVEPOINT</code>를 찍고,
+    안쪽에서 예외가 나면 <code>ROLLBACK TO SAVEPOINT</code>로 그 부분만 되돌릴 수 있다. 단,
+    <strong>Rails가 자동으로 예외를 삼켜주지는 않는다</strong> — SAVEPOINT까지만 롤백해줄 뿐, 예외
+    자체는 계속 위로 전파되므로 원하는 지점에서 직접 <code>rescue</code>로 잡아줘야 한다.
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — SAVEPOINT가 안 해주는 것</h3>
+    <p class="quiz-q">
+      바깥에 이미 큰 트랜잭션이 열려있는 상태에서, 안쪽 작업 10개를 각각
+      <code>transaction(requires_new: true)</code>로 감쌌다. 이렇게 하면 바깥 트랜잭션이 잡고 있는
+      row lock의 보유 시간도 줄어드는가?
+    </p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">그렇다. SAVEPOINT마다 독립적으로 커밋되므로 락이 그때그때 풀린다</button></li>
+      <li><button onclick="answer(this,'q2',true)">아니다. 락은 여전히 바깥(최상위) 트랜잭션이 끝날 때까지 보유된다 — SAVEPOINT는 "부분 실패 격리"만 해줄 뿐, 락을 조기에 풀어주지는 않는다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>실무에서 쓸 때 확인해야 할 것 — 이 서비스가 정말 최상위인가?</h2>
+
+  <p>
+    실제로 부딪힌 문제는 이거였다 — 어떤 서비스의 <code>transaction do end</code>이 "정말 이 호출의
+    최상위 트랜잭션"인지, 아니면 "이미 누군가 열어둔 트랜잭션에 합류하는 것"인지는 <strong>그
+    서비스 코드만 봐서는 알 수 없다.</strong> 실제 호출부를 하나하나 추적해야 한다.
+  </p>
+
+  <p>
+    예를 들어 체크인 반영 서비스는 6곳에서 호출되는데, 그중 4곳은 이미 자기만의
+    <code>transaction do end</code>으로 감싸고 있었고 2곳은 아니었다. 그 4곳에서는 "반영 트랜잭션과
+    자동 마감을 분리했다"고 해도 실제로는 이미 열려있던 트랜잭션에 계속 합류할 뿐이라, 원했던 "락
+    보유 시간 단축" 효과는 그 4곳에서는 얻지 못했다 — 다만 "부분 실패 격리"는 <code>requires_new:
+    true</code> 덕분에 여전히 유효했다.
+  </p>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">항목</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">설명</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">기본 중첩 <code>transaction do</code></td>
+        <td style="padding:0.4rem 0.5rem;">이미 열린 트랜잭션이 있으면 새로 시작하지 않고 그냥 합류한다 (BEGIN/COMMIT 없음)</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">예외 전파</td>
+        <td style="padding:0.4rem 0.5rem;">블록 안 예외는 ROLLBACK 후 다시 던져진다 → 블록 뒤 코드는 자동으로 실행 안 됨(Ruby 순차 실행)</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>requires_new: true</code></td>
+        <td style="padding:0.4rem 0.5rem;">진짜 SAVEPOINT를 만들어 부분 실패 격리는 되지만, 락 조기 해제는 안 됨. 예외도 직접 rescue해야 함</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">실무 체크리스트</td>
+        <td style="padding:0.4rem 0.5rem;">이 코드가 정말 최상위 트랜잭션인지는 코드만 봐선 모른다 — 모든 호출부를 추적해야 한다</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고: <a href="https://api.rubyonrails.org/classes/ActiveRecord/Transactions/ClassMethods.html" target="_blank">Rails API — ActiveRecord::Transactions::ClassMethods (requires_new)</a> ·
+    <a href="https://dev.mysql.com/doc/refman/8.4/en/savepoint.html" target="_blank">MySQL 8.4 Reference — SAVEPOINT</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 낙관적 락(<code>lock_version</code>, <code>ActiveRecord::StaleObjectError</code>)과
+    <code>with_lock</code>(비관적 락)을 실무에서 어떤 기준으로 나눠 쓰는지 궁금하면 언제든 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="0044-transaction-isolation-level.html">← 레슨 44: 트랜잭션 격리 수준</a>
+    <a href="0046-pundit-authorize-scope-and-hr-admin-duality.html">레슨 46: Pundit authorize와 두 가지 HR admin →</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. 안쪽 transaction do는 새로 BEGIN하지 않고 이미 열려있는 바깥 트랜잭션에 합류합니다. requires_new: true를 명시적으로 주지 않는 한 그렇습니다.",
+        wrong: "아니에요. 기본적으로 안쪽 transaction do는 새 트랜잭션을 시작하지 않고, 이미 열려있는 바깥 트랜잭션에 합류합니다."
+      },
+      q2: {
+        correct: "맞아요. SAVEPOINT는 '부분 실패가 다른 부분에 번지지 않게' 격리해줄 뿐이지, 락 자체는 최상위 트랜잭션이 커밋될 때까지 계속 보유됩니다.",
+        wrong: "아니에요. SAVEPOINT는 독립적으로 커밋되지 않습니다 — 최상위 트랜잭션이 끝나야 실제로 커밋되고, 그때까지 모든 락이 보유됩니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>

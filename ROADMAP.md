@@ -47,6 +47,7 @@
 - [x] 트랜잭션(Transaction)과 ACID → [레슨](lessons/0024-transaction-atomicity-bulk-approval-bug.html) | [배운 작업](work-log/2026-07-03-sentry-batch-approval-atomicity-bug.md) · [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
 - [x] 행 잠금(Row Locking)과 동시성 제어 (`with_lock`, `SELECT ... FOR UPDATE`) → [레슨](lessons/0042-row-locking-and-deadlock.html)
 - [x] 트랜잭션 격리 수준(Isolation Level)이란 (Dirty/Non-Repeatable/Phantom Read, MySQL 기본값) → [레슨](lessons/0044-transaction-isolation-level.html)
+- [x] 중첩 트랜잭션(Nested Transaction)과 `requires_new`(SAVEPOINT) — 기본 중첩은 진짜 커밋 경계가 아니라 바깥 트랜잭션에 합류할 뿐이고, `requires_new: true`는 부분 실패 격리는 되지만 락 조기 해제는 안 됨 → [레슨](lessons/0045-nested-transaction-and-requires-new.html) | [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-auto-close-and-review-fixes.md)
 - [ ] SQL 기본 (SELECT, INSERT, UPDATE, DELETE)
 - [x] JOIN이란? → [레슨](lessons/0004-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 
@@ -172,6 +173,8 @@
 - [x] Pundit 정책(Policy)이란? → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
 - [ ] `policy_scope`란?
 - [x] `authorize`란? (실패 시 `record.errors.add`로 사유 기록 → `errors.empty? && 조건`으로 최종 판정하는 패턴) → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
+- [x] `authorize`는 컨트롤러에서 명시적으로 호출한 곳에서만 강제됨 — 서비스 객체를 직접 호출하면 정책 체크가 통째로 우회됨 → [레슨](lessons/0046-pundit-authorize-scope-and-hr-admin-duality.html) | [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-manual-scenario-testing.md)
+- [x] `has_flags`(비트마스크 플래그 컬럼) 패턴과, 같은 개념(HR admin)이 조인 테이블과 비트마스크 두 곳에 독립적으로 존재해 서로 어긋날 수 있다는 것 → [레슨](lessons/0046-pundit-authorize-scope-and-hr-admin-duality.html) | [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-manual-scenario-testing.md)
 
 ### 백그라운드 잡
 

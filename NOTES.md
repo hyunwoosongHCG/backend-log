@@ -37,6 +37,8 @@
 - 행 잠금(Row Locking)과 동시성 제어 (with_lock, SELECT ... FOR UPDATE, 데드락) — 2026-07-15
 - 인덱스(Index)와 복합 인덱스 Leftmost-Prefix 규칙 — 2026-07-15
 - 트랜잭션 격리 수준(Isolation Level), Dirty/Non-Repeatable/Phantom Read, Lost Update — 2026-07-16
+- 중첩 트랜잭션과 requires_new(SAVEPOINT) — 락 조기 해제는 안 됨, 부분 실패 격리만 됨 — 2026-07-24
+- Pundit `authorize`는 컨트롤러 전용, `has_flags` 비트마스크와 조인 테이블 두 곳에 독립적으로 존재하는 "HR admin" — 2026-07-27
 
 ## 주의사항
 
