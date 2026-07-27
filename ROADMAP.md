@@ -73,6 +73,8 @@
 ### 자료형과 변수
 
 - [ ] 자료형 (String, Integer, Float, Boolean, nil)
+- [x] `nil`(값을 안 보냄)과 `false`(false라는 값)의 구분 — Grape optional 파라미터는 미전송 시 `params`에 키 자체가 없어 `nil`이 되는데, NOT NULL boolean 컬럼은 `as_json` 시 항상 `true`/`false`라 diff 비교에서 "변경 없음"이 "false로 바꿔달라"로 둔갑한다 → [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-branch-review.md)
+- [x] `BigDecimal`의 정밀도와 `#round` — 인자 없는 `#round`는 정수로 반올림하므로 `decimal(26,6)` 같은 컬럼에 쓰면 소수점이 통째로 사라진다 → [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-branch-review.md)
 - [x] Symbol vs String → [레슨](lessons/0021-symbol-vs-string.html) | [정리](concepts/symbol-vs-string.md) | [배운 작업](work-log/2026-07-02-symbol-vs-string.md)
 - [ ] 배열(Array)
 - [ ] 해시(Hash)
@@ -127,9 +129,11 @@
 - [x] Dirty Tracking이란? (`changed?`, `attribute_changed?`, partial writes) → [레슨](lessons/0020-dirty-tracking-and-partial-writes.html) | [정리](concepts/dirty-tracking.md) | [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)
 - [x] 쿼리 메서드 (`where`, `find`, `find_by`, `includes`, `joins`) → [배운 작업](work-log/2026-07-07-delete-workspace-self-find.md)
 - [x] N+1 문제란? `includes`로 해결하기 → [레슨](lessons/0009-n-plus-1.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
+- [x] `preload` vs `includes`, 그리고 공유 엔티티에 필드를 추가하면 그 엔티티를 렌더하는 **모든** 컨트롤러의 preload를 갱신해야 한다 — 쿼리는 그대로인데 노출 필드 하나 때문에 N+1이 생긴다 → [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-branch-review.md)
+- [x] 연관 캐시(association cache) — 스코프가 걸린 `has_one`(`-> { where(status: :pending) }`)은 상태가 바뀐 뒤 재조회하면 `nil`이 되므로, 이미 로드된 캐시에만 의존하는 코드는 `reload` 한 줄에 깨진다 → [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-branch-review.md)
 - [x] Read Replica 라우팅 (멀티 DB, `connects_to`/`connected_to`) → [정리](concepts/read-replica-routing.md) | [배운 작업](work-log/2026-07-03-controller-routing-and-read-replica.md)
 - [x] `accepts_nested_attributes_for` — 부모 생성/수정 시 자식 레코드 배열을 한 번에 생성/수정/삭제 → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
-- [x] 자기참조 관계(Self-referential Association)와 순환 참조 방지 (closure_tree gem, `cycle_is_not_permitted`) → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
+- [x] 자기참조 관계(Self-referential Association)와 순환 참조 방지 (closure_tree gem, `cycle_is_not_permitted`) → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md) · DB 레벨 방지와 별개로, 런타임에 그래프를 재귀 순회할 땐 방문한 노드 id를 `Set`에 쌓아 막아야 한다 → [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-branch-review.md)
 
 ### Controller
 
@@ -176,6 +180,11 @@
 - [x] `authorize`란? (실패 시 `record.errors.add`로 사유 기록 → `errors.empty? && 조건`으로 최종 판정하는 패턴) → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
 - [x] `authorize`는 컨트롤러에서 명시적으로 호출한 곳에서만 강제됨 — 서비스 객체를 직접 호출하면 정책 체크가 통째로 우회됨 → [레슨](lessons/0046-pundit-authorize-scope-and-hr-admin-duality.html) | [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-manual-scenario-testing.md)
 - [x] `has_flags`(비트마스크 플래그 컬럼) 패턴과, 같은 개념(HR admin)이 조인 테이블과 비트마스크 두 곳에 독립적으로 존재해 서로 어긋날 수 있다는 것 → [레슨](lessons/0046-pundit-authorize-scope-and-hr-admin-duality.html) | [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-manual-scenario-testing.md)
+
+### 도메인 이벤트
+
+- [x] 문자열 상수(`event_type`)로 분기하는 도메인 이벤트를 추가할 때의 파급 범위 — enum이나 타입이 아니라 문자열이라 컴파일러가 누락을 안 잡아준다. 이벤트 하나 추가에 메시지 팩토리(안 넣으면 `raise`), 히스토리 스코프, 안읽음 카운트 제외 목록, 노출 제외 목록, 시리얼라이저, 엔티티의 `case`까지 6곳이 얽혔다 → [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-branch-review.md)
+- [ ] 1:N 팬인(여러 하위 → 하나의 상위) 값 반영 semantics — 마지막이 이김 / 평균 / 합계 중 무엇이 기본이어야 하나
 
 ### 백그라운드 잡
 
