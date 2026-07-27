@@ -147,7 +147,7 @@
 
 - [ ] RSpec 기초 (`describe`, `it`, `expect`)
 - [ ] `let`과 `let!`의 차이
-- [x] `let_it_be`(test-prof)와 `let`/`let!`의 차이 — 같은 example group 안에서 객체를 재사용하므로, 저장 없는 인메모리 속성 변경 시 다른 예제로 오염될 수 있음 → [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-api-exposure-review.md)
+- [x] `let_it_be`(test-prof)와 `let`/`let!`의 차이 — 같은 example group 안에서 객체를 재사용하므로, 저장 없는 인메모리 속성 변경 시 다른 예제로 오염될 수 있음 → [레슨](lessons/0048-let-it-be-shared-object-pollution.html) | [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-api-exposure-review.md)
 - [ ] Factory Bot으로 테스트 데이터 만들기
 - [ ] Request spec vs Model spec
 
@@ -166,7 +166,7 @@
 - [x] Grape 파라미터 상호 검증 (`at_least_one_of`)과 `default:`의 실행 순서 충돌 → [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
 - [x] Grape는 top-level JSON 배열 body를 못 읽는다 (`Formatter#read_rack_input`의 `body.is_a?(Hash)` 체크) → [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
 - [x] Grape custom validator 작성 (`Grape::Validations::Validators::Base`, `register_validator`, `validate_param!`) — 파라미터 타입 검증을 넘어 "지금 이 값을 써도 되는 상태인가"까지 처리 → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
-- [x] Grape::Entity의 `if:` 조건부 expose — 성능/페이로드 최적화용 게이팅과, 특정 분기에서만 SELECT되는 가상 컬럼 접근 시 `MissingAttributeError`를 막는 정합성 게이팅은 서로 다른 이유일 수 있음 → [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-api-exposure-review.md)
+- [x] Grape::Entity의 `if:` 조건부 expose — 성능/페이로드 최적화용 게이팅과, 특정 분기에서만 SELECT되는 가상 컬럼 접근 시 `MissingAttributeError`를 막는 정합성 게이팅은 서로 다른 이유일 수 있음 → [레슨](lessons/0047-grape-entity-conditional-expose-two-natures.html) | [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-api-exposure-review.md)
 
 ### 권한
 

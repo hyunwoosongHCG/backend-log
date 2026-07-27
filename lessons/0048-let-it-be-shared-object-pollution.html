@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 48 — let_it_be는 트랜잭션 롤백으로 못 막는 오염을 만든다</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1><code>let_it_be</code>가 공유하는 건 DB 레코드가 아니라 "그 Ruby 객체 자체"다</h1>
+  <div class="lesson-meta">
+    <span>레슨 048</span>
+    <span>RSpec · test-prof · let_it_be</span>
+    <span>~10분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 핵심성과 자동 반영 조건(<code>auto_reflect_eligible?</code>)을 테스트하다가, 랜덤 실행
+    순서에 따라 어쩔 때만 실패하는 테스트를 만나서 원인을 추적하며 배운 것 —
+    <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>어쩔 때만 실패하는 테스트</h2>
+
+  <p>
+    <code>KeyResult#auto_reflect_eligible?</code>은 "목표가 open 상태가 아니면 false"라는
+    조건이 있다. 이걸 테스트하려고 이렇게 썼다.
+  </p>
+
+<pre><code>describe '#auto_reflect_eligible?' do
+  let_it_be(:objective) { create(:objective, stage: :open) }
+  subject(:key_result) { create(:key_result, objective: objective, auto_checkin_reflect: true) }
+
+  it '세 조건을 모두 만족하면 true를 리턴한다' do
+    expect(key_result.auto_reflect_eligible?).to be(true)
+  end
+
+  it '목표가 open 상태가 아니면 false를 리턴한다' do
+    key_result.objective.stage = 'closed'   # 저장(save)은 안 하고 인메모리로만 바꿈
+    expect(key_result.auto_reflect_eligible?).to be(false)
+  end
+end</code></pre>
+
+  <p>
+    RSpec은 기본적으로 각 <code>it</code> 블록(example)을 트랜잭션으로 감싸고, 끝나면
+    롤백한다 — 그래서 DB에 저장한 내용은 다음 example로 넘어가지 않는다고 배웠다(레슨 24).
+    그런데 이 두 테스트를 실행 순서를 바꿔가며 여러 번 돌리면, <strong>가끔 첫 번째 테스트
+    ("모두 만족하면 true")가 실패한다</strong> — 트랜잭션 롤백이 있는데 왜?
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — 무엇이 롤백되고, 무엇이 롤백되지 않는가</h3>
+    <p class="quiz-q">
+      RSpec의 트랜잭션 롤백은 각 example이 끝날 때마다 자동으로 일어난다. 이게 되돌리는 건
+      정확히 무엇인가?
+    </p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',true)">DB에 저장(save/update)된 내용만 되돌린다 — 이미 메모리에 로드된 Ruby 객체의 속성값 자체는 안 건드린다</button></li>
+      <li><button onclick="answer(this,'q1',false)">그 example에서 생성되거나 참조된 모든 Ruby 객체를 통째로 가비지 컬렉션한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <h2>범인 — <code>let_it_be</code>는 "example마다 새로 만들기"를 건너뛴다</h2>
+
+  <p>
+    보통 쓰는 <code>let</code>은 각 example마다 블록을 다시 평가해서 <strong>매번 새 객체</strong>를
+    만든다. 그런데 <code>let_it_be</code>(test-prof 젬)는 <code>describe</code>/<code>context</code>
+    블록 전체에서 딱 한 번만 만들고, 그 example group 안의 모든 example이 <strong>같은 객체를
+    공유</strong>한다 — DB 접근이 잦은 무거운 픽스처(workspace, cycle 등)를 매번 다시 만들지
+    않아서 테스트가 훨씬 빨라진다는 게 장점이다.
+  </p>
+
+  <div class="analogy">
+    <code>let</code>은 매 example마다 "새 종이에 다시 적기"고, <code>let_it_be</code>는 "이미
+    적어둔 종이 한 장을 여러 example이 돌려가며 읽고 쓰기"다. 트랜잭션 롤백은 "그 종이를 원래
+    글자로 되돌리는 것"이 아니라 "그 종이 내용을 DB에 반영한 것 자체를 취소하는 것"이다.
+    누군가 종이(Ruby 객체) 위에 연필로 낙서만 하고(<code>stage = 'closed'</code>, 저장 안 함)
+    잉크로 다시 쓰지(<code>save!</code>) 않았다면, DB 취소와 무관하게 그 낙서는 종이 위에
+    그대로 남아 다음 사람이 읽는다.
+  </div>
+
+  <p>
+    문제의 테스트를 다시 보면, 두 번째 테스트가 <code>key_result.objective.stage = 'closed'</code>로
+    <strong>저장 없이 인메모리 속성만</strong> 바꾼다. <code>objective</code>가 <code>let_it_be</code>로
+    공유되고 있었다면, 이 변경은 트랜잭션 롤백과 무관하게 그대로 남아서 <strong>다음 example이
+    이 오염된 객체를 그대로 넘겨받는다</strong>. RSpec은 기본적으로 example 실행 순서를
+    무작위로 섞기 때문에, "closed로 바꾸는 테스트"가 "open이어야 true인 테스트"보다 먼저
+    실행되는 순서에서만 실패가 재현된다 — 이게 "가끔만 실패하는 테스트"의 정체다.
+  </p>
+
+  <h2>실제 수정</h2>
+
+  <p>
+    실제 코드에서는 이렇게 고쳤다 — 매번 새로 만들어야 하는 것만 <code>let</code>으로 내리고,
+    진짜 재사용해도 안전한(어떤 테스트도 인메모리로 변형하지 않는) 픽스처만
+    <code>let_it_be</code>로 남겼다.
+  </p>
+
+<pre><code># spec/models/key_result_spec.rb
+describe '#auto_reflect_eligible?' do
+  let_it_be(:current_user) { create(:user) }
+  let_it_be(:workspace) { create(:workspace, creating_user: current_user, users: [current_user]) }
+  let_it_be(:cycle) { create(:cycle, workspace: workspace) }
+
+  # objective는 각 예제에서 stage를 직접(in-memory) 건드리므로 let_it_be로 공유하면
+  # 한 예제의 변경이 저장되지 않아도 같은 Ruby 객체가 다음 예제에 그대로 넘어가 오염된다 (let로 매번 새로 생성)
+  let(:objective) do
+    create(:objective, workspace: workspace, cycle: cycle, creater: current_user, approver: current_user, stage: :open, privacy: 'all')
+  end
+
+  subject(:key_result) do
+    create(:key_result, objective: objective, kind: :progress, target: 100, auto_checkin_reflect: true)
+  end
+
+  it '목표가 open 상태가 아니면 false를 리턴한다' do
+    key_result.objective.stage = 'closed'
+    expect(key_result.auto_reflect_eligible?).to be(false)
+  end
+end</code></pre>
+
+  <p>
+    <code>current_user</code>/<code>workspace</code>/<code>cycle</code>은 어떤 example도
+    속성을 직접 바꾸지 않으니 <code>let_it_be</code>로 공유해도 안전하다. 반면
+    <code>objective</code>는 최소 한 example에서 저장 없이 속성을 바꾸므로, 반드시
+    <code>let</code>이어야 한다.
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — 어느 걸 let_it_be로 둬도 되는가</h3>
+    <p class="quiz-q">
+      한 example group 안의 여러 <code>it</code> 블록 중 하나가 어떤 픽스처의 속성을 저장 없이
+      직접 바꾼다(<code>obj.attr = value</code>, <code>.save</code> 호출 없음). 이 픽스처를
+      <code>let_it_be</code>로 선언해도 안전한가?
+    </p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">안전하다. 어차피 저장 안 했으니 DB엔 영향 없다</button></li>
+      <li><button onclick="answer(this,'q2',true)">안전하지 않다. 그 인메모리 변경이 같은 객체를 쓰는 다른 example로 그대로 넘어가서, 실행 순서에 따라 랜덤하게 오염될 수 있다 — let로 매 example마다 새로 만들어야 한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>핵심 요약</h2>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">항목</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">설명</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>let</code>/<code>let!</code></td>
+        <td style="padding:0.4rem 0.5rem;">매 example마다 블록을 다시 평가 — 항상 새 객체</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>let_it_be</code>(test-prof)</td>
+        <td style="padding:0.4rem 0.5rem;">example group 전체에서 한 번만 생성 — 모든 example이 같은 Ruby 객체를 공유 (빠르지만 위험할 수 있음)</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">트랜잭션 롤백이 되돌리는 것</td>
+        <td style="padding:0.4rem 0.5rem;">DB에 저장된 내용만 — 저장 없이 바꾼 인메모리 속성값은 안 되돌림</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">판단 기준</td>
+        <td style="padding:0.4rem 0.5rem;">어떤 example도 그 픽스처의 속성을 저장 없이 직접 바꾸지 않는다 → let_it_be 안전. 하나라도 바꾼다 → let으로</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="source">
+    참고: <a href="https://test-prof.evilmartians.io/#/let_it_be" target="_blank">test-prof — let_it_be 공식 문서</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 <code>let_it_be(:objective, refind: true)</code> 옵션이 이 문제를 어떻게 완화해주는지,
+    그리고 <code>before(:all)</code>과 <code>let_it_be</code>가 왜 비슷한 함정을 공유하는지
+    궁금하면 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="0047-grape-entity-conditional-expose-two-natures.html">← 레슨 47: Grape::Entity if: 조건부 expose 두 성격</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. 트랜잭션 롤백은 DB에 반영된 내용만 되돌립니다 — 이미 메모리에 있는 Ruby 객체의 속성값 자체(저장 안 한 변경)는 그대로 남습니다.",
+        wrong: "아니에요. 롤백은 DB 저장 내용만 되돌리는 것이고, Ruby 객체 자체를 가비지 컬렉션하거나 초기화하지 않습니다 — 그래서 let_it_be로 공유된 객체의 인메모리 변경이 다음 example로 그대로 넘어갈 수 있습니다."
+      },
+      q2: {
+        correct: "맞아요. 인메모리 변경은 롤백으로 안 지워지고 같은 객체를 다음 example도 그대로 물려받으므로, RSpec의 랜덤 실행 순서에 따라 어쩔 때만 실패하는 테스트가 됩니다. let로 매번 새로 만들어야 안전합니다.",
+        wrong: "아니에요. 저장을 안 했어도 그 변경은 Ruby 객체 자체에 남아있고, let_it_be는 그 객체를 example끼리 공유하므로 오염이 그대로 전달됩니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>
