@@ -31,7 +31,7 @@
 ### 아키텍처
 
 - [ ] MVC 패턴 (Model, View, Controller)
-- [ ] 서비스 레이어(Service Layer)란?
+- [x] 서비스 레이어(Service Layer)란? — 화이트리스트 상수 같은 걸 어느 레이어에 둘지는 "누가 그 개념의 진짜 주인인가"로 판단한다. 모델 컬럼(`category`)에 대한 predicate는 모델에 두고, 컨트롤러/validator가 끌어다 쓰는 API 파라미터 화이트리스트는 서비스 클래스가 아니라 별도 PORO 모듈로 분리해야 역참조가 안 생긴다 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 - [x] 도메인(Domain)이란? 3레이어 Entity와의 차이 → [레슨](lessons/0003-domain-vs-entity.html) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
 - [ ] 미들웨어(Middleware)란?
 - [ ] 모놀리식 vs 마이크로서비스
@@ -45,12 +45,14 @@
 - [ ] 1:1, 1:N, N:M 관계
 - [x] 인덱스(Index)란? 왜 필요한가 → [레슨](lessons/0043-index-and-leftmost-prefix.html)
 - [x] 조건부(Partial) 유니크 인덱스 — Postgres의 `WHERE` 조건부 인덱스와, MySQL이 생성 컬럼 + NULL 중복 허용으로 이를 흉내내는 법 → [레슨](lessons/0050-mysql-conditional-unique-index-via-generated-column.html) | [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
-- [x] 트랜잭션(Transaction)과 ACID → [레슨](lessons/0024-transaction-atomicity-bulk-approval-bug.html) | [배운 작업](work-log/2026-07-03-sentry-batch-approval-atomicity-bug.md) · [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
+- [x] 트랜잭션(Transaction)과 ACID → [레슨](lessons/0024-transaction-atomicity-bulk-approval-bug.html) | [배운 작업](work-log/2026-07-03-sentry-batch-approval-atomicity-bug.md) · [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md) · [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 - [x] 행 잠금(Row Locking)과 동시성 제어 (`with_lock`, `SELECT ... FOR UPDATE`) → [레슨](lessons/0042-row-locking-and-deadlock.html)
 - [x] 트랜잭션 격리 수준(Isolation Level)이란 (Dirty/Non-Repeatable/Phantom Read, MySQL 기본값) → [레슨](lessons/0044-transaction-isolation-level.html)
 - [x] 중첩 트랜잭션(Nested Transaction)과 `requires_new`(SAVEPOINT) — 기본 중첩은 진짜 커밋 경계가 아니라 바깥 트랜잭션에 합류할 뿐이고, `requires_new: true`는 부분 실패 격리는 되지만 락 조기 해제는 안 됨 → [레슨](lessons/0045-nested-transaction-and-requires-new.html) | [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-auto-close-and-review-fixes.md)
 - [ ] SQL 기본 (SELECT, INSERT, UPDATE, DELETE)
 - [x] JOIN이란? → [레슨](lessons/0004-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
+- [x] 쿼리 프로파일링/N+1 실측 (`ActiveSupport::Notifications.subscribed(..., "sql.active_record")`) — N+1을 추측이 아니라 직접 재현해서 쿼리 개수를 세는 법. 같은 방법으로 "이미 로드된 Relation을 `Enumerable#select`(블록)로 필터링하면 쿼리가 안 나가지만, `scope`(`.where`)를 걸면 로드 여부와 무관하게 새 쿼리가 나간다"는 것도 실측으로 증명했다 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
+- [x] 크로스 서비스 auto-increment 시퀀스 정합성 — 서로 다른 DB(서비스)에 같은 id로 레코드를 복제 삽입한 뒤 시퀀스(`setval`)를 강제로 맞출 때, 상대 DB의 현재 max_id를 확인하지 않고 계산하면 시퀀스가 기존 데이터보다 뒤로 밀려 다음 정상 삽입이 PK 충돌을 일으킬 수 있다 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 
 ### 인증과 인가
 
@@ -121,6 +123,7 @@
 - [x] 모델(Model)이란? 테이블과의 관계 → [레슨](lessons/0011-activerecord-base-and-model-layer.html)
 - [x] 마이그레이션(Migration)이란? → [정리](concepts/migration.md) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
 - [x] 연관관계 (`belongs_to`, `has_many`, `has_one`, `has_many :through`) → [레슨](lessons/0008-active-record-associations.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
+- [x] `has_one` 연관에서 FK는 상대 테이블에 있다 — `section.score?`가 부르는 `score_setting`은 `appraisal_sections`의 컬럼이 아니라 `has_one`으로 연결된 별도 테이블(`appraisal_section_score_settings`)이라, `.includes(:appraisal_sections)`만으로는 preload가 안 되고 섹션 수만큼 N+1이 생긴다. `includes(appraisal_sections: [:score_setting, :rating_setting])`처럼 중첩 preload로 해결 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 - [x] 폴리모픽 연관관계 (`belongs_to ..., polymorphic: true`) → [레슨](lessons/0036-polymorphic-association.html) | [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
 - [x] 유효성 검사 (`validates`) → [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
 - [x] 스코프(Scope)란? → [레슨](lessons/0049-where-not-nor-vs-and.html) | [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
@@ -131,6 +134,7 @@
 - [x] N+1 문제란? `includes`로 해결하기 → [레슨](lessons/0009-n-plus-1.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [x] `preload` vs `includes`, 그리고 공유 엔티티에 필드를 추가하면 그 엔티티를 렌더하는 **모든** 컨트롤러의 preload를 갱신해야 한다 — 쿼리는 그대로인데 노출 필드 하나 때문에 N+1이 생긴다 → [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-branch-review.md)
 - [x] 연관 캐시(association cache) — 스코프가 걸린 `has_one`(`-> { where(status: :pending) }`)은 상태가 바뀐 뒤 재조회하면 `nil`이 되므로, 이미 로드된 캐시에만 의존하는 코드는 `reload` 한 줄에 깨진다 → [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-branch-review.md)
+- [x] Relation의 `Enumerable#select`(블록)는 이미 로드된 배열을 재사용하지만 `scope`(`.where`)는 로드 여부와 무관하게 새 Relation(= 새 쿼리)을 만든다 — 그래서 이미 `.includes`로 로드해둔 컬렉션을 다시 필터링할 땐 `scope`가 아니라 인스턴스 predicate를 써야 방금 고친 N+1이 다른 자리에 또 생기지 않는다 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 - [x] Read Replica 라우팅 (멀티 DB, `connects_to`/`connected_to`) → [정리](concepts/read-replica-routing.md) | [배운 작업](work-log/2026-07-03-controller-routing-and-read-replica.md)
 - [x] `accepts_nested_attributes_for` — 부모 생성/수정 시 자식 레코드 배열을 한 번에 생성/수정/삭제 → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
 - [x] 자기참조 관계(Self-referential Association)와 순환 참조 방지 (closure_tree gem, `cycle_is_not_permitted`) → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md) · DB 레벨 방지와 별개로, 런타임에 그래프를 재귀 순회할 땐 방문한 노드 id를 `Set`에 쌓아 막아야 한다 → [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-branch-review.md)
@@ -147,6 +151,7 @@
 
 - [ ] 시리얼라이저(Serializer)란?
 - [ ] `render json:` 응답 만들기
+- [x] JSON 컬럼을 여러 파일이 독립적으로 파싱할 때 shape 계약이 갈라지는 문제 — 같은 JSON 컬럼을 한 파일은 String 키로, 다른 파일은 `deep_symbolize_keys`로 Symbol 키로 각자 읽으면, 원본 필드 이름이 바뀌어도 `[]`/`dig`가 예외 없이 `nil`을 반환해서 조용히 값만 틀려진다. PORO(값 객체)로 파싱 지점을 하나로 모으는 게 정석 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 
 ### 테스트
 
