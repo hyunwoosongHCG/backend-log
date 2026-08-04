@@ -177,6 +177,7 @@
 - [x] Grape는 top-level JSON 배열 body를 못 읽는다 (`Formatter#read_rack_input`의 `body.is_a?(Hash)` 체크) → [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
 - [x] Grape custom validator 작성 (`Grape::Validations::Validators::Base`, `register_validator`, `validate_param!`) — 파라미터 타입 검증을 넘어 "지금 이 값을 써도 되는 상태인가"까지 처리 → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
 - [x] Grape::Entity의 `if:` 조건부 expose — 성능/페이로드 최적화용 게이팅과, 특정 분기에서만 SELECT되는 가상 컬럼 접근 시 `MissingAttributeError`를 막는 정합성 게이팅은 서로 다른 이유일 수 있음 → [레슨](lessons/0047-grape-entity-conditional-expose-two-natures.html) | [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-api-exposure-review.md)
+- [x] Grape::Entity `options` 기반 조건부 필터링 — `if:`는 expose 자체를 게이팅하지만, expose된 컬렉션 안에서 개별 원소를 `options[:key]`로 `reject`하는 건 다른 메커니즘. 호출부마다 다른 필터 기준(`open_result_section_ids` 등)을 주입할 수 있는 대신, 그 옵션 값을 만드는 헬퍼가 어떤 범위로 스코프됐는지(예: 특정 process 기준인지 전체인지)를 놓치면 필터가 조용히 새는 게이트가 됨 → [배운 작업](work-log/2026-08-04-ppback-pr-5528-review.md)
 
 ### 권한
 
@@ -185,6 +186,7 @@
 - [x] `authorize`란? (실패 시 `record.errors.add`로 사유 기록 → `errors.empty? && 조건`으로 최종 판정하는 패턴) → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
 - [x] `authorize`는 컨트롤러에서 명시적으로 호출한 곳에서만 강제됨 — 서비스 객체를 직접 호출하면 정책 체크가 통째로 우회됨 → [레슨](lessons/0046-pundit-authorize-scope-and-hr-admin-duality.html) | [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-manual-scenario-testing.md)
 - [x] `has_flags`(비트마스크 플래그 컬럼) 패턴과, 같은 개념(HR admin)이 조인 테이블과 비트마스크 두 곳에 독립적으로 존재해 서로 어긋날 수 있다는 것 → [레슨](lessons/0046-pundit-authorize-scope-and-hr-admin-duality.html) | [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-manual-scenario-testing.md)
+- [x] 테넌트 격리 가드 패턴 (멀티 workspace에서 FK 소속 검증) — 같은 user가 여러 workspace에 속할 수 있는 멀티테넌시에서는, 파라미터로 받은 id가 "존재하는가"가 아니라 "현재 요청 중인 workspace에 속하는가"를 별도로 확인해야 한다. `AppraisalProcess.joins(appraisal_group: :appraisal).exists?(id:, appraisals: { workspace_id: })` 같은 join + `exists?`로 소속을 검증하고, 실패 시 존재 자체를 노출하지 않도록 403이 아니라 404로 처리한다 → [배운 작업](work-log/2026-08-04-ppback-pr-5528-review.md)
 
 ### 도메인 이벤트
 
