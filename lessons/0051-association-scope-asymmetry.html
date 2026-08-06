@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 51 — 연관관계 스코프는 조인 대상의 부모를 보지 않는다</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>연관관계 스코프는 조인 대상의 <em>부모</em>를 보지 않는다</h1>
+  <div class="lesson-meta">
+    <span>레슨 051</span>
+    <span>has_many 스코프 · 소프트 삭제 · joins 조건 · 계산과 표시의 분리</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 이름이 대칭인 두 연관관계가 같은 정책을 표현한다고 믿었다가, 한쪽만 부모 상태를 검사한다는 걸 발견한 과정 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>상황 — 평균을 내려면 분모가 필요했다</h2>
+
+  <p>
+    핵심성과 자동 반영을 "하위 하나로 덮어쓰기"에서 "연계된 하위 전체의 평균"으로 바꾸는 작업이었다.
+    평균을 내려면 <strong>분모에 넣을 하위 목록</strong>이 필요하다. 정책은 이랬다 —
+    연계돼 있으면 체크인 이력이 없어도 포함, 마감된 것도 포함, <strong>삭제된 것만 제외.</strong>
+  </p>
+
+  <p>
+    모델에 이미 쓸 만해 보이는 연관관계가 둘 있었다. 하위 목표를 가져오는 것과 하위 핵심성과를
+    가져오는 것. 이름도 대칭이라 그대로 쓰면 될 줄 알았다.
+  </p>
+
+<pre><code>class KeyResult &lt; ApplicationRecord
+  # 연계된 하위 목표
+  has_many :child_objectives,
+           -&gt; { where(stage: Objective::ACTIVE + Objective::CLOSED).kept },
+           class_name: :Objective, foreign_key: :super_key_result_id
+
+  # 연계된 하위 핵심성과
+  has_many :child_key_results,
+           -&gt; { where(active: true) },
+           class_name: :KeyResult, foreign_key: :super_key_result_id
+end</code></pre>
+
+  <p>
+    자세히 보면 조건이 다르다. 위쪽은 목표의 <code>stage</code>와 삭제 여부를 보는데,
+    아래쪽은 핵심성과 자신의 <code>active</code>만 본다. <strong>그 핵심성과가 어떤 목표에 속했고
+    그 목표가 살아 있는지는 조건에 없다.</strong>
+  </p>
+
+  <h2>왜 이게 문제가 되나 — 삭제가 부모 쪽에서만 일어난다</h2>
+
+  <p>
+    조건이 다르다고 무조건 문제는 아니다. 핵심성과를 삭제할 때 <code>active</code>가 항상 내려간다면
+    결과적으로 같을 수도 있다. 그래서 삭제 코드를 확인했다.
+  </p>
+
+<pre><code># 목표 삭제 — stage만 바꾼다
+def archive_and_create_history(current_user_id)
+  update!(stage: :archived)
+  create_history('Archived', current_user_id)
+end
+
+# active: false로 내리는 곳은 임시저장 삭제 하나뿐이었다
+def temp_discard
+  key_results.update_all(active: false, super_key_result_id: nil)
+  ...
+end</code></pre>
+
+  <p>
+    목표를 삭제해도 그 목표에 속한 핵심성과의 <code>active</code>는 <strong>그대로 true다.</strong>
+    그래서 결과가 갈린다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">목표를 삭제<br><code>stage: :archived</code></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><code>child_objectives</code><br><strong>제외됨</strong> ✓</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><code>child_key_results</code><br><strong>그대로 포함</strong> ✗</div>
+  </div>
+
+  <p>
+    그대로 썼다면 <strong>삭제된 목표의 핵심성과가 평균의 분모에 들어간다.</strong>
+    분모가 부풀려지니 상위 값이 실제보다 낮게 나오고, 눈에 잘 안 띈다.
+    값이 틀린 게 아니라 조금 낮을 뿐이라서.
+  </p>
+
+  <div class="analogy">
+    프론트로 치면 <code>items.filter(i =&gt; !i.deleted)</code>로 걸렀는데, 정작 삭제는
+    아이템이 아니라 <strong>그 아이템이 담긴 폴더</strong>에 표시되는 구조인 것과 같다.
+    필터는 정상 동작하고 있고, 보는 곳이 틀렸을 뿐이다.
+  </div>
+
+  <h2>이미 알려진 문제였다 — 다만 화면에서만 메우고 있었다</h2>
+
+  <p>
+    고치려고 코드를 뒤지다가 프론트 응답을 만드는 엔티티에서 이걸 발견했다.
+  </p>
+
+<pre><code># Entities::Objectives::KeyResult::ShowEntity
+object.child_key_results.select {|kr|
+  kr.objective.stage.in?(Objective::ACTIVE + Objective::CLOSED) &amp;&amp; !kr.objective.discarded?
+}</code></pre>
+
+  <p>
+    <strong>정확히 같은 조건을 Ruby <code>select</code>로 덧대고 있었다.</strong>
+    즉 비대칭은 이미 알려져 있었고, 발견한 사람이 연관관계를 고치는 대신
+    자기 화면에서만 보정한 것이다.
+  </p>
+
+  <p>
+    이게 이 레슨의 핵심이다. <strong>연관관계 자체를 안 고치면, 그 연관관계를 새로 쓰는
+    코드는 매번 같은 함정을 처음부터 다시 밟는다.</strong> 나는 운 좋게 계산 전에 발견했지만,
+    발견 못 했다면 조용히 틀린 분모로 몇 달을 갔을 것이다.
+  </p>
+
+  <h2>고치기 — joins로 부모 조건까지 SQL에 넣는다</h2>
+
+<pre><code>has_many :reflect_source_key_results,
+         lambda {
+           unscope(:order)
+             .joins(:objective)
+             .where(active: true,
+                    objective: { stage: Objective::ACTIVE + Objective::CLOSED, deleted_at: nil })
+         },
+         class_name: :KeyResult, foreign_key: :super_key_result_id,
+         inverse_of: :super_key_result</code></pre>
+
+  <p>
+    두 가지를 짚어둔다.
+  </p>
+
+  <ul>
+    <li>
+      <code>joins</code>의 <code>where</code> 조건에는 <code>.kept</code>(Discard gem의 스코프)를
+      직접 못 쓴다. 그건 <code>Objective</code>에 걸리는 스코프지 조인 조건이 아니다.
+      그래서 <code>deleted_at: nil</code>로 같은 정책을 손으로 표현해야 한다 —
+      <strong>Discard 설정이 바뀌면 이쪽도 같이 고쳐야 하는 결합</strong>이 생긴다. 주석으로 남겼다.
+    </li>
+    <li>
+      <code>unscope(:order)</code>가 필요했다. <code>KeyResult</code>에
+      <code>default_scope { order(:position) }</code>가 걸려 있어서, 정렬이 필요 없는
+      집계 쿼리에 불필요한 <code>ORDER BY</code>가 따라붙는다.
+    </li>
+  </ul>
+
+  <h2>Ruby select가 아니라 SQL로 거른 이유</h2>
+
+  <p>
+    엔티티는 Ruby <code>select</code>로 걸렀는데 나는 SQL로 걸렀다. 어느 쪽이 맞는 게 아니라
+    <strong>쓰임이 다르면 답이 다르다.</strong>
+  </p>
+
+  <div class="flow">
+    <div class="flow-step"><strong>화면</strong><br>목록을 그리려고<br>어차피 전부 로드함<br>→ Ruby select가 자연스러움</div>
+    <div class="flow-arrow">vs</div>
+    <div class="flow-step"><strong>계산</strong><br>평균의 분모라<br><em>건수</em>만 필요<br>→ SQL에서 거르는 게 맞음</div>
+  </div>
+
+  <p>
+    이건 <a href="0009-n-plus-1.html">레슨 9</a>·
+    <a href="0049-where-not-nor-vs-and.html">레슨 49</a>에서 본 것과 이어진다.
+    이미 <code>includes</code>로 로드해둔 컬렉션을 다시 <code>where</code>로 필터링하면 새 쿼리가 나가고,
+    반대로 로드할 이유가 없는데 전부 불러와서 Ruby로 세면 메모리를 낭비한다.
+    <strong>"이 데이터를 왜 가져오는가"가 필터 위치를 정한다.</strong>
+  </p>
+
+  <h2>기존 연관관계를 고치지 않고 새로 만든 이유</h2>
+
+  <p>
+    <code>child_key_results</code>를 직접 고칠 수도 있었다. 그러지 않은 이유는 두 가지다.
+  </p>
+
+  <ul>
+    <li>
+      <strong>영향 범위.</strong> 그 연관관계는 시리얼라이저·엔티티 등 화면 노출에도 쓰인다.
+      조건을 바꾸면 응답이 바뀌는 API가 여러 개다.
+    </li>
+    <li>
+      <strong>계산이 표시에 끌려가지 않게.</strong> 화면 요구는 바뀐다. "삭제된 것도 회색으로
+      보여달라"는 요청 하나에 조건이 바뀌면, 그 순간 <strong>반영값 계산이 조용히 함께 바뀐다.</strong>
+      계산의 입력을 표시용 연관관계에 묶어두면 안 된다.
+    </li>
+  </ul>
+
+  <p>
+    그래서 <code>reflect_source_objectives</code> / <code>reflect_source_key_results</code>라는
+    전용 연관관계를 새로 뒀다. 목표 쪽은 조건이 <code>child_objectives</code>와 같아서 중복처럼
+    보이지만, <strong>중복을 감수하고 분리</strong>했다. 이름이 용도를 말해주면 나중에 조건을 바꿀 때
+    "이건 반영 계산용이구나"가 바로 보인다.
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — 문제의 원인</h3>
+    <p class="quiz-q"><code>has_many :child_key_results, -&gt; { where(active: true) }</code>가
+      삭제된 목표의 핵심성과를 들고 오는 근본 원인은?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)"><code>active</code> 컬럼에 인덱스가 없어서</button></li>
+      <li><button onclick="answer(this,'q1',true)">스코프가 조인 대상 테이블의 컬럼만 보고, 그 레코드가 속한 목표의 상태는 조건에 없어서</button></li>
+      <li><button onclick="answer(this,'q1',false)"><code>has_many</code>는 소프트 삭제를 지원하지 않아서</button></li>
+      <li><button onclick="answer(this,'q1',false)">람다 스코프는 런타임에 평가되지 않아서</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — 필터 위치 고르기</h3>
+    <p class="quiz-q">평균의 <strong>분모 개수</strong>만 필요한 상황에서, 이미 <code>includes</code>로
+      로드된 컬렉션이 아니라면 어디서 거르는 게 적절한가?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">Ruby <code>select</code> — 어차피 객체가 필요하니까</button></li>
+      <li><button onclick="answer(this,'q2',true)">SQL(<code>joins</code> + <code>where</code>) — 건수만 필요하므로 레코드를 전부 로드할 이유가 없다</button></li>
+      <li><button onclick="answer(this,'q2',false)">엔티티에서 — 표시 로직과 함께 두는 게 응집도가 높다</button></li>
+      <li><button onclick="answer(this,'q2',false)">둘 다 상관없다 — 결과가 같으면 성능 차이는 없다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>한 줄로 남기면</h2>
+
+  <p>
+    <strong>연관관계 스코프를 읽을 때는 "이 조건이 어느 테이블에 걸리는가"를 먼저 보자.</strong>
+    그리고 같은 개념을 표현하는 연관관계가 둘 이상이면, 이름이 대칭이라는 이유로 정책도 같다고
+    믿지 말 것. 특히 <strong>소프트 삭제가 부모 쪽에서만 일어나는 설계</strong>라면 자식 연관관계는
+    거의 확실히 그 삭제를 못 본다.
+  </p>
+
+  <p class="source">
+    참고: <a href="https://guides.rubyonrails.org/association_basics.html#scopes-for-has-many" target="_blank">Rails Guides — Scopes for has_many</a> ·
+    <a href="https://github.com/jhawthorn/discard" target="_blank">discard gem</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 소프트 삭제를 부모에만 두는 설계(자식은 그대로 두기)와 자식까지 전파하는 설계 중
+    어느 쪽이 실무에서 더 흔한지, 각각의 트레이드오프가 궁금하면 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="0050-mysql-conditional-unique-index-via-generated-column.html">← 레슨 50: MySQL 조건부 유니크 인덱스 — 생성 컬럼으로 흉내내기</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. 람다 스코프의 where는 조인되는 테이블(key_results)에만 적용됩니다. 그 레코드가 속한 objectives의 stage/deleted_at은 조건에 들어가지 않아, 목표만 archived로 바뀌는 삭제 방식에서는 걸러지지 않습니다.",
+        wrong: "아니에요. 인덱스나 gem 지원 여부와 무관합니다. 원인은 스코프 조건이 조인 대상 테이블의 컬럼만 검사하고, 그 레코드가 속한 부모(objectives)의 상태는 보지 않기 때문입니다."
+      },
+      q2: {
+        correct: "맞아요. 필요한 게 건수뿐이면 레코드를 전부 객체로 만들 이유가 없습니다. joins로 부모 조건까지 넣어 SQL에서 거르는 편이 맞습니다. 반대로 화면처럼 어차피 전부 로드하는 자리에서는 Ruby select가 추가 쿼리를 만들지 않아 유리합니다.",
+        wrong: "아니에요. 쓰임에 따라 답이 갈립니다. 화면은 목록을 그리려고 어차피 전부 로드하니 Ruby select가 자연스럽지만, 분모 개수만 필요한 계산에서는 전부 로드할 이유가 없어 SQL에서 거르는 게 맞습니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>

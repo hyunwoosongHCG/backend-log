@@ -124,6 +124,7 @@
 - [x] 마이그레이션(Migration)이란? → [정리](concepts/migration.md) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
 - [x] 연관관계 (`belongs_to`, `has_many`, `has_one`, `has_many :through`) → [레슨](lessons/0008-active-record-associations.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [x] `has_one` 연관에서 FK는 상대 테이블에 있다 — `section.score?`가 부르는 `score_setting`은 `appraisal_sections`의 컬럼이 아니라 `has_one`으로 연결된 별도 테이블(`appraisal_section_score_settings`)이라, `.includes(:appraisal_sections)`만으로는 preload가 안 되고 섹션 수만큼 N+1이 생긴다. `includes(appraisal_sections: [:score_setting, :rating_setting])`처럼 중첩 preload로 해결 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
+- [x] 연관관계 스코프의 비대칭 — `has_many`의 람다 스코프는 **조인 대상 테이블의 컬럼만** 검사하고 그 레코드가 속한 부모의 상태는 보지 않는다. 소프트 삭제가 부모 쪽에서만 일어나는 설계(`stage: :archived`만 바꾸고 자식의 `active`는 그대로)에서는, 자식 연관관계가 삭제된 부모의 자식을 계속 들고 온다. 이름이 대칭인 두 연관관계라도 정책이 같다고 믿으면 안 됨 → [레슨](lessons/0051-association-scope-asymmetry.html) | [정리](concepts/association-scope-asymmetry.md) | [배운 작업](work-log/2026-08-06-key-result-auto-reflect-1n-split.md)
 - [x] 폴리모픽 연관관계 (`belongs_to ..., polymorphic: true`) → [레슨](lessons/0036-polymorphic-association.html) | [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
 - [x] 유효성 검사 (`validates`) → [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
 - [x] 스코프(Scope)란? → [레슨](lessons/0049-where-not-nor-vs-and.html) | [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
@@ -227,7 +228,7 @@
 
 > theplus-back PR #1294(Kafka 컨슘 실패 처리 개편)를 보며 심화. 레슨 24(트랜잭션)·29(DLQ)도 이 PR 내용으로 함께 보강했다.
 
-- [x] 원자성(Atomicity) vs 멱등성(Idempotency) → [레슨](lessons/0031-atomicity-vs-idempotency.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md)
+- [x] 원자성(Atomicity) vs 멱등성(Idempotency) → [레슨](lessons/0031-atomicity-vs-idempotency.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md) · 장애를 분류하는 프레임이 아니라 **설계 도구로** 쓴 사례 — 값을 절대 대입하는 대신 매번 전량 재계산하게 바꾸니 "처리 순서가 결과를 바꾼다"는 문제 자체가 사라져, 모호한 배치를 탐지해 막던 밸리데이션을 통째로 폐기할 수 있었다 → [배운 작업](work-log/2026-08-06-key-result-auto-reflect-1n-split.md)
 - [x] Transient vs Non-transient 에러 분류 (재시도 가능 여부로 에러 나누기) → [레슨](lessons/0029-kafka-dlq.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md)
 
 ### 분산 트랜잭션과 아키텍처 패턴
