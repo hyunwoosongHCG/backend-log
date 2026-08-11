@@ -6,7 +6,7 @@
 
 ## 이번 작업에서 처음 배운 개념
 
-- **[SQL JOIN](../lessons/0004-sql-joins.html)** — INNER JOIN vs LEFT OUTER JOIN의 차이와 서브쿼리 안에서 JOIN이 없으면 에러가 나는 이유
+- **[SQL JOIN](../lessons/0005-sql-joins.html)** — INNER JOIN vs LEFT OUTER JOIN의 차이와 서브쿼리 안에서 JOIN이 없으면 에러가 나는 이유
 - **서브쿼리(Subquery)** — `WHERE id IN (SELECT id FROM ...)` 패턴, 컨트롤러에서 쿼리 결과를 다시 감싸는 이유
 - **preload vs joins** — JOIN은 필터링/정렬용, preload는 N+1 방지용으로 역할이 다르다
 - **has_one** — 1:1 연관관계 선언, 외래키가 상대 테이블에 있다

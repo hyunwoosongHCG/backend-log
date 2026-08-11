@@ -33,7 +33,7 @@
 - [ ] MVC 패턴 (Model, View, Controller)
 - [x] 서비스 레이어(Service Layer)란? — 화이트리스트 상수 같은 걸 어느 레이어에 둘지는 "누가 그 개념의 진짜 주인인가"로 판단한다. 모델 컬럼(`category`)에 대한 predicate는 모델에 두고, 컨트롤러/validator가 끌어다 쓰는 API 파라미터 화이트리스트는 서비스 클래스가 아니라 별도 PORO 모듈로 분리해야 역참조가 안 생긴다 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 - [x] 트랜잭션 경계 소유권 — 트랜잭션을 **호출부가 여는가 서비스가 여는가**는 별도로 결정해야 하는 설계 항목이다. 서비스를 블록으로 감싸는 건 문법적으로 무해해 보여도, 그 서비스가 내부에서 트랜잭션을 열면 **감싸는 순간 경계가 이동**해서 원래 커밋 뒤에 돌던 후처리(자동 마감 등)가 같은 트랜잭션에 딸려 들어가고, 후처리 실패가 본 작업까지 롤백시킨다 → [레슨](lessons/0052-transaction-boundary-ownership.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md)
-- [x] 도메인(Domain)이란? 3레이어 Entity와의 차이 → [레슨](lessons/0003-domain-vs-entity.html) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
+- [x] 도메인(Domain)이란? 3레이어 Entity와의 차이 → [레슨](lessons/0006-domain-vs-entity.html) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
 - [ ] 미들웨어(Middleware)란?
 - [ ] 모놀리식 vs 마이크로서비스
 
@@ -41,7 +41,7 @@
 
 - [ ] 관계형 데이터베이스(RDB)란?
 - [ ] 테이블, 컬럼, 로우
-- [x] 기본키(PK)와 외래키(FK) → [레슨](lessons/0004-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
+- [x] 기본키(PK)와 외래키(FK) → [레슨](lessons/0005-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [x] 공개 식별자(Public ID)와 내부 PK 분리 패턴 → [정리](concepts/public-id-vs-primary-key.md) | [배운 작업](work-log/2026-07-07-delete-workspace-self-find.md)
 - [ ] 1:1, 1:N, N:M 관계
 - [x] 인덱스(Index)란? 왜 필요한가 → [레슨](lessons/0043-index-and-leftmost-prefix.html)
@@ -52,7 +52,7 @@
 - [x] 트랜잭션 격리 수준(Isolation Level)이란 (Dirty/Non-Repeatable/Phantom Read, Lost Update, MySQL 기본값) → [레슨](lessons/0044-transaction-isolation-level.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md) · MySQL REPEATABLE READ의 스냅샷 고정 **시점** 규칙: 잠금 읽기(`FOR UPDATE`)는 read view를 열지 않고 **첫 비잠금 SELECT가 연다.** 그래서 "락을 트랜잭션이 열리기 전(또는 첫 문장)에 잡아야 한다"는 제약이 생긴다
 - [x] 중첩 트랜잭션(Nested Transaction)과 `requires_new`(SAVEPOINT) — 기본 중첩은 진짜 커밋 경계가 아니라 바깥 트랜잭션에 합류할 뿐이고, `requires_new: true`는 부분 실패 격리는 되지만 락 조기 해제는 안 됨 → [레슨](lessons/0045-nested-transaction-and-requires-new.html) | [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-auto-close-and-review-fixes.md)
 - [ ] SQL 기본 (SELECT, INSERT, UPDATE, DELETE)
-- [x] JOIN이란? → [레슨](lessons/0004-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
+- [x] JOIN이란? → [레슨](lessons/0005-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [x] 쿼리 프로파일링/N+1 실측 (`ActiveSupport::Notifications.subscribed(..., "sql.active_record")`) — N+1을 추측이 아니라 직접 재현해서 쿼리 개수를 세는 법. 같은 방법으로 "이미 로드된 Relation을 `Enumerable#select`(블록)로 필터링하면 쿼리가 안 나가지만, `scope`(`.where`)를 걸면 로드 여부와 무관하게 새 쿼리가 나간다"는 것도 실측으로 증명했다 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 - [x] 크로스 서비스 auto-increment 시퀀스 정합성 — 서로 다른 DB(서비스)에 같은 id로 레코드를 복제 삽입한 뒤 시퀀스(`setval`)를 강제로 맞출 때, 상대 DB의 현재 max_id를 확인하지 않고 계산하면 시퀀스가 기존 데이터보다 뒤로 밀려 다음 정상 삽입이 PK 충돌을 일으킬 수 있다 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 
