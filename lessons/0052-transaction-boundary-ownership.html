@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 52 — 트랜잭션 경계는 누가 소유하는가</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>트랜잭션 경계는 <em>누가</em> 소유하는가</h1>
+  <div class="lesson-meta">
+    <span>레슨 052</span>
+    <span>트랜잭션 경계 · 블록 래핑 · 서비스 객체 계약 · 실패 전파 범위</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 "블록으로 감싸기"라는 무해해 보이는 리팩터링이 실패 전파 범위를 바꿔놓은 걸 리뷰에서 발견한 과정 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>상황 — 락을 걸려면 트랜잭션이 필요하다</h2>
+
+  <p>
+    형제 목표가 같은 상위 핵심성과에 동시에 체크인 승인되면 값이 덮어써지는
+    <strong>lost update</strong>가 있었다. 막으려면 상위 행에 <code>SELECT ... FOR UPDATE</code>를
+    걸어야 하는데, <strong>행 잠금은 트랜잭션이 끝나는 순간 풀린다.</strong>
+    그래서 "락을 잡는다"는 건 필연적으로 "트랜잭션을 연다"와 같은 말이다.
+  </p>
+
+  <p>
+    락 헬퍼는 이렇게 생겼다. 블록을 받고, 안에서 트랜잭션을 열고, 락을 잡고, 블록을 실행한다.
+  </p>
+
+<pre><code>def lock(key_result_ids)
+  return yield if key_result_ids.empty?
+  ...
+  ActiveRecord::Base.transaction do          # ← 여기서 트랜잭션이 열린다
+    key_result_ids.sort.each {|id| KeyResult.lock.where(id: id).pluck(:id) }
+    yield                                     # ← 호출부 코드가 이 안에서 돈다
+  end
+end</code></pre>
+
+  <p>
+    그리고 호출부를 이렇게 감쌌다. 겉보기엔 <strong>들여쓰기만 한 칸 늘어난</strong> 변경이다.
+  </p>
+
+<pre><code># before
+when 'pending_check_in'
+  diff_history = ObjectiveCheckInDiff.call(self)
+  accept_check_ins_and_create_history(user_id, diff_history)   # 자체 트랜잭션 → 커밋
+
+  Objective::AutoCloseObjectiveIfProgressCompleteService.call( # 커밋된 뒤, 트랜잭션 밖
+    workspace:, current_user_id: user_id, objective: reload,
+  )
+
+# after
+when 'pending_check_in'
+  ReflectToSuperKeyResultService.with_ancestor_locks(objective: self) do
+    diff_history = ObjectiveCheckInDiff.call(self)
+    accept_check_ins_and_create_history(user_id, diff_history)
+
+    Objective::AutoCloseObjectiveIfProgressCompleteService.call( # ← 이제 트랜잭션 "안"
+      workspace:, current_user_id: user_id, objective: reload,
+    )
+  end</code></pre>
+
+  <h2>무엇이 바뀌었나 — 실패 전파 범위</h2>
+
+  <p>
+    자동 마감 서비스는 내부에 <code>rescue</code>가 없다. 그래서:
+  </p>
+
+  <div class="flow">
+    <div class="flow-step"><strong>before</strong><br>체크인 승인 커밋 ✓<br>→ 자동 마감 실패<br>→ <strong>승인은 남는다</strong></div>
+    <div class="flow-arrow">vs</div>
+    <div class="flow-step"><strong>after</strong><br>같은 트랜잭션<br>→ 자동 마감 실패<br>→ <strong>승인까지 롤백</strong></div>
+  </div>
+
+  <p>
+    사용자 입장에서는 "승인 눌렀는데 아무 일도 안 일어났다"가 된다.
+    이전에는 "승인은 됐는데 목표가 자동 마감만 안 됐다"였다.
+    <strong>어느 쪽이 옳은지는 도메인이 정할 문제지, 리팩터링이 조용히 정할 문제가 아니다.</strong>
+  </p>
+
+  <div class="analogy">
+    프론트로 치면 <code>try/catch</code>의 범위를 넓힌 것과 같다.
+    <code>try { save(); } catch {}</code> 뒤에 있던 <code>sendAnalytics()</code>를
+    <code>try</code> 블록 안으로 옮기면, 분석 전송 실패가 저장 실패로 둔갑한다.
+    코드는 "감싸기만" 했는데 의미가 바뀐 것이다.
+  </div>
+
+  <h2>왜 눈에 안 띄는가 — Rails 트랜잭션은 조용히 합류한다</h2>
+
+  <p>
+    핵심은 <a href="0045-nested-transaction-and-requires-new.html">레슨 45</a>에서 본 성질이다.
+    <code>ActiveRecord::Base.transaction</code>은 <strong>이미 열린 트랜잭션이 있으면 새로 열지 않고
+    그냥 합류한다.</strong> 예외도 경고도 없다.
+  </p>
+
+<pre><code>ActiveRecord::Base.transaction do      # 여기서 진짜 BEGIN
+  ActiveRecord::Base.transaction do    # BEGIN 안 함. 그냥 합류.
+    ...                                # 이 안의 롤백은 바깥까지 되돌린다
+  end
+end</code></pre>
+
+  <p>
+    그래서 <code>accept_check_ins_and_create_history</code>가 자기 안에서
+    <code>ActiveRecord::Base.transaction</code>을 열고 있어도 <strong>더 이상 "자체 트랜잭션"이 아니다.</strong>
+    바깥에 락 헬퍼의 트랜잭션이 생긴 순간, 그 메서드의 커밋 시점이 바깥으로 밀려난다.
+    메서드 본문은 한 글자도 안 바뀌었는데 동작이 바뀐다.
+  </p>
+
+  <p>
+    <strong>이게 트랜잭션 경계 소유권이 별도의 설계 항목인 이유다.</strong>
+    "이 메서드는 자체 트랜잭션을 가진다"는 건 그 메서드 혼자 결정할 수 없다.
+    호출부 중 하나라도 트랜잭션을 열면 그 보장이 사라진다.
+  </p>
+
+  <h2>세 가지 소유 방식</h2>
+
+  <div class="flow">
+    <div class="flow-step"><strong>① 호출부 소유</strong><br>서비스는 절대 안 연다<br>경계가 명시적<br>서비스마다 반복</div>
+    <div class="flow-arrow">·</div>
+    <div class="flow-step"><strong>② 서비스 소유</strong><br>서비스가 항상 연다<br>단독 호출이 안전<br><strong>합류하면 보장 깨짐</strong></div>
+    <div class="flow-arrow">·</div>
+    <div class="flow-step"><strong>③ 최상위만 소유</strong><br>진입점 1곳만 연다<br>경계가 하나<br>진입점 규율 필요</div>
+  </div>
+
+  <p>
+    이번 코드는 <strong>②를 쓰면서 ①처럼 다루려다 사고가 났다.</strong>
+    락 헬퍼는 트랜잭션을 소유하는데(②), 호출부는 그걸 "그냥 감싸는 블록"으로 취급했다(①처럼).
+    그 결과 원래 경계 밖이던 후처리가 안으로 딸려 들어갔다.
+  </p>
+
+  <p>
+    고치는 방법은 간단하다. <strong>후처리를 블록 밖으로 빼면 된다.</strong>
+  </p>
+
+<pre><code>ReflectToSuperKeyResultService.with_ancestor_locks(objective: self) do
+  diff_history = ObjectiveCheckInDiff.call(self)
+  accept_check_ins_and_create_history(user_id, diff_history)
+end                                              # ← 여기서 커밋 + 락 해제
+
+Objective::AutoCloseObjectiveIfProgressCompleteService.call(
+  workspace:, current_user_id: user_id, objective: reload,
+)</code></pre>
+
+  <p>
+    덤으로 <strong>락 보유 시간도 짧아진다.</strong> 자동 마감은 다른 목표를 건드리는 무거운 작업인데,
+    그동안 상위 핵심성과 행을 계속 잡고 있을 이유가 없다.
+  </p>
+
+  <h2>실무에서 쓸 판별 질문</h2>
+
+  <ul>
+    <li>
+      <strong>"이 서비스/헬퍼는 트랜잭션을 여는가?"</strong> — 이건 메서드 이름이나 인자만 봐서는 모른다.
+      여는 쪽이면 문서화하거나, 최소한 <code>with_</code> 같은 접두사로 "리소스를 소유하는 블록"임을 드러낸다.
+      Ruby에서 <code>File.open</code>·<code>with_lock</code>처럼 <strong>블록을 받는 메서드는 대개 무언가를
+      열고 닫는다</strong>는 관습이 있다.
+    </li>
+    <li>
+      <strong>"블록 안에 넣은 코드가 원래 커밋 뒤에 돌던 것인가?"</strong> — 감싸기 리팩터링을 할 때
+      추가된 코드가 아니라 <em>이동한 코드</em>를 봐야 한다. 위치가 바뀐 줄이 있으면 경계가 바뀐 것이다.
+    </li>
+    <li>
+      <strong>"실패해도 본 작업은 살아야 하는 후처리가 있는가?"</strong> — 알림, 통계, 자동 마감처럼
+      부수적인 작업은 대개 그렇다. 있다면 트랜잭션 밖이거나, 최소한
+      <code>requires_new: true</code> + <code>rescue</code>로 격리돼야 한다.
+    </li>
+  </ul>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — 무엇이 바뀌었나</h3>
+    <p class="quiz-q">기존에 <code>accept_check_ins_and_create_history</code>가 자기 안에서
+      <code>ActiveRecord::Base.transaction</code>을 열고 있었다. 호출부를 트랜잭션을 여는 블록으로
+      감싸면 이 메서드는 어떻게 되나?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">중첩 트랜잭션이 되어 안쪽이 먼저 독립적으로 커밋된다</button></li>
+      <li><button onclick="answer(this,'q1',true)">새 트랜잭션을 열지 않고 바깥에 합류해서, 커밋 시점이 바깥 블록 끝으로 밀려난다</button></li>
+      <li><button onclick="answer(this,'q1',false)">중첩이 감지되어 <code>TransactionError</code>가 발생한다</button></li>
+      <li><button onclick="answer(this,'q1',false)">아무 변화 없다 — 메서드 본문이 안 바뀌었으므로</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — 후처리를 어디에 둘까</h3>
+    <p class="quiz-q">"실패해도 본 작업은 커밋돼야 하는" 후처리(알림 발송, 자동 마감 등)를
+      트랜잭션과 관련해 어디에 두는 게 맞나?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">같은 트랜잭션 안 — 데이터 일관성이 항상 최우선이므로</button></li>
+      <li><button onclick="answer(this,'q2',true)">트랜잭션 밖(커밋 이후), 또는 <code>requires_new: true</code> + <code>rescue</code>로 격리</button></li>
+      <li><button onclick="answer(this,'q2',false)">같은 트랜잭션 안에 두되 <code>rescue</code>만 붙이면 충분하다</button></li>
+      <li><button onclick="answer(this,'q2',false)">항상 별도 스레드로 — 본 작업을 블로킹하지 않도록</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>한 줄로 남기면</h2>
+
+  <p>
+    <strong>"블록으로 감쌌을 뿐"인 리팩터링은 없다.</strong> 그 블록을 제공하는 쪽이 트랜잭션을 연다면,
+    감싸는 순간 안에 들어간 모든 코드의 <strong>실패 전파 범위와 커밋 시점</strong>이 바뀐다.
+    특히 Rails의 트랜잭션은 조용히 합류하기 때문에 "이 메서드는 자체 트랜잭션이 있다"는 믿음이
+    호출부 하나 때문에 소리 없이 깨진다는 걸 기억하자.
+  </p>
+
+  <p class="source">
+    참고: <a href="https://api.rubyonrails.org/classes/ActiveRecord/Transactions/ClassMethods.html" target="_blank">Rails API — ActiveRecord::Transactions</a> ·
+    관련 레슨: <a href="0045-nested-transaction-and-requires-new.html">45 중첩 트랜잭션</a> ·
+    <a href="0038-after-commit-vs-after-create.html">38 after_commit</a> ·
+    <a href="0039-thread-pool-and-transaction-boundary.html">39 스레드 풀과 트랜잭션 경계</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 "서비스 객체가 트랜잭션을 열어야 하나 말아야 하나"는 팀마다 규칙이 다릅니다.
+    각 방식의 실무 트레이드오프(테스트 용이성, 재사용성, 배치 처리)가 궁금하면 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="0051-association-scope-asymmetry.html">← 레슨 51: 연관관계 스코프는 조인 대상의 부모를 보지 않는다</a>
+    <a href="0053-current-attributes.html">레슨 53: CurrentAttributes — 요청 하나에만 사는 전역 상태 →</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. Rails의 transaction은 이미 열린 트랜잭션이 있으면 BEGIN을 다시 하지 않고 합류합니다. 그래서 메서드 본문이 그대로여도 커밋 시점이 바깥 블록 끝으로 밀려나고, 바깥이 롤백되면 이 메서드의 결과도 함께 사라집니다.",
+        wrong: "아니에요. 기본 동작은 중첩도 예외도 아니고 '합류'입니다. BEGIN을 다시 하지 않으므로 안쪽이 먼저 커밋되지 않고, 커밋 시점이 바깥 블록 끝으로 밀려납니다."
+      },
+      q2: {
+        correct: "맞아요. 본 작업의 성패와 후처리의 성패를 분리하려면 경계를 나눠야 합니다. 트랜잭션 밖으로 빼거나, 안에 둬야 한다면 requires_new: true로 SAVEPOINT를 만들고 rescue로 잡아야 바깥까지 롤백되지 않습니다.",
+        wrong: "아니에요. 같은 트랜잭션 안에서 rescue만 붙이면 예외는 삼켜도 이미 발생한 DB 오류로 트랜잭션이 오염될 수 있고, 롤백 대상도 분리되지 않습니다. 경계 자체를 나눠야 합니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 54 — 동시성 버그를 스펙으로 재현하기, 그리고 테스트를 빠르게 만든 바로 그 장치가 막는 것</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>동시성 버그를 스펙으로 재현하기</h1>
+  <div class="lesson-meta">
+    <span>레슨 054</span>
+    <span>DatabaseCleaner · transaction vs truncation · 다중 커넥션 · filter_run_excluding</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 테스트를 빠르게 만들어주던 바로 그 장치가 동시성 재현을 막고 있다는 걸 알게 된 과정 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>상황 — 스레드 두 개를 띄웠더니 픽스처가 안 보인다</h2>
+
+  <p>
+    형제 목표 동시 승인 lost update를 스펙으로 고정하려면 <strong>진짜로 커넥션 두 개</strong>가 필요하다.
+    한 스레드가 계산하는 동안 다른 스레드가 커밋하는 상황을 만들어야 하니까.
+    그래서 이렇게 짰다.
+  </p>
+
+<pre><code>threads = [sibling_a, sibling_b].map do |objective|
+  Thread.new do
+    ActiveRecord::Base.connection_pool.with_connection { request_and_approve(objective, 100) }
+  end
+end
+threads.each(&amp;:join)</code></pre>
+
+  <p>
+    그런데 스레드 안에서 <strong>메인 스레드가 만든 목표를 못 찾는다.</strong>
+    <code>let!</code>로 분명히 <code>create</code>했는데 <code>RecordNotFound</code>가 난다.
+  </p>
+
+  <h2>원인 — 테스트가 빠른 이유가 그대로 원인이다</h2>
+
+  <p>
+    Rails 테스트가 빠른 건 <strong>예제마다 트랜잭션을 열고 끝나면 롤백</strong>하기 때문이다.
+    <code>DELETE</code>나 <code>TRUNCATE</code> 없이 즉시 원상복구된다. 이 레포는 DatabaseCleaner의
+    <code>:transaction</code> 전략을 쓴다.
+  </p>
+
+<pre><code>config.before(:suite) do
+  DatabaseCleaner.clean_with(:truncation)
+  DatabaseCleaner.strategy = :transaction     # ← 기본 전략
+end
+
+config.before { DatabaseCleaner.start }       # 예제마다 BEGIN
+config.after  { DatabaseCleaner.clean }       # 예제 끝나면 ROLLBACK</code></pre>
+
+  <p>
+    여기서 <a href="0044-transaction-isolation-level.html">레슨 44</a>의 내용이 그대로 걸린다.
+    <strong>커밋되지 않은 데이터는 그 트랜잭션 밖에서 안 보인다.</strong>
+    스레드를 새로 띄우면 <strong>별도 커넥션</strong>을 쓰게 되고, 그 커넥션은 메인 스레드의
+    미커밋 트랜잭션 안을 들여다볼 수 없다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step"><strong>메인 스레드</strong><br>커넥션 A<br>BEGIN → 픽스처 생성<br>(커밋 안 함)</div>
+    <div class="flow-arrow">✗</div>
+    <div class="flow-step"><strong>서브 스레드</strong><br>커넥션 B<br>SELECT → <strong>빈 결과</strong></div>
+  </div>
+
+  <div class="analogy">
+    프론트로 치면 <code>jsdom</code>에서 실제 브라우저의 렌더 타이밍 버그를 재현하려는 것과 비슷하다.
+    테스트를 빠르고 결정적으로 만들어준 바로 그 단순화가, <strong>정확히 그 단순화가 지운 영역의 버그</strong>는
+    재현할 수 없게 만든다.
+  </div>
+
+  <h2>해결 — 그 그룹만 커밋되는 전략으로</h2>
+
+<pre><code>config.before(:all) do
+  # :concurrency 태그가 붙은 그룹만 실제로 커밋되는 :truncation으로 바꾼다
+  DatabaseCleaner.strategy = self.class.metadata[:concurrency] ? :truncation : :transaction
+  DatabaseCleaner.start
+end
+
+config.after(:all) do
+  DatabaseCleaner.clean
+  DatabaseCleaner.strategy = :transaction    # 원복
+end</code></pre>
+
+  <p>
+    <code>:truncation</code>은 트랜잭션으로 감싸지 않고, 예제가 끝나면 <strong>테이블을 실제로 비운다.</strong>
+    그래서 픽스처가 커밋된 상태로 남고 다른 커넥션에서도 보인다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step"><strong><code>:transaction</code></strong><br>BEGIN → ROLLBACK<br>빠름 (ms)<br><strong>다른 커넥션에 안 보임</strong></div>
+    <div class="flow-arrow">vs</div>
+    <div class="flow-step"><strong><code>:truncation</code></strong><br>실제 커밋 → TRUNCATE<br>느림 (예제당 10~15초)<br><strong>다른 커넥션에 보임</strong></div>
+  </div>
+
+  <p>
+    대가가 크다. 이 PR의 동시성 스펙 7건이 <strong>96초</strong> 걸린다.
+    그리고 매 예제 후 테이블을 통째로 비우므로,
+    <a href="0048-let-it-be-shared-object-pollution.html">레슨 48</a>에서 본
+    <code>let_it_be</code>/<code>before(:all)</code> 픽스처도 같이 날아간다.
+    그래서 이 전략을 쓰는 그룹은 <strong>예제마다 픽스처를 다시 만드는 <code>let!</code> 스타일</strong>로 짜야 한다.
+  </p>
+
+  <h2>보너스 — "지금 앱이 연 트랜잭션인가, 테스트 하네스가 연 트랜잭션인가"</h2>
+
+  <p>
+    이 PR엔 "락을 잡기 전에 트랜잭션이 열려 있으면 안 된다"는 규칙이 있고, 그걸 런타임에 검사한다.
+    그런데 <strong>테스트에서는 하네스가 항상 트랜잭션을 열어두고 있다.</strong> 그대로 검사하면 전 스펙이 죽는다.
+  </p>
+
+<pre><code>def app_transaction_open?
+  ActiveRecord::Base.connection.current_transaction.joinable?
+end</code></pre>
+
+  <p>
+    DatabaseCleaner는 트랜잭션을 <code>joinable: false</code>로 연다.
+    앱의 <code>ActiveRecord::Base.transaction</code>은 <code>true</code>다.
+    트랜잭션이 아예 없을 때 반환되는 <code>NullTransaction</code>도 <code>false</code>다.
+    그래서 <strong><code>joinable?</code> 하나로 세 상태가 정확히 갈린다.</strong>
+  </p>
+
+  <p>
+    <code>joinable</code>은 원래 "이 트랜잭션에 다른 트랜잭션이 합류해도 되는가"를 뜻하는 플래그다
+    (<a href="0045-nested-transaction-and-requires-new.html">레슨 45</a>의 합류 동작을 제어한다).
+    테스트 하네스는 자기 트랜잭션에 앱 코드가 합류해서 커밋 콜백이 엉키는 걸 원치 않으니 <code>false</code>로 연다.
+    <strong>그 부수효과를 "하네스 트랜잭션 식별자"로 빌려 쓴 것</strong>이다 — 영리하지만 문서화되지 않은 계약에 기대는 것이라
+    주석이 필수다.
+  </p>
+
+  <h2>함정 — 태그로 뺐으면 CI에서 다시 넣어야 한다</h2>
+
+<pre><code>config.filter_run_excluding concurrency: true unless ENV['RUN_CONCURRENCY_SPECS']</code></pre>
+
+  <p>
+    느리고 타이밍에 따라 flaky할 수 있으니 기본 스위트에서 빼는 건 표준적인 판단이다.
+    문제는 그다음이다. <strong>CI에 별도 실행 스텝을 안 만들면 이 스펙은 아무도 안 돌린다.</strong>
+  </p>
+
+  <p>
+    이 PR에서 가장 중요한 회귀 방어가 정확히 이 스펙인데, 지금 상태로는
+    <strong>누가 락을 통째로 되돌려도 CI가 초록</strong>이다.
+    "테스트를 썼다"와 "테스트가 지켜준다" 사이에는 <strong>실행되는가</strong>라는 한 칸이 더 있다.
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — 왜 안 보였나</h3>
+    <p class="quiz-q"><code>:transaction</code> 전략에서 <code>Thread.new</code>로 띄운 스레드가
+      메인 스레드의 <code>let!</code> 픽스처를 못 찾는 이유는?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)"><code>let!</code>은 lazy라서 스레드 안에서는 평가되지 않기 때문</button></li>
+      <li><button onclick="answer(this,'q1',true)">픽스처가 미커밋 트랜잭션 안에 있고, 새 스레드는 별도 커넥션이라 그 트랜잭션 밖에서 보기 때문</button></li>
+      <li><button onclick="answer(this,'q1',false)">FactoryBot이 스레드 세이프하지 않아서</button></li>
+      <li><button onclick="answer(this,'q1',false)">커넥션 풀 크기가 1이라 스레드가 커넥션을 못 얻어서</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — 태그로 제외한 스펙</h3>
+    <p class="quiz-q">느린 동시성 스펙을 <code>filter_run_excluding</code>으로 기본 스위트에서 뺐다.
+      이때 반드시 함께 해야 하는 일은?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">특별히 없다 — 필요할 때 개발자가 로컬에서 돌리면 된다</button></li>
+      <li><button onclick="answer(this,'q2',true)">CI에 해당 태그만 실행하는 별도 스텝을 추가한다 — 안 그러면 그 회귀 방어는 실질적으로 0이다</button></li>
+      <li><button onclick="answer(this,'q2',false)">제외한 스펙을 삭제한다 — 안 돌 거면 유지 비용만 든다</button></li>
+      <li><button onclick="answer(this,'q2',false)">같은 검증을 단위 테스트로 다시 작성한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>한 줄로 남기면</h2>
+
+  <p>
+    <strong>테스트 격리 전략은 "무엇을 테스트할 수 없는가"까지 정한다.</strong>
+    예제를 트랜잭션으로 감싸 롤백하는 방식은 빠르지만, 바로 그 미커밋 상태 때문에
+    <strong>커밋 가시성에 의존하는 버그(lost update, 데드락, 격리 수준 문제)는 재현할 수 없다.</strong>
+    그런 버그를 잡으려면 그 그룹만 실제로 커밋되게 바꾸고, 느려진 만큼
+    <strong>CI에서 따로 돌 자리를 반드시 만들어줘야</strong> 한다.
+  </p>
+
+  <p class="source">
+    참고: <a href="https://github.com/DatabaseCleaner/database_cleaner" target="_blank">DatabaseCleaner</a> ·
+    <a href="https://rspec.info/features/3-13/rspec-core/configuration/filter-run-excluding/" target="_blank">RSpec — filter_run_excluding</a> ·
+    관련 레슨: <a href="0044-transaction-isolation-level.html">44 격리 수준</a> ·
+    <a href="0045-nested-transaction-and-requires-new.html">45 중첩 트랜잭션</a> ·
+    <a href="0048-let-it-be-shared-object-pollution.html">48 let_it_be 오염</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 동시성 스펙이 flaky해지는 전형적인 패턴(스레드 순서 가정, sleep 기반 동기화)과
+    그걸 피하는 방법(<code>Queue</code>·barrier·advisory lock)이 궁금하면 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="0053-current-attributes.html">← 레슨 53: CurrentAttributes — 요청 하나에만 사는 전역 상태</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. :transaction 전략은 예제를 미커밋 트랜잭션으로 감쌉니다. 새 스레드는 커넥션 풀에서 다른 커넥션을 받으므로, 그 커넥션 입장에서 픽스처는 아직 커밋되지 않은 남의 트랜잭션 안 데이터라 보이지 않습니다.",
+        wrong: "아니에요. let!은 즉시 평가되고 FactoryBot이나 풀 크기 문제도 아닙니다. 원인은 커밋 가시성입니다 — 미커밋 트랜잭션 안의 데이터는 다른 커넥션에서 볼 수 없습니다."
+      },
+      q2: {
+        correct: "맞아요. 태그로 빼는 것 자체는 합리적이지만, CI에 별도 스텝이 없으면 아무도 그 스펙을 돌리지 않게 됩니다. 그 순간 초록 CI가 해당 회귀에 대해 아무것도 보장하지 않는 상태가 됩니다.",
+        wrong: "아니에요. 로컬 실행에 의존하면 실제로는 아무도 안 돌립니다. 삭제하거나 단위 테스트로 대체하면 동시성이라는 검증 대상 자체가 사라집니다. CI에 태그 전용 스텝을 만드는 게 정답입니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>

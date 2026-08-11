@@ -39,6 +39,10 @@
 - 트랜잭션 격리 수준(Isolation Level), Dirty/Non-Repeatable/Phantom Read, Lost Update — 2026-07-16
 - 중첩 트랜잭션과 requires_new(SAVEPOINT) — 락 조기 해제는 안 됨, 부분 실패 격리만 됨 — 2026-07-24
 - Pundit `authorize`는 컨트롤러 전용, `has_flags` 비트마스크와 조인 테이블 두 곳에 독립적으로 존재하는 "HR admin" — 2026-07-27
+- 트랜잭션 경계 소유권 — 서비스를 블록으로 감싸면 그 서비스가 트랜잭션을 열 때 경계가 이동한다 — 2026-08-11
+- `ActiveSupport::CurrentAttributes` (요청/잡 단위 스레드 로컬 상태, executor가 자동 리셋) — 2026-08-11
+- DatabaseCleaner `:transaction` vs `:truncation`, 다중 커넥션 동시성 스펙, `filter_run_excluding`의 CI 공백 — 2026-08-11
+- MySQL REPEATABLE READ read view 고정 **시점** (`FOR UPDATE`는 안 열고 첫 비잠금 SELECT가 연다) — 2026-08-11
 
 ## 주의사항
 

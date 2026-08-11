@@ -32,6 +32,7 @@
 
 - [ ] MVC 패턴 (Model, View, Controller)
 - [x] 서비스 레이어(Service Layer)란? — 화이트리스트 상수 같은 걸 어느 레이어에 둘지는 "누가 그 개념의 진짜 주인인가"로 판단한다. 모델 컬럼(`category`)에 대한 predicate는 모델에 두고, 컨트롤러/validator가 끌어다 쓰는 API 파라미터 화이트리스트는 서비스 클래스가 아니라 별도 PORO 모듈로 분리해야 역참조가 안 생긴다 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
+- [x] 트랜잭션 경계 소유권 — 트랜잭션을 **호출부가 여는가 서비스가 여는가**는 별도로 결정해야 하는 설계 항목이다. 서비스를 블록으로 감싸는 건 문법적으로 무해해 보여도, 그 서비스가 내부에서 트랜잭션을 열면 **감싸는 순간 경계가 이동**해서 원래 커밋 뒤에 돌던 후처리(자동 마감 등)가 같은 트랜잭션에 딸려 들어가고, 후처리 실패가 본 작업까지 롤백시킨다 → [레슨](lessons/0052-transaction-boundary-ownership.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md)
 - [x] 도메인(Domain)이란? 3레이어 Entity와의 차이 → [레슨](lessons/0003-domain-vs-entity.html) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
 - [ ] 미들웨어(Middleware)란?
 - [ ] 모놀리식 vs 마이크로서비스
@@ -46,8 +47,9 @@
 - [x] 인덱스(Index)란? 왜 필요한가 → [레슨](lessons/0043-index-and-leftmost-prefix.html)
 - [x] 조건부(Partial) 유니크 인덱스 — Postgres의 `WHERE` 조건부 인덱스와, MySQL이 생성 컬럼 + NULL 중복 허용으로 이를 흉내내는 법 → [레슨](lessons/0050-mysql-conditional-unique-index-via-generated-column.html) | [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
 - [x] 트랜잭션(Transaction)과 ACID → [레슨](lessons/0024-transaction-atomicity-bulk-approval-bug.html) | [배운 작업](work-log/2026-07-03-sentry-batch-approval-atomicity-bug.md) · [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md) · [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
-- [x] 행 잠금(Row Locking)과 동시성 제어 (`with_lock`, `SELECT ... FOR UPDATE`) → [레슨](lessons/0042-row-locking-and-deadlock.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md)
-- [x] 트랜잭션 격리 수준(Isolation Level)이란 (Dirty/Non-Repeatable/Phantom Read, MySQL 기본값) → [레슨](lessons/0044-transaction-isolation-level.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md)
+- [x] 행 잠금(Row Locking)과 동시성 제어 (`with_lock`, `SELECT ... FOR UPDATE`) → [레슨](lessons/0042-row-locking-and-deadlock.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md) · 전역 정렬 순서(id 오름차순)로 잡으면 데드락을 피할 수 있지만, **반대로 조상 행 전체를 미리 선점하는 설계는 그 자체가 새 데드락 축을 만든다** — 같은 행을 락 없이 쓰는 다른 경로가 있으면 순서가 역전되므로, 그 경로까지 같은 규칙으로 잠그게 하거나 아예 한 번에 한 행만 잡아 hold-and-wait를 없애야 한다
+- [ ] 낙관적 락(Optimistic Locking, `lock_version`) vs 비관적 락 — 충돌 빈도·재시도 비용 기준의 트레이드오프
+- [x] 트랜잭션 격리 수준(Isolation Level)이란 (Dirty/Non-Repeatable/Phantom Read, Lost Update, MySQL 기본값) → [레슨](lessons/0044-transaction-isolation-level.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md) · MySQL REPEATABLE READ의 스냅샷 고정 **시점** 규칙: 잠금 읽기(`FOR UPDATE`)는 read view를 열지 않고 **첫 비잠금 SELECT가 연다.** 그래서 "락을 트랜잭션이 열리기 전(또는 첫 문장)에 잡아야 한다"는 제약이 생긴다
 - [x] 중첩 트랜잭션(Nested Transaction)과 `requires_new`(SAVEPOINT) — 기본 중첩은 진짜 커밋 경계가 아니라 바깥 트랜잭션에 합류할 뿐이고, `requires_new: true`는 부분 실패 격리는 되지만 락 조기 해제는 안 됨 → [레슨](lessons/0045-nested-transaction-and-requires-new.html) | [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-auto-close-and-review-fixes.md)
 - [ ] SQL 기본 (SELECT, INSERT, UPDATE, DELETE)
 - [x] JOIN이란? → [레슨](lessons/0004-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
@@ -145,6 +147,7 @@
 - [ ] 컨트롤러(Controller)란?
 - [x] 액션(Action)과 HTTP 메서드 매핑 → [레슨](lessons/0023-rails-resources-routing-cases.html) | [배운 작업](work-log/2026-07-03-rails-resources-routing-lesson.md)
 - [ ] `before_action`이란?
+- [x] 요청/잡 단위 전역 상태 (`ActiveSupport::CurrentAttributes`) — 스레드·파이버 단위 상태를 Rails executor가 요청·잡 경계마다 자동 리셋해준다. 전역 변수처럼 쓰되 요청 간 누수가 없어, "이 호출 스택 안에서 이미 처리한 것"을 기록해 정상 재진입과 진짜 위반을 구분하는 용도로 쓸 수 있다. 다만 인자에 안 드러나는 암묵적 의존이라 도메인 결정보다 진단·가드용이 안전 → [레슨](lessons/0053-current-attributes.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md)
 - [ ] Strong Parameters (`params.require.permit`)
 - [ ] `render` vs `redirect_to`
 
@@ -161,6 +164,9 @@
 - [x] `let_it_be`(test-prof)와 `let`/`let!`의 차이 — 같은 example group 안에서 객체를 재사용하므로, 저장 없는 인메모리 속성 변경 시 다른 예제로 오염될 수 있음 → [레슨](lessons/0048-let-it-be-shared-object-pollution.html) | [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-api-exposure-review.md)
 - [ ] Factory Bot으로 테스트 데이터 만들기
 - [ ] Request spec vs Model spec
+- [x] DB 정리 전략 (`DatabaseCleaner` `:transaction` vs `:truncation`) — `:transaction`은 예제를 **미커밋 트랜잭션으로 감싸서** 빠르게 되돌리는 대신, 그 픽스처가 **다른 커넥션에는 보이지 않는다.** `:truncation`은 실제로 커밋되지만 매 예제마다 테이블을 비워서 느리다 → [레슨](lessons/0054-database-cleaner-strategy-and-concurrency-spec.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md)
+- [x] 다중 커넥션(스레드) 동시성 스펙 — 진짜 동시성 버그(lost update, 데드락)는 커넥션 2개를 실제로 띄워야 재현된다. 픽스처가 커밋돼 있어야 하므로 `:truncation` 전환이 전제. 부수적으로, 테스트 하네스가 연 트랜잭션은 `joinable: false`로 열려서 앱이 연 트랜잭션(`true`)과 `current_transaction.joinable?`로 구분할 수 있다 → [레슨](lessons/0054-database-cleaner-strategy-and-concurrency-spec.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md)
+- [x] 태그 기반 스펙 제외 (`config.filter_run_excluding`)와 그 대가 — 느리거나 flaky한 스펙을 기본 스위트에서 빼는 표준 방법이지만, **CI에 별도 실행 스텝을 안 만들면 그 회귀 방어는 0이 된다** (초록 CI가 아무것도 보장하지 않게 됨) → [레슨](lessons/0054-database-cleaner-strategy-and-concurrency-spec.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md)
 
 ---
 
@@ -228,7 +234,7 @@
 
 > theplus-back PR #1294(Kafka 컨슘 실패 처리 개편)를 보며 심화. 레슨 24(트랜잭션)·29(DLQ)도 이 PR 내용으로 함께 보강했다.
 
-- [x] 원자성(Atomicity) vs 멱등성(Idempotency) → [레슨](lessons/0031-atomicity-vs-idempotency.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md) · 장애를 분류하는 프레임이 아니라 **설계 도구로** 쓴 사례 — 값을 절대 대입하는 대신 매번 전량 재계산하게 바꾸니 "처리 순서가 결과를 바꾼다"는 문제 자체가 사라져, 모호한 배치를 탐지해 막던 밸리데이션을 통째로 폐기할 수 있었다 → [배운 작업](work-log/2026-08-06-key-result-auto-reflect-1n-split.md)
+- [x] 원자성(Atomicity) vs 멱등성(Idempotency) → [레슨](lessons/0031-atomicity-vs-idempotency.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md) · 장애를 분류하는 프레임이 아니라 **설계 도구로** 쓴 사례 — 값을 절대 대입하는 대신 매번 전량 재계산하게 바꾸니 "처리 순서가 결과를 바꾼다"는 문제 자체가 사라져, 모호한 배치를 탐지해 막던 밸리데이션을 통째로 폐기할 수 있었다 → [배운 작업](work-log/2026-08-06-key-result-auto-reflect-1n-split.md) · 둘은 서로를 대체하기도 한다 — 전량 재계산(멱등)이 있으면 값은 다음 실행에 자가복구되므로 **원자성을 포기하고 후처리를 커밋 뒤로 분리**하는 선택지가 열리고, 그 결정 하나가 동시성 방어 코드량을 크게 좌우한다 → [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md)
 - [x] Transient vs Non-transient 에러 분류 (재시도 가능 여부로 에러 나누기) → [레슨](lessons/0029-kafka-dlq.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md)
 
 ### 분산 트랜잭션과 아키텍처 패턴

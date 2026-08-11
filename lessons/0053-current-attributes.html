@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 53 — CurrentAttributes, 요청 하나에만 사는 전역 상태</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1><code>CurrentAttributes</code> — 요청 하나에만 사는 전역 상태</h1>
+  <div class="lesson-meta">
+    <span>레슨 053</span>
+    <span>ActiveSupport::CurrentAttributes · 스레드 로컬 · executor · 암묵적 의존</span>
+    <span>~12분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 "이미 처리했음"을 호출 스택 깊은 곳까지 전달해야 하는데 중간 계층은 그걸 몰라도 되는 상황 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>상황 — 인자로 넘기자니 중간이 너무 많다</h2>
+
+  <p>
+    상위 핵심성과 자동 반영에 락을 도입하면서 규칙이 하나 생겼다.
+    <strong>락은 쓰기 트랜잭션이 열리기 전에 잡아야 한다.</strong>
+    그런데 벌크 체크인 워커는 정상적으로 이 규칙을 두 번 밟는다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step"><strong>워커</strong><br>배치 전체의<br>조상 KR을<br><strong>미리 잠금</strong></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">배치 트랜잭션<br>objective 루프</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><strong>RequestService</strong><br>objective 하나의<br>조상 KR을<br>또 잠그려 함</div>
+  </div>
+
+  <p>
+    안쪽 호출은 <strong>위반이 아니다.</strong> 바깥에서 이미 잠근 집합의 부분집합이니 다시 잠글 필요도 없고,
+    그 트랜잭션은 락 획득 이후에 열렸으니 안전하다. 하지만 안쪽 코드는 그걸 알 방법이 없다.
+    "이미 잠갔음"을 알려면 인자를 뚫어야 하는데, 중간에 워커 → 서비스 → 모델 메서드가 줄줄이 있고
+    <strong>그 계층들은 락 얘기를 전혀 몰라도 되는 코드다.</strong>
+  </p>
+
+  <div class="analogy">
+    프론트의 <strong>props drilling</strong>과 똑같은 문제다. 최상위에서 잡은 값을 6단계 아래
+    컴포넌트가 써야 하는데, 중간 5개는 그 값에 아무 관심이 없다.
+    React는 이걸 <code>Context</code>로 푼다. Rails에서 대응하는 도구가 <code>CurrentAttributes</code>다.
+  </div>
+
+  <h2>왜 그냥 전역 변수를 쓰면 안 되나</h2>
+
+  <p>
+    Ruby에서 "아무 데서나 읽는 값"을 만드는 방법은 여러 가지다. 문제는 서버 환경이다.
+  </p>
+
+  <ul>
+    <li>
+      <strong><code>$global</code> / 클래스 변수</strong> — 프로세스 전체가 공유한다.
+      Puma/Sidekiq는 <strong>한 프로세스에서 여러 요청·잡을 스레드로 동시에 처리</strong>하므로,
+      A 요청이 넣은 값을 B 요청이 읽는다. 즉시 사고.
+    </li>
+    <li>
+      <strong><code>Thread.current[:key]</code></strong> — 스레드 격리는 된다. 그런데 <strong>정리를 안 해준다.</strong>
+      스레드는 재사용되므로(스레드 풀), 이전 요청이 남긴 값이 다음 요청에 그대로 보인다.
+      <code>ensure</code>로 매번 지우는 걸 사람이 기억해야 한다.
+    </li>
+  </ul>
+
+  <p>
+    <code>ActiveSupport::CurrentAttributes</code>는 이 둘의 문제를 동시에 푼다.
+    <strong>내부적으로는 스레드(정확히는 <code>IsolatedExecutionState</code>) 단위 저장이고,
+    Rails executor가 요청·잡의 경계마다 자동으로 <code>reset</code>한다.</strong>
+  </p>
+
+  <h2>실제 코드</h2>
+
+<pre><code>class Objective::CheckIns::ReflectToSuperKeyResultService &lt; ApplicationService
+  # 이 스레드에서 이미 FOR UPDATE로 잠근 조상 KR id.
+  class LockedKeyResults &lt; ActiveSupport::CurrentAttributes
+    attribute :ids
+  end
+  ...
+end</code></pre>
+
+  <p>
+    <code>attribute :ids</code> 한 줄로 <code>LockedKeyResults.ids</code> /
+    <code>LockedKeyResults.ids = [...]</code> 접근자가 생긴다. 그리고 사용부:
+  </p>
+
+<pre><code>def lock(key_result_ids)
+  already_locked = LockedKeyResults.ids || []
+
+  # 바깥 lock이 이미 전부 잠갔다면(정상 재진입) 다시 잠글 필요가 없다
+  return yield if (key_result_ids - already_locked).empty?
+
+  # 아직 안 잠근 id가 남았는데 트랜잭션이 이미 열려 있으면 진짜 위반
+  report_lock_precondition_violation(key_result_ids - already_locked) if app_transaction_open?
+
+  ActiveRecord::Base.transaction do
+    LockedKeyResults.ids = already_locked | key_result_ids
+    begin
+      key_result_ids.sort.each {|id| KeyResult.lock.where(id: id).pluck(:id) }
+      yield
+    ensure
+      LockedKeyResults.ids = already_locked      # ← 중첩 복원
+    end
+  end
+end</code></pre>
+
+  <p>
+    핵심은 <strong>"정상 재진입"과 "진짜 위반"을 구분하는 것</strong>이다.
+    둘 다 겉보기엔 "트랜잭션이 열린 상태에서 락을 요청함"으로 똑같이 생겼는데,
+    이미 잠근 집합을 알고 있으면 부분집합인지 확인해서 갈라낼 수 있다.
+  </p>
+
+  <h2>executor가 리셋해주는데 <code>ensure</code>는 왜 있나</h2>
+
+  <p>
+    executor의 리셋은 <strong>요청·잡의 시작과 끝</strong>에 일어난다.
+    그건 "다음 요청에 안 새게" 하는 보장이고, <strong>같은 요청 안에서 중첩 호출이 끝났을 때
+    이전 값으로 되돌리는 것</strong>은 별개다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step"><strong>executor reset</strong><br>요청·잡 경계<br>= 다음 요청 오염 방지</div>
+    <div class="flow-arrow">≠</div>
+    <div class="flow-step"><strong><code>ensure</code> 복원</strong><br>블록 경계<br>= 같은 요청 안 중첩 복원</div>
+  </div>
+
+  <p>
+    <code>ensure</code>에서 <code>already_locked</code>(들어올 때의 값)로 되돌리는 이유가 이것이다.
+    <code>nil</code>로 지우면 <strong>바깥 락이 아직 유효한데 안쪽이 그 기록을 지워버린다.</strong>
+    React에서 Context Provider를 중첩할 때 안쪽이 끝나면 바깥 값이 다시 보여야 하는 것과 같다.
+  </p>
+
+  <h2>남용 주의 — 숨은 전역 상태다</h2>
+
+  <p>
+    <code>CurrentAttributes</code>는 Rails 공식 기능이지만 <strong>논쟁이 있는 도구</strong>다.
+    가장 흔한 용례인 <code>Current.user</code>조차 "모델이 현재 로그인 유저를 알게 되는 게 맞나"로
+    의견이 갈린다. 이유는 명확하다 — <strong>인자로 안 받는 의존은 시그니처에 안 드러난다.</strong>
+  </p>
+
+  <ul>
+    <li>메서드만 봐서는 이 값을 쓰는지 알 수 없다 (테스트에서 세팅을 빼먹기 쉽다)</li>
+    <li>호출 순서에 의존한다 (누가 언제 넣었는지가 동작을 좌우)</li>
+    <li>스레드 밖으로 못 넘어간다 — <code>Thread.new</code>나 <code>perform_async</code>로 넘어가면 값이 없다</li>
+  </ul>
+
+  <p>
+    이번 코드에서 괜찮다고 본 이유는 <strong>용도가 좁기 때문</strong>이다.
+    비즈니스 로직이 이 값을 읽어서 결과를 바꾸지 않는다. 오직 <strong>가드가 오탐을 내지 않도록
+    "이미 잠갔다"를 기억하는 용도</strong>고, 값이 없으면 <code>[]</code>로 안전하게 떨어진다.
+    <strong>도메인 결정에 쓰이면 위험하고, 진단·가드에 쓰이면 상대적으로 안전하다</strong>가 기준이 된다.
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — Thread.current 대신 쓰는 이유</h3>
+    <p class="quiz-q"><code>Thread.current[:locked_ids]</code> 대신
+      <code>ActiveSupport::CurrentAttributes</code>를 쓰면 얻는 가장 큰 이점은?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">여러 프로세스가 값을 공유할 수 있게 된다</button></li>
+      <li><button onclick="answer(this,'q1',true)">Rails executor가 요청·잡 경계마다 자동으로 리셋해줘서, 재사용되는 스레드에 이전 요청 값이 남지 않는다</button></li>
+      <li><button onclick="answer(this,'q1',false)">값이 DB에 저장되어 재시작 후에도 유지된다</button></li>
+      <li><button onclick="answer(this,'q1',false)">타입 검증이 자동으로 붙는다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — ensure에서 되돌리는 값</h3>
+    <p class="quiz-q">중첩 호출이 끝날 때 <code>ensure</code>에서 <code>nil</code>이 아니라
+      <strong>들어올 때의 값</strong>으로 되돌리는 이유는?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)"><code>nil</code> 대입은 <code>CurrentAttributes</code>에서 허용되지 않아서</button></li>
+      <li><button onclick="answer(this,'q2',true)">바깥 호출이 아직 진행 중일 수 있어서 — 안쪽이 지워버리면 바깥이 잡아둔 기록까지 사라진다</button></li>
+      <li><button onclick="answer(this,'q2',false)">executor 리셋이 <code>ensure</code>보다 먼저 실행되기 때문에</button></li>
+      <li><button onclick="answer(this,'q2',false)">성능 — 재대입이 삭제보다 빠르다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>한 줄로 남기면</h2>
+
+  <p>
+    <code>CurrentAttributes</code>는 <strong>"요청 하나의 수명만 사는 Context"</strong>다.
+    props drilling을 피하는 값이지만, React Context와 마찬가지로
+    <strong>암묵적 의존을 만든다</strong>는 대가가 있다.
+    도메인 결정을 좌우하는 값보다는 진단·가드·감사 로그처럼
+    <strong>없어도 안전하게 떨어지는 값</strong>에 쓰는 게 안전하다.
+    그리고 스레드를 새로 띄우거나 잡으로 넘어가는 순간 값은 따라가지 않는다는 걸 기억할 것.
+  </p>
+
+  <p class="source">
+    참고: <a href="https://api.rubyonrails.org/classes/ActiveSupport/CurrentAttributes.html" target="_blank">Rails API — ActiveSupport::CurrentAttributes</a> ·
+    관련 레슨: <a href="0035-ruby-instance-variable-and-annotation-confusion.html">35 Ruby 변수 종류</a> ·
+    <a href="0052-transaction-boundary-ownership.html">52 트랜잭션 경계 소유권</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 <code>Current.user</code> 패턴이 왜 논쟁적인지, 대안(명시적 인자 전달 · 요청 컨텍스트 객체)이
+    각각 어떤 상황에서 나은지 궁금하면 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="0052-transaction-boundary-ownership.html">← 레슨 52: 트랜잭션 경계는 누가 소유하는가</a>
+    <a href="0054-database-cleaner-strategy-and-concurrency-spec.html">레슨 54: 동시성 버그를 스펙으로 재현하기 →</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. Thread.current는 격리는 되지만 정리를 안 해줍니다. 스레드 풀에서 스레드가 재사용되므로 이전 요청 값이 남고, ensure로 지우는 걸 사람이 기억해야 합니다. CurrentAttributes는 executor가 요청·잡 경계에서 자동 리셋합니다.",
+        wrong: "아니에요. CurrentAttributes는 프로세스 간 공유도, 영속화도, 타입 검증도 하지 않습니다. 핵심 이점은 Rails executor가 요청·잡 경계마다 자동으로 리셋해준다는 것입니다."
+      },
+      q2: {
+        correct: "맞아요. 벌크 워커처럼 바깥에서 먼저 잠그고 안에서 재진입하는 구조에서는, 안쪽이 끝나도 바깥 락은 아직 유효합니다. nil로 지우면 바깥의 '이미 잠갔다' 기록이 사라져 이후 재진입이 위반으로 오탐됩니다.",
+        wrong: "아니에요. nil 대입도 가능하고 성능 문제도 아닙니다. 이유는 중첩입니다 — 안쪽이 끝나도 바깥 락은 진행 중이므로, 바깥이 기록해둔 값을 그대로 살려둬야 합니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>
