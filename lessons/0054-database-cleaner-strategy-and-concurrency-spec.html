@@ -132,19 +132,32 @@ end</code></pre>
     주석이 필수다.
   </p>
 
-  <h2>함정 — 태그로 뺐으면 CI에서 다시 넣어야 한다</h2>
+  <h2>함정 — 태그로 뺐으면 어디서 도는지 확인해야 한다</h2>
 
 <pre><code>config.filter_run_excluding concurrency: true unless ENV['RUN_CONCURRENCY_SPECS']</code></pre>
 
   <p>
     느리고 타이밍에 따라 flaky할 수 있으니 기본 스위트에서 빼는 건 표준적인 판단이다.
-    문제는 그다음이다. <strong>CI에 별도 실행 스텝을 안 만들면 이 스펙은 아무도 안 돌린다.</strong>
+    문제는 그다음이다. <strong>그 태그를 실행하는 자리가 없으면 그 회귀 방어는 실질적으로 0이다.</strong>
+    "테스트를 썼다"와 "테스트가 지켜준다" 사이에는 <strong>실행되는가</strong>라는 한 칸이 더 있다.
   </p>
 
+  <div class="analogy">
+    <strong>정정 (2026-08-13).</strong> 이 절을 처음 쓸 때 "이 레포는 지금 아무도 안 돌린다"고 적었다.
+    근거는 <code>.github/workflows</code>에 <code>rspec</code>이 없다는 것이었다. <strong>틀렸다.</strong>
+    이 레포의 스펙은 <strong>PR 오픈 시 AWS(CodePipeline/CodeBuild)에서 돈다.</strong>
+    CI 정의가 레포 안에 있어야 한다는 법이 없다 — 파이프라인이 레포 밖에 있을 수 있다.
+    <br><br>
+    교훈이 두 개로 갈린다. <strong>원칙은 그대로다</strong> — 태그로 뺐으면 실행 자리를 확인해야 한다.
+    <strong>확인 방법이 틀렸다</strong> — <code>.github/</code>만 보고 "CI 없음"으로 단정하지 말고,
+    빌드·배포 경로를 먼저 물어봐야 한다.
+  </div>
+
   <p>
-    이 PR에서 가장 중요한 회귀 방어가 정확히 이 스펙인데, 지금 상태로는
-    <strong>누가 락을 통째로 되돌려도 CI가 초록</strong>이다.
-    "테스트를 썼다"와 "테스트가 지켜준다" 사이에는 <strong>실행되는가</strong>라는 한 칸이 더 있다.
+    남은 확인 지점은 이것이다. 게이트가 <code>ENV['RUN_CONCURRENCY_SPECS']</code>를 요구하므로,
+    <strong>그 파이프라인이 이 환경변수를 세팅하는지</strong>까지 봐야 비로소 "돈다"고 말할 수 있다.
+    세팅하지 않으면 스펙은 파이프라인 안에서도 조용히 제외된다 —
+    게이트를 없애거나(대신 느려지고 flake 위험을 감수), 파이프라인에 변수를 넣어야 한다.
   </p>
 
   <div class="quiz">
@@ -180,7 +193,8 @@ end</code></pre>
     예제를 트랜잭션으로 감싸 롤백하는 방식은 빠르지만, 바로 그 미커밋 상태 때문에
     <strong>커밋 가시성에 의존하는 버그(lost update, 데드락, 격리 수준 문제)는 재현할 수 없다.</strong>
     그런 버그를 잡으려면 그 그룹만 실제로 커밋되게 바꾸고, 느려진 만큼
-    <strong>CI에서 따로 돌 자리를 반드시 만들어줘야</strong> 한다.
+    <strong>CI에서 따로 돌 자리를 반드시 확인하고 확보해야</strong> 한다.
+    (그 자리가 레포 안에 있다는 보장은 없다 — 위 정정 참고)
   </p>
 
   <p class="source">
