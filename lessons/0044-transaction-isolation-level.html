@@ -11,8 +11,8 @@
   <h1>트랜잭션 격리 수준(Isolation Level) — 동시 트랜잭션은 서로에게 무엇을 감추는가</h1>
   <div class="lesson-meta">
     <span>레슨 044</span>
-    <span>Isolation Level · Dirty Read · Phantom Read · REPEATABLE READ</span>
-    <span>~15분</span>
+    <span>Isolation Level · Dirty Read · Phantom Read · REPEATABLE READ · Consistent Read vs Locking Read</span>
+    <span>~22분</span>
   </div>
 
   <div class="mission-link">
@@ -249,6 +249,138 @@
     <div class="quiz-result" id="q3-result"></div>
   </div>
 
+  <h2>with_lock이 실제로 보게 해주는 값 — Consistent Read vs Locking Read</h2>
+
+  <p>
+    레슨 42에서 "<code>with_lock</code>을 쓰면 두 번째 트랜잭션이 첫 번째가 끝날 때까지
+    기다린다"까지 배웠다. 그런데 "기다렸다가 통과하면 그 다음엔 어떤 값을 보게 되는가"까지
+    한 단계 더 들어가 보면, InnoDB가 <code>SELECT</code>를 두 종류로 구분한다는 사실을
+    만나게 된다.
+  </p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">종류</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">예시</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">트랜잭션의 read view(스냅샷)와의 관계</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">행이 이미 잠겨 있으면</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;">Consistent Read<br>(평범한 SELECT)</td>
+        <td style="padding:0.4rem 0.5rem;"><code>KeyResult.find(id)</code></td>
+        <td style="padding:0.4rem 0.5rem;">이 트랜잭션에서 <strong>처음 실행되는 순간</strong> 스냅샷을 열고, 그 뒤로는 커밋할 때까지 그 스냅샷만 본다</td>
+        <td style="padding:0.4rem 0.5rem;">대기 없음 — 그냥 스냅샷 시점 값을 반환</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">Locking Read<br>(<code>FOR UPDATE</code>/<code>FOR SHARE</code>)</td>
+        <td style="padding:0.4rem 0.5rem;"><code>KeyResult.lock.find(id)</code>, <code>with_lock</code></td>
+        <td style="padding:0.4rem 0.5rem;">스냅샷을 열지도, 거기 묶이지도 않는다 — 항상 "지금 커밋된 최신 데이터"를 직접 본다</td>
+        <td style="padding:0.4rem 0.5rem;"><strong>커밋/롤백까지 블로킹</strong>, 풀리면 최신값 반환</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>직접 확인해보기</h3>
+
+  <p>
+    이 프로젝트가 실제로 쓰는 MySQL(<code>perpl_development</code>, 8.4)에 두 세션을 열어
+    확인한 결과다 — 세션 1이 REPEATABLE READ 트랜잭션을 연 채로 값을 한 번 읽고, 그 사이
+    세션 2가 값을 바꾸고 커밋한 뒤, 세션 1로 돌아가서 같은 값을 세 가지 방식으로 다시 읽어봤다.
+  </p>
+
+<pre><code># 세션 1
+START TRANSACTION;
+SELECT value FROM key_results WHERE id=1;             -- 0   (여기서 read view 고정)
+
+# 세션 2 (세션 1이 트랜잭션 안에 머무는 동안)
+UPDATE key_results SET value=999 WHERE id=1; COMMIT;
+
+# 다시 세션 1, 같은 트랜잭션 안에서
+SELECT value FROM key_results WHERE id=1;              -- 0    (여전히 고정된 스냅샷 — REPEATABLE READ)
+SELECT value FROM key_results WHERE id=1 FOR UPDATE;   -- 999  (Locking Read는 스냅샷을 무시하고 최신값)
+SELECT value FROM key_results WHERE id=1;               -- 0    (그런데 평범한 SELECT로 돌아오면 다시 0!)
+</code></pre>
+
+  <p>
+    마지막 줄이 핵심이다. <code>FOR UPDATE</code>가 최신값(999)을 보여줬다고 해서 트랜잭션의
+    스냅샷 자체가 갱신되는 게 아니다. 스냅샷은 "이 트랜잭션에서 처음 실행된 Consistent Read
+    시점"에 딱 한 번 고정되고, 그 뒤로 Locking Read가 몇 번을 오가며 최신값을 보고 가든 전혀
+    바뀌지 않는다. <strong><code>FOR UPDATE</code> 자신은 항상 최신값을 보지만, 그 옆에서
+    평범한 SELECT로 읽는 다른 값들은 오직 "스냅샷이 언제 고정됐는지"에만 좌우된다.</strong>
+  </p>
+
+  <div class="analogy">
+    React의 클로저(closure) 문제와 닮아 있다 — <code>useEffect</code> 콜백이 렌더링 시점의
+    <code>state</code> 변수를 캡처하면, 그 사이 실제 state가 몇 번을 바뀌어도 그 콜백은 자기가
+    캡처했던 값만 계속 참조한다. REPEATABLE READ 트랜잭션의 평범한 SELECT도 똑같다 — 트랜잭션
+    안에서 처음 본 값에 영원히 묶이고, 그 값을 갱신하려면 "다시 렌더링"에 해당하는 동작, 즉
+    커밋하고 새 트랜잭션을 여는 것뿐이다. <code>FOR UPDATE</code>로 최신값을 한 번 들여다본다고
+    그 클로저가 갱신되지는 않는다.
+  </div>
+
+  <h2>그래서 "락은 트랜잭션이 열리기 전에" 잡아야 한다</h2>
+
+  <p>
+    위 실험이 왜 실무에 중요한지는 순서를 뒤집어보면 바로 드러난다. 형제 체크인 두 개가 같은
+    상위 핵심성과(KR)를 향해 거의 동시에 승인되는 상황을 다시 가져오자 — 이번엔 계산에 쓰이는
+    실제 값(<code>super_key_result.value</code>, <code>parent_objective.progress</code>)이
+    <strong>항상 평범한 SELECT로 읽힌다</strong>는 점에 주목해야 한다. Rails가
+    <code>.lock.where(id:).pluck(:id)</code>처럼 명시적으로 <code>.lock</code>을 붙이지 않는
+    이상, 연관관계(<code>source.super_key_result</code>)나 속성 접근은 전부 Consistent Read다.
+  </p>
+
+  <table style="width:100%; border-collapse:collapse; font-family: var(--font-sans); font-size:0.88rem; margin-top:0.5rem;">
+    <thead>
+      <tr style="border-bottom:2px solid var(--border);">
+        <th style="text-align:left; padding:0.4rem 0.5rem;">트랜잭션 안에서 첫 문장이</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">스냅샷이 고정되는 시점</th>
+        <th style="text-align:left; padding:0.4rem 0.5rem;">뒤이은 <code>super_key_result.value</code> 읽기</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:0.4rem 0.5rem;"><code>KeyResult.lock.find(id)</code> (Locking Read 먼저)</td>
+        <td style="padding:0.4rem 0.5rem;">아직 안 열림 — 락이 형제 커밋을 기다리는 동안 스냅샷은 존재하지 않음</td>
+        <td style="padding:0.4rem 0.5rem;">락이 풀린 <strong>이후</strong>에야 첫 Consistent Read로 스냅샷이 열림 → 형제의 커밋이 이미 반영된 최신값</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">평범한 조회 하나라도 먼저 (예: <code>objective.workspace</code>)</td>
+        <td style="padding:0.4rem 0.5rem;">그 조회 순간 즉시 고정 — 아직 형제가 커밋 전이라 옛값 기준</td>
+        <td style="padding:0.4rem 0.5rem;">뒤에서 <code>FOR UPDATE</code>로 기다렸다 통과해도 소용없음 — 이미 고정된 스냅샷에 영원히 묶여 옛값</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    이게 <code>Objective::CheckIns::ReflectToSuperKeyResultService</code>의 <code>lock</code>
+    메서드가 실제로 지키는 규칙이다(<code>app/services/objective/check_ins/reflect_to_super_key_result_service.rb:88-111</code>).
+    트랜잭션에 들어가서 가장 먼저 하는 일이 조상 KR들을 <code>id</code> 오름차순으로
+    <code>.lock.where(id: key_result_id).pluck(:id)</code>로 잠그는 것뿐이고(105행), 그 전에
+    평범한 조회가 섞이면 안 된다는 제약이 주석으로 명시돼 있다. 더 나아가 <strong>호출부가 이미
+    열어둔 트랜잭션 안에서</strong> 이 락을 잡아도 같은 문제가 생긴다 — 그 바깥 트랜잭션이
+    이미 다른 평범한 조회로 스냅샷을 고정했을 수 있기 때문이다. 그래서 <code>app_transaction_open?</code>
+    가드(113-115행)가 "트랜잭션이 이미 열려 있는데 아직 안 잠근 KR이 남았다"는 상태를 잡아내
+    로컬/CI에서는 바로 <code>raise</code>시킨다(119-127행).
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 4 — 순서가 왜 중요한가</h3>
+    <p class="quiz-q">
+      형제 체크인 승인 두 트랜잭션이 같은 상위 KR을 향해 겹친다. 다음 중 상위 KR의 최신
+      커밋값을 확실히 반영해 계산하게 되는 순서는?
+    </p>
+    <ul class="options" id="q4">
+      <li><button onclick="answer(this,'q4',true)">트랜잭션을 열고 가장 먼저 <code>KeyResult.lock.find(id)</code>로 조상 KR을 잠근 뒤, 그 다음에 <code>value</code>를 읽고 계산한다</button></li>
+      <li><button onclick="answer(this,'q4',false)"><code>objective.workspace</code> 같은 평범한 조회를 먼저 하고, 그 다음에 <code>KeyResult.lock.find(id)</code>로 조상 KR을 잠근다</button></li>
+      <li><button onclick="answer(this,'q4',false)">순서는 상관없다 — <code>FOR UPDATE</code>가 한 번이라도 실행되면 그 트랜잭션의 모든 SELECT가 자동으로 최신값을 보게 된다</button></li>
+      <li><button onclick="answer(this,'q4',false)">순서는 상관없다 — REPEATABLE READ는 트랜잭션 시작 시점에 스냅샷을 고정하므로 트랜잭션 안에서 뭘 먼저 하든 결과는 같다</button></li>
+    </ul>
+    <div class="quiz-result" id="q4-result"></div>
+  </div>
+
   <h2>Rails에서 격리 수준 지정하기</h2>
 
   <p>
@@ -294,15 +426,20 @@ end</code></pre>
         <td style="padding:0.4rem 0.5rem;">MySQL 기본값</td>
         <td style="padding:0.4rem 0.5rem;">REPEATABLE READ (PostgreSQL/Oracle 기본값인 READ COMMITTED와 다름)</td>
       </tr>
-      <tr>
+      <tr style="border-bottom:1px solid var(--border);">
         <td style="padding:0.4rem 0.5rem;">격리 수준의 한계</td>
         <td style="padding:0.4rem 0.5rem;">Lost Update(read-modify-write 경쟁)는 격리 수준만으로는 못 막음 — with_lock(레슨 42) 또는 낙관적 락이 별도로 필요</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.5rem;">Consistent Read vs Locking Read</td>
+        <td style="padding:0.4rem 0.5rem;">평범한 SELECT는 트랜잭션의 첫 Consistent Read 시점에 고정된 스냅샷만 보고 다시는 안 바뀜. <code>FOR UPDATE</code>는 스냅샷 없이 항상 최신 커밋을 보되 잠긴 행이면 대기 — 그래서 락을 트랜잭션의 첫 문장으로 잡아야 뒤이은 평범한 조회들도 최신값을 보게 됨</td>
       </tr>
     </tbody>
   </table>
 
   <p class="source">
     참고: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html" target="_blank">MySQL 8.4 Reference — InnoDB Transaction Isolation Levels</a> ·
+    <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html" target="_blank">MySQL 8.4 Reference — Locking Reads</a> ·
     <a href="https://api.rubyonrails.org/classes/ActiveRecord/Transactions/ClassMethods.html" target="_blank">Rails API — ActiveRecord::Transactions::ClassMethods</a>
   </p>
 
@@ -331,6 +468,10 @@ end</code></pre>
       q3: {
         correct: "맞아요. 격리 수준은 '한 트랜잭션 안에서 읽는 값이 일관돼 보이는가'를 다룰 뿐, 서로 다른 트랜잭션의 read-modify-write 경쟁(Lost Update)까지 막아주진 않습니다. with_lock 같은 명시적 잠금이나 낙관적 락이 별도로 필요합니다.",
         wrong: "아니에요. REPEATABLE READ는 '같은 행을 다시 읽어도 값이 바뀌지 않는다'는 보장이지, 서로 다른 트랜잭션의 쓰기 경쟁(Lost Update)까지 막아주는 건 아닙니다."
+      },
+      q4: {
+        correct: "맞아요. 락(Locking Read)이 트랜잭션의 첫 문장이면 스냅샷이 아직 안 열린 상태라, 형제의 커밋을 기다렸다가 통과한 뒤에야 첫 Consistent Read로 스냅샷이 열립니다 — 그 스냅샷엔 형제의 커밋이 이미 포함돼 있죠. 반대로 평범한 조회가 먼저 실행되면 그 순간 스냅샷이 옛값으로 고정돼버려서, 뒤에서 FOR UPDATE가 아무리 잘 기다려도 계산에 쓰이는 평범한 SELECT 값들은 계속 옛값입니다.",
+        wrong: "아니에요. 순서가 결과를 완전히 바꿉니다. Locking Read는 트랜잭션의 스냅샷을 열지 않고 늘 최신 커밋을 보지만, 그 사실이 '다른 평범한 SELECT들도 자동으로 최신값을 보게 해주는' 건 아닙니다 — 스냅샷은 그 트랜잭션의 첫 Consistent Read 시점에 딱 한 번 고정되고, 그 이후엔 무슨 일이 있어도 바뀌지 않습니다. 락을 먼저 잡아야 하는 이유가 바로 이 고정 시점을 늦추는 것입니다."
       }
     };
 

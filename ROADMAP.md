@@ -245,7 +245,7 @@
 
 > 팀 시니어(juhoLee)와의 대화에서 나온 "2PC → Saga → Outbox" 순서, "MSA 이해하려면 DDD로 돌아가야 한다"는 관점을 정리했다.
 
-- [x] 분산 트랜잭션 전략: 2PC → Saga → Outbox → [레슨](lessons/0032-distributed-transaction-2pc-saga-outbox.html) · 서비스 *내부* 트랜잭션 경계 분리 용도 → [레슨 56](lessons/0056-outbox-moving-the-transaction-boundary.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md) · **아웃박스는 서비스 *내부*에서도 쓴다** — 서비스 간 메시지 유실 방지가 아니라, 같은 DB 안에서 무거운 후처리를 커밋 밖으로 빼되 "후처리가 필요하다"는 사실만은 원자적으로 남기려는 용도. 후처리를 별도 트랜잭션으로 열 수 있게 되면서 잠금·격리수준을 그 트랜잭션이 직접 소유하게 된다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
+- [x] 분산 트랜잭션 전략: 2PC → Saga → Outbox → [레슨](lessons/0032-distributed-transaction-2pc-saga-outbox.html) · 서비스 _내부_ 트랜잭션 경계 분리 용도 → [레슨 56](lessons/0056-outbox-moving-the-transaction-boundary.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md) · **아웃박스는 서비스 *내부*에서도 쓴다** — 서비스 간 메시지 유실 방지가 아니라, 같은 DB 안에서 무거운 후처리를 커밋 밖으로 빼되 "후처리가 필요하다"는 사실만은 원자적으로 남기려는 용도. 후처리를 별도 트랜잭션으로 열 수 있게 되면서 잠금·격리수준을 그 트랜잭션이 직접 소유하게 된다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
 - [x] 언제 카프카를 쓰면 안 되는가 (기술 선택 기준) → [레슨](lessons/0033-when-not-to-use-kafka.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md)
 - [x] MSA와 DDD의 관계 (아키텍처는 구조, 패턴은 전략) → [레슨](lessons/0034-msa-ddd-and-not-knowing-everything.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md)
 
