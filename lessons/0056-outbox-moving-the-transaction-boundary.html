@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 56 — 같은 트랜잭션에서 풀 수 없으면 경계를 옮긴다: 아웃박스의 두 번째 용도</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>같은 트랜잭션에서 풀 수 없으면 경계를 옮긴다</h1>
+  <div class="lesson-meta">
+    <span>레슨 056</span>
+    <span>트랜잭션 아웃박스 · 경계 이동 · 스냅샷 고정 시점</span>
+    <span>~20분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 락을 90줄 붙여도 안 고쳐지던 문제가, 트랜잭션 경계를 옮기니 한 줄이 됐다 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>문제 — 락을 걸어도 갱신 손실이 났다</h2>
+
+  <p>
+    하위 목표 체크인이 승인되면 상위 핵심성과 값을 자동으로 갱신한다.
+    상위 P에 하위 S1(→80%), S2(→40%)가 붙어 있고 둘을 동시에 승인하면 평균 60이 나와야 한다.
+    실제로는 다른 값이 저장됐다. 전형적인 <strong>lost update</strong>다.
+  </p>
+
+  <p>
+    <a href="0042-row-locking-and-deadlock.html">레슨 42</a>대로 조상 행을 id 오름차순
+    <code>FOR UPDATE</code>로 잡았다. 데드락도 안 나게 순서까지 고정했다.
+    <strong>그런데 값이 여전히 틀렸다.</strong>
+  </p>
+
+  <h2>왜 같은 트랜잭션 안에서는 못 고치나</h2>
+
+  <p>
+    <a href="0044-transaction-isolation-level.html">레슨 44</a>에서 배운 규칙이 여기서 정확히 걸린다.
+    MySQL REPEATABLE READ의 스냅샷은 <strong>트랜잭션의 첫 비잠금 SELECT가 고정</strong>한다.
+  </p>
+
+  <p>
+    반영은 체크인 승인 트랜잭션 안에서 돌았다. 그 트랜잭션은 반영에 도달하기 훨씬 전에
+    이미 여러 조회를 했다 — 인가 검사, 핵심성과 로드, 이력 생성. 그 첫 조회가 스냅샷을 고정한다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step"><strong>BEGIN</strong><br>인가 검사 (SELECT)<br>← <strong>여기서 스냅샷 고정</strong></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">체크인 값 쓰기<br>이력 생성</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><strong>반영</strong><br>FOR UPDATE로 락 획득<br>형제 값 조회<br>← <strong>옛 스냅샷</strong></div>
+  </div>
+
+  <p>
+    락은 제대로 잡힌다. 그런데 락을 잡은 <strong>뒤에 하는 조회가 옛 스냅샷을 읽는다.</strong>
+    형제가 이미 커밋한 새 값이 안 보인다. <strong>락이 무력화된 것이 아니라, 락으로 풀 문제가 아니었다.</strong>
+  </p>
+
+  <div class="analogy">
+    문을 잠그긴 했는데, 방 안 사진을 <strong>잠그기 전에 찍어둔 것</strong>으로 보고 있는 상황이다.
+    자물쇠를 더 튼튼한 걸로 바꿔도 사진이 바뀌지 않는다.
+  </div>
+
+  <p>
+    "락을 트랜잭션이 열리기 전에 잡으면?" — 그 방향으로 90줄을 붙여봤다.
+    진입점 8곳을 래핑하고, 전제 위반을 런타임에 잡는 가드를 만들고, 동시성 스펙도 썼다.
+    그런데 측정하니 <strong>배치 승인이 배치 전체 동안 락을 쥐고 있어</strong>
+    50건에 15.9초, 약 160건에서 <code>innodb_lock_wait_timeout</code>에 닿았다.
+    게다가 <strong>절반만 막혔다</strong> — 같은 목표의 다른 핵심성과로 들어오는 달성도 롤업 경합은 그 락 밖이었다.
+  </p>
+
+  <h2>전제를 바꾼다 — 아웃박스의 두 번째 용도</h2>
+
+  <p>
+    코드가 많은 게 문제가 아니었다. 붙은 이유를 하나씩 따라가니 전부
+    <strong>"체크인과 상위 반영이 한 트랜잭션이어야 한다"는 전제 하나</strong>에서 파생됐다.
+    그 전제를 놓으면 같은 기계가 사라진다.
+  </p>
+
+  <p>
+    <a href="0032-distributed-transaction-2pc-saga-outbox.html">레슨 32</a>에서 아웃박스를
+    <strong>서비스 간</strong> 메시지 유실을 막는 패턴으로 배웠다. 이번엔 목적이 다르다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step"><strong>레슨 32의 아웃박스</strong><br>서비스 A → 서비스 B<br>목적: <strong>메시지 유실 방지</strong><br>DB 커밋과 메시지 발행을<br>원자적으로 묶기</div>
+    <div class="flow-arrow">vs</div>
+    <div class="flow-step"><strong>이번의 아웃박스</strong><br>같은 DB, 같은 서비스<br>목적: <strong>트랜잭션 경계 분리</strong><br>무거운 후처리를 커밋 밖으로 빼되<br>"필요하다"는 사실만 원자적으로</div>
+  </div>
+
+  <p>
+    체크인 트랜잭션은 <strong>"반영이 필요하다"는 행 하나만</strong> 남긴다. 계산은 안 한다.
+  </p>
+
+<pre><code>def accept_check_ins_and_create_history(current_user_id, values)
+  ActiveRecord::Base.transaction do
+    accept_check_ins
+    update!(progress: calculate_progress, stage: 'open')
+    create_history('CheckinAccepted', current_user_id, values)
+
+    # 계산이 아니라 "필요하다"만 기록. 체크인과 원자적으로 커밋된다.
+    key_result_reflection_events.create!(...)
+  end
+end</code></pre>
+
+  <p>
+    그리고 모델의 <code>after_commit</code>이 워커를 발행한다.
+    <a href="0038-after-commit-vs-after-create.html">레슨 38</a>의 <code>after_commit</code>이
+    <strong>중첩 트랜잭션에서도 최외곽 커밋까지 미뤄져</strong> 실행되기 때문에,
+    진입점이 6곳이나 되는데도 재구성 없이 모델 콜백 한 줄로 끝났다.
+  </p>
+
+  <h2>경계를 옮기면 따라오는 것들</h2>
+
+  <p>
+    워커는 웹 요청 트랜잭션에 nest되지 않는다. <strong>그래서 자기 트랜잭션의 첫 문장에서 락을 잡을 수 있다.</strong>
+    어제 배운 "락을 트랜잭션이 열리기 전에 잡아야 한다"는 제약이 <strong>제약이 성립하는 조건 자체를 없애서</strong> 사라진다.
+  </p>
+
+<pre><code>ActiveRecord::Base.transaction(isolation: :read_committed) do
+  Objective.where(id: lock_objective_ids).order(:id).lock.load   # ← 첫 문장
+  ReflectToSuperKeyResultService.call(event: event, ...)
+  event.update!(processed_at: Time.current)
+end</code></pre>
+
+  <p>
+    세 줄에 세 가지 결정이 들어 있다.
+  </p>
+
+  <ul>
+    <li>
+      <strong><code>isolation: :read_committed</code></strong> — 사실 기본 REPEATABLE READ에서도
+      잠금 SELECT가 첫 문장이면 동작한다(InnoDB는 잠금 읽기에 read view를 배정하지 않는다).
+      실측으로 확인했다. 그런데 그 보장은 <strong>코드로 강제되지 않는 암묵 전제</strong>다 —
+      훗날 잠금보다 먼저 실행되는 조회가 한 줄 끼면 갱신 손실이 <strong>조용히</strong> 되살아나고 테스트는 통과한다.
+      명시하면 중첩 트랜잭션에서 호출될 때 <code>TransactionIsolationError</code>로 즉시 드러난다.
+      <strong>"동작한다"와 "보장된다"는 다르다.</strong>
+    </li>
+    <li>
+      <strong>id 오름차순 일괄 잠금</strong> — 서로 다른 두 체크인이 같은 조상 집합을 반대 순서로
+      잠그면 <strong>순환 없는 DAG에서도 데드락</strong>이 난다.
+    </li>
+    <li>
+      <strong>핵심성과가 아니라 목표를 잠근다</strong> — <code>update_progress</code>가 그 목표의
+      활성 핵심성과 <em>전체</em>를 다시 합산하므로, 같은 목표의 다른 핵심성과로 들어오는 반영과도
+      직렬화돼야 한다. 앞서 "절반만 막혔던" 그 구멍이 여기서 닫힌다.
+    </li>
+  </ul>
+
+  <p>
+    그리고 <a href="0031-atomicity-vs-idempotency.html">레슨 31</a>이 결정적으로 일한다.
+    반영값을 누적이 아니라 <strong>연계된 하위 전체에서 매번 다시 계산</strong>하도록 설계해뒀기 때문에,
+    Sidekiq 메시지가 두 번 배달되든 순서가 뒤섞이든 최종값이 수렴한다.
+    <strong>멱등성이 있어서 원자성을 포기할 수 있었다.</strong>
+  </p>
+
+  <h2>대가 — 무엇을 내놓았나</h2>
+
+  <p>
+    경계를 옮기는 건 공짜가 아니다. 정직하게 적으면.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step"><strong>얻은 것</strong><br>갱신 손실 방어<br>락 보유 시간 단축<br>반영 실패가 체크인을<br>롤백하지 않음</div>
+    <div class="flow-arrow">↔</div>
+    <div class="flow-step"><strong>내놓은 것</strong><br>원자성(반영이 몇 박자 늦음)<br>발행 유실 가능성<br>감사 이력의 결이 달라짐</div>
+  </div>
+
+  <p>
+    특히 세 번째가 예상 밖이었다. 배치 승인은 하위 값을 한꺼번에 커밋하므로,
+    워커가 돌 때는 이미 전부 반영돼 있어 <strong>첫 이벤트가 곧바로 최종값을 써버린다.</strong>
+    이력이 하위 수만큼(3건) 남지 않고 1건으로 뭉치고, 그 1건이
+    <strong>"0→250은 C1 때문"이라고 잘못 귀인</strong>한다. 실제로는 셋이 함께 만든 값인데.
+  </p>
+
+  <p>
+    고치려면 워커가 같은 조상의 미처리 이벤트를 <strong>승인 순서로 이어서</strong> 처리하고,
+    각 단계에서 아직 반영되지 않은 형제를 <strong>체크인 전 값</strong>으로 봐야 한다.
+    그 값은 이미 아웃박스에 있었다 — 이력 표기용으로 저장해둔 <code>source_prev_progress</code>가
+    <strong>값 계산의 입력으로 승격</strong>됐다.
+  </p>
+
+  <div class="analogy">
+    <strong>감사 이력은 부산물이 아니라 설계 산출물이다.</strong>
+    값 정확성만 요구사항으로 잡고 이력을 부산물로 취급했다가, 이력 요구가 설계를 한 번 더 되돌렸다.
+    "무엇이 이력에 남아야 하는가"를 값 설계와 같은 급으로 먼저 못 박아야 했다.
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — 락으로 안 고쳐진 이유</h3>
+    <p class="quiz-q">조상 행을 <code>FOR UPDATE</code>로 잡았는데도 형제의 최신 커밋값이 안 보였다.
+      가장 정확한 설명은?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">FOR UPDATE는 읽기 락이라 다른 트랜잭션의 쓰기를 막지 못하기 때문</button></li>
+      <li><button onclick="answer(this,'q1',true)">그 트랜잭션이 락을 잡기 훨씬 전에 이미 조회를 해서 스냅샷이 고정됐고, 락 이후의 조회도 그 옛 스냅샷을 읽기 때문</button></li>
+      <li><button onclick="answer(this,'q1',false)">락 획득 순서가 달라 데드락이 나고 롤백됐기 때문</button></li>
+      <li><button onclick="answer(this,'q1',false)">MySQL이 락을 무시하고 캐시된 결과를 반환하기 때문</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — 아웃박스의 목적</h3>
+    <p class="quiz-q">같은 DB·같은 서비스 안에서 아웃박스 테이블을 두는 목적은?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">서비스 간 메시지 유실을 막기 위해 — 분산 환경의 표준 패턴이므로</button></li>
+      <li><button onclick="answer(this,'q2',false)">DB 부하를 줄이려고 쓰기를 배치로 모으기 위해</button></li>
+      <li><button onclick="answer(this,'q2',true)">무거운 후처리를 커밋 밖으로 빼되 "후처리가 필요하다"는 사실만은 본 작업과 원자적으로 남기기 위해</button></li>
+      <li><button onclick="answer(this,'q2',false)">감사 이력을 남기기 위해 — 이벤트 소싱의 일종이므로</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>한 줄로 남기면</h2>
+
+  <p>
+    <strong>어떤 문제는 트랜잭션 안에서 아무리 노력해도 풀리지 않는다.</strong>
+    락을 더 정교하게 잡는 대신, <strong>"이게 왜 한 트랜잭션이어야 하지?"</strong>를 물어야 할 때가 있다.
+    전제를 놓으면 90줄이 15줄이 된다.
+    대가는 원자성인데, <strong>멱등성이 있으면 그 대가를 치를 수 있다</strong> —
+    값이 다음 실행에 자가복구되므로.
+    설계 리뷰에서 볼 것은 코드량이 아니라 <strong>전제</strong>다.
+  </p>
+
+  <p class="source">
+    관련 레슨: <a href="0032-distributed-transaction-2pc-saga-outbox.html">32 2PC·Saga·Outbox</a> ·
+    <a href="0031-atomicity-vs-idempotency.html">31 원자성 vs 멱등성</a> ·
+    <a href="0044-transaction-isolation-level.html">44 격리 수준</a> ·
+    <a href="0042-row-locking-and-deadlock.html">42 행 잠금과 데드락</a> ·
+    <a href="0052-transaction-boundary-ownership.html">52 트랜잭션 경계 소유권</a> ·
+    <a href="0038-after-commit-vs-after-create.html">38 after_commit</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 아웃박스를 두면 "발행이 유실된 이벤트"를 누가 회수하는가가 남습니다.
+    폴링 스위퍼 / 이벤트 재발행 / 이번처럼 다음 요청의 드레인에 얹기 —
+    각각의 트레이드오프가 궁금하면 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="0055-regression-spec-discriminating-power.html">← 레슨 55: 초록색이 아무것도 증명하지 않을 때</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. REPEATABLE READ의 스냅샷은 트랜잭션의 첫 비잠금 SELECT가 고정합니다. 체크인 트랜잭션은 반영에 도달하기 전에 이미 인가 검사·핵심성과 로드 등으로 조회를 했으니 그 시점에 스냅샷이 잡혔고, 락 이후의 조회도 그 스냅샷을 읽습니다. 락으로 풀 문제가 아니었습니다.",
+        wrong: "아니에요. FOR UPDATE는 배타 락이고, 데드락도 캐시도 원인이 아닙니다. 원인은 스냅샷이 락보다 먼저 고정됐다는 것 — 락은 정상 동작했지만 읽는 데이터가 옛것이었습니다."
+      },
+      q2: {
+        correct: "맞아요. 서비스 간 메시지 유실 방지(레슨 32)와 형태는 같지만 목적이 다릅니다. 같은 DB 안에서도 '이 작업은 이 트랜잭션에서 하면 안 된다'는 이유가 생기면, 후처리를 밖으로 빼고 필요성만 원자적으로 기록하는 데 쓸 수 있습니다.",
+        wrong: "아니에요. 이번 사례는 서비스가 하나이고 배치 쓰기나 이벤트 소싱이 목적도 아닙니다. 핵심은 트랜잭션 경계를 쪼개면서 '후처리가 필요하다'는 사실만은 유실되지 않게 하는 것입니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>
