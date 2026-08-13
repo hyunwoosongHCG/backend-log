@@ -44,15 +44,16 @@
 - [x] 기본키(PK)와 외래키(FK) → [레슨](lessons/0005-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [x] 공개 식별자(Public ID)와 내부 PK 분리 패턴 → [정리](concepts/public-id-vs-primary-key.md) | [배운 작업](work-log/2026-07-07-delete-workspace-self-find.md)
 - [ ] 1:1, 1:N, N:M 관계
-- [x] 인덱스(Index)란? 왜 필요한가 → [레슨](lessons/0043-index-and-leftmost-prefix.html)
+- [x] 인덱스(Index)란? 왜 필요한가 → [레슨](lessons/0043-index-and-leftmost-prefix.html) · **인덱스가 있다 ≠ 쓰인다.** EXPLAIN으로 확인해야 한다 — MySQL이 `ORDER BY id`의 filesort를 피하려고 더 선택적인 복합 인덱스 대신 단독 인덱스를 풀스캔하는 선택을 했다(2,000행 중 2,331행 읽음 vs 200행). 행이 없으면 통계가 없어 EXPLAIN 자체가 무의미하니 데이터를 채우고 `ANALYZE` 후에 봐야 한다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
 - [x] 조건부(Partial) 유니크 인덱스 — Postgres의 `WHERE` 조건부 인덱스와, MySQL이 생성 컬럼 + NULL 중복 허용으로 이를 흉내내는 법 → [레슨](lessons/0050-mysql-conditional-unique-index-via-generated-column.html) | [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
 - [x] 트랜잭션(Transaction)과 ACID → [레슨](lessons/0024-transaction-atomicity-bulk-approval-bug.html) | [배운 작업](work-log/2026-07-03-sentry-batch-approval-atomicity-bug.md) · [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md) · [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 - [x] 행 잠금(Row Locking)과 동시성 제어 (`with_lock`, `SELECT ... FOR UPDATE`) → [레슨](lessons/0042-row-locking-and-deadlock.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md) · 전역 정렬 순서(id 오름차순)로 잡으면 데드락을 피할 수 있지만, **반대로 조상 행 전체를 미리 선점하는 설계는 그 자체가 새 데드락 축을 만든다** — 같은 행을 락 없이 쓰는 다른 경로가 있으면 순서가 역전되므로, 그 경로까지 같은 규칙으로 잠그게 하거나 아예 한 번에 한 행만 잡아 hold-and-wait를 없애야 한다
 - [ ] 낙관적 락(Optimistic Locking, `lock_version`) vs 비관적 락 — 충돌 빈도·재시도 비용 기준의 트레이드오프
-- [x] 트랜잭션 격리 수준(Isolation Level)이란 (Dirty/Non-Repeatable/Phantom Read, Lost Update, MySQL 기본값) → [레슨](lessons/0044-transaction-isolation-level.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md) · MySQL REPEATABLE READ의 스냅샷 고정 **시점** 규칙: 잠금 읽기(`FOR UPDATE`)는 read view를 열지 않고 **첫 비잠금 SELECT가 연다.** 그래서 "락을 트랜잭션이 열리기 전(또는 첫 문장)에 잡아야 한다"는 제약이 생긴다
+- [x] 트랜잭션 격리 수준(Isolation Level)이란 (Dirty/Non-Repeatable/Phantom Read, Lost Update, MySQL 기본값) → [레슨](lessons/0044-transaction-isolation-level.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md) · MySQL REPEATABLE READ의 스냅샷 고정 **시점** 규칙: 잠금 읽기(`FOR UPDATE`)는 read view를 열지 않고 **첫 비잠금 SELECT가 연다.** 그래서 "락을 트랜잭션이 열리기 전(또는 첫 문장)에 잡아야 한다"는 제약이 생긴다 · **"동작한다"와 "보장된다"는 다르다** — 위 규칙 덕에 기본 격리수준으로도 실제로 통과하지만(실측), 그 보장은 코드로 강제되지 않는 암묵 전제(잠금 SELECT 앞에 조회가 없어야 함)라 한 줄만 끼어들면 조용히 깨지고 **테스트는 통과한다.** `isolation: :read_committed`를 명시하면 전제에 의존하지 않고, 중첩 트랜잭션에서 호출되면 `TransactionIsolationError`로 시끄럽게 터진다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
 - [x] 중첩 트랜잭션(Nested Transaction)과 `requires_new`(SAVEPOINT) — 기본 중첩은 진짜 커밋 경계가 아니라 바깥 트랜잭션에 합류할 뿐이고, `requires_new: true`는 부분 실패 격리는 되지만 락 조기 해제는 안 됨 → [레슨](lessons/0045-nested-transaction-and-requires-new.html) | [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-auto-close-and-review-fixes.md)
 - [ ] SQL 기본 (SELECT, INSERT, UPDATE, DELETE)
 - [x] JOIN이란? → [레슨](lessons/0005-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
+- [x] 성능 측정에는 여러 축이 있다 ([레슨 55](lessons/0055-regression-spec-discriminating-power.html)) — 한 축(배치 크기)을 재고 다 쟀다고 착각했고, 지적받은 축(워크스페이스 전체 대기 건수)에서는 이벤트당 쿼리가 O(N)이라 총비용이 제곱이었다. "무엇을 재지 않았는지"를 스스로 물어야 한다. 이벤트당 쿼리 수를 세면 O(N)인지 O(N²)인지 바로 갈린다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
 - [x] 쿼리 프로파일링/N+1 실측 (`ActiveSupport::Notifications.subscribed(..., "sql.active_record")`) — N+1을 추측이 아니라 직접 재현해서 쿼리 개수를 세는 법. 같은 방법으로 "이미 로드된 Relation을 `Enumerable#select`(블록)로 필터링하면 쿼리가 안 나가지만, `scope`(`.where`)를 걸면 로드 여부와 무관하게 새 쿼리가 나간다"는 것도 실측으로 증명했다 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 - [x] 크로스 서비스 auto-increment 시퀀스 정합성 — 서로 다른 DB(서비스)에 같은 id로 레코드를 복제 삽입한 뒤 시퀀스(`setval`)를 강제로 맞출 때, 상대 DB의 현재 max_id를 확인하지 않고 계산하면 시퀀스가 기존 데이터보다 뒤로 밀려 다음 정상 삽입이 PK 충돌을 일으킬 수 있다 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 
@@ -123,15 +124,16 @@
 ### ActiveRecord (Model)
 
 - [x] 모델(Model)이란? 테이블과의 관계 → [레슨](lessons/0011-activerecord-base-and-model-layer.html)
-- [x] 마이그레이션(Migration)이란? → [정리](concepts/migration.md) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
+- [x] 마이그레이션(Migration)이란? → [정리](concepts/migration.md) | [배운 작업](work-log/2026-06-25-add-use-required-template.md) · **롤백은 "된다고 적는 것"이 아니라 돌려보는 것.** `change`의 자동 역방향이 항상 되는 게 아니다 — `add_foreign_key(column:)`은 역방향에서 제약을 못 찾아 실패한다. 게다가 실패한 롤백이 FK를 지워서 `db/schema.rb`와 실제 DB가 어긋난 채 남았다(`SHOW CREATE TABLE`로만 발각). 확실히 하려면 `up`/`down`을 직접 쓴다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
 - [x] 연관관계 (`belongs_to`, `has_many`, `has_one`, `has_many :through`) → [레슨](lessons/0008-active-record-associations.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [x] `has_one` 연관에서 FK는 상대 테이블에 있다 — `section.score?`가 부르는 `score_setting`은 `appraisal_sections`의 컬럼이 아니라 `has_one`으로 연결된 별도 테이블(`appraisal_section_score_settings`)이라, `.includes(:appraisal_sections)`만으로는 preload가 안 되고 섹션 수만큼 N+1이 생긴다. `includes(appraisal_sections: [:score_setting, :rating_setting])`처럼 중첩 preload로 해결 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 - [x] 연관관계 스코프의 비대칭 — `has_many`의 람다 스코프는 **조인 대상 테이블의 컬럼만** 검사하고 그 레코드가 속한 부모의 상태는 보지 않는다. 소프트 삭제가 부모 쪽에서만 일어나는 설계(`stage: :archived`만 바꾸고 자식의 `active`는 그대로)에서는, 자식 연관관계가 삭제된 부모의 자식을 계속 들고 온다. 이름이 대칭인 두 연관관계라도 정책이 같다고 믿으면 안 됨 → [레슨](lessons/0051-association-scope-asymmetry.html) | [정리](concepts/association-scope-asymmetry.md) | [배운 작업](work-log/2026-08-06-key-result-auto-reflect-1n-split.md)
-- [x] 폴리모픽 연관관계 (`belongs_to ..., polymorphic: true`) → [레슨](lessons/0036-polymorphic-association.html) | [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
+- [x] 폴리모픽 연관관계 (`belongs_to ..., polymorphic: true`) → [레슨](lessons/0036-polymorphic-association.html) | [배운 작업](work-log/2026-07-09-review-remind-notification-split.md) · 반대쪽 `has_many`에 `as:`를 빼먹으면 존재하지 않는 `<모델>_id` 컬럼을 찾는다. 조회 경로가 없으면 배포 후에도 안 터지고, `destroy` 같은 드문 경로에서만 드러난다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
 - [x] 유효성 검사 (`validates`) → [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
 - [x] 스코프(Scope)란? → [레슨](lessons/0049-where-not-nor-vs-and.html) | [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
 - [x] 콜백 (`before_save`, `after_create` 등) → [레슨](lessons/0019-timestamps-and-hidden-callbacks.html) | [정리](concepts/timestamps-and-callbacks.md) | [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)
-- [x] `after_commit`과 `after_save`/`after_create`의 차이 (트랜잭션 커밋 시점) → [레슨](lessons/0038-after-commit-vs-after-create.html) | [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
+- [x] `after_commit`과 `after_save`/`after_create`의 차이 (트랜잭션 커밋 시점) → [레슨](lessons/0038-after-commit-vs-after-create.html) | [배운 작업](work-log/2026-07-09-review-remind-notification-split.md) · **중첩 트랜잭션에서는 최외곽 커밋까지 미뤄져 실행된다** — 그래서 진입점 여러 곳이 이미 바깥 트랜잭션 안이어도 재구성 없이 모델 콜백 한 줄로 "커밋 후 발행"을 걸 수 있다. 대신 콜백 안에서는 예외를 삼켜야 한다(이미 커밋된 트랜잭션은 되돌릴 수 없으므로) → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
+- [x] `dependent: :destroy`는 **선언 순서대로** 실행된다 — 두 부모를 FK로 참조하는 자식 테이블이 있으면, 참조당하는 쪽보다 먼저 선언해야 삭제 시 외래키 위반이 나지 않는다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
 - [x] Dirty Tracking이란? (`changed?`, `attribute_changed?`, partial writes) → [레슨](lessons/0020-dirty-tracking-and-partial-writes.html) | [정리](concepts/dirty-tracking.md) | [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)
 - [x] 쿼리 메서드 (`where`, `find`, `find_by`, `includes`, `joins`) → [배운 작업](work-log/2026-07-07-delete-workspace-self-find.md)
 - [x] N+1 문제란? `includes`로 해결하기 → [레슨](lessons/0009-n-plus-1.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
@@ -162,11 +164,12 @@
 - [ ] RSpec 기초 (`describe`, `it`, `expect`)
 - [ ] `let`과 `let!`의 차이
 - [x] `let_it_be`(test-prof)와 `let`/`let!`의 차이 — 같은 example group 안에서 객체를 재사용하므로, 저장 없는 인메모리 속성 변경 시 다른 예제로 오염될 수 있음 → [레슨](lessons/0048-let-it-be-shared-object-pollution.html) | [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-api-exposure-review.md)
-- [ ] Factory Bot으로 테스트 데이터 만들기
+- [ ] Factory Bot으로 테스트 데이터 만들기 — 미사용 팩토리는 `FactoryBot.lint`가 없으면 아무도 잡지 못하고, NOT NULL 컬럼을 안 채운 팩토리는 호출하면 실패하는 죽은 코드로 남는다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
 - [ ] Request spec vs Model spec
-- [x] DB 정리 전략 (`DatabaseCleaner` `:transaction` vs `:truncation`) — `:transaction`은 예제를 **미커밋 트랜잭션으로 감싸서** 빠르게 되돌리는 대신, 그 픽스처가 **다른 커넥션에는 보이지 않는다.** `:truncation`은 실제로 커밋되지만 매 예제마다 테이블을 비워서 느리다 → [레슨](lessons/0054-database-cleaner-strategy-and-concurrency-spec.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md)
+- [x] DB 정리 전략 (`DatabaseCleaner` `:transaction` vs `:truncation`) — `:transaction`은 예제를 **미커밋 트랜잭션으로 감싸서** 빠르게 되돌리는 대신, 그 픽스처가 **다른 커넥션에는 보이지 않는다.** `:truncation`은 실제로 커밋되지만 매 예제마다 테이블을 비워서 느리다 → [레슨](lessons/0054-database-cleaner-strategy-and-concurrency-spec.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md) · 바깥 트랜잭션이 **첫 예제에만 열려 있고 이후 예제엔 없다** — 그래서 `transaction(isolation:)`처럼 중첩을 못 견디는 코드는 어떤 예제가 먼저 실행되느냐에 따라 통과/실패가 갈린다. 격리수준을 쓰는 스펙 파일은 태그로 아예 `:truncation`에 태워야 한다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
+- [x] **회귀 스펙의 판별력 검증** ([레슨 55](lessons/0055-regression-spec-discriminating-power.html)) — 초록색은 아무것도 증명하지 않을 수 있다. 고친 코드를 임시로 되돌려 그 스펙이 **실제로 실패하는지** 확인해야 한다. 동시성 회귀는 특히 그런데, 경합 상태를 만들어두지 않으면(예: 두 입력이 워커 실행 전에 이미 커밋돼 있으면) 두 실행이 같은 값을 계산해 경합 자체가 성립하지 않는다. 인터리빙을 `Queue` 등으로 강제해야 한다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
 - [x] 다중 커넥션(스레드) 동시성 스펙 — 진짜 동시성 버그(lost update, 데드락)는 커넥션 2개를 실제로 띄워야 재현된다. 픽스처가 커밋돼 있어야 하므로 `:truncation` 전환이 전제. 부수적으로, 테스트 하네스가 연 트랜잭션은 `joinable: false`로 열려서 앱이 연 트랜잭션(`true`)과 `current_transaction.joinable?`로 구분할 수 있다 → [레슨](lessons/0054-database-cleaner-strategy-and-concurrency-spec.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md)
-- [x] 태그 기반 스펙 제외 (`config.filter_run_excluding`)와 그 대가 — 느리거나 flaky한 스펙을 기본 스위트에서 빼는 표준 방법이지만, **CI에 별도 실행 스텝을 안 만들면 그 회귀 방어는 0이 된다** (초록 CI가 아무것도 보장하지 않게 됨) → [레슨](lessons/0054-database-cleaner-strategy-and-concurrency-spec.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md)
+- [x] 태그 기반 스펙 제외 (`config.filter_run_excluding`)와 그 대가 — 느리거나 flaky한 스펙을 기본 스위트에서 빼는 표준 방법이지만, **그 태그를 실행하는 경로를 확인하지 않으면 회귀 방어가 0이 된다** (초록 CI가 아무것도 보장하지 않게 됨) → [레슨](lessons/0054-database-cleaner-strategy-and-concurrency-spec.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md) · **확인 방법을 틀렸던 사례**: `.github/workflows`에 rspec이 없어 "스펙 CI 부재"로 단정했는데 실제 파이프라인은 AWS 쪽에 있었다. CI 정의가 레포 밖에 있을 수 있다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
 
 ---
 
@@ -207,6 +210,7 @@
 - [x] `Sidekiq::Status` gem — `total`/`at`/`store`/`retrieve`로 벌크 job 진행률을 Redis에 기록하고 `job_id`로 폴링 조회 → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
 - [ ] 큐(Queue) 종류와 우선순위
 - [ ] 실패한 잡 재시도
+- [ ] 아웃박스 테이블의 수명 관리 — 폴링 스위퍼/클린업 cron을 언제 붙여야 하는지 판단 기준(테이블 증가 속도, 발행 유실 빈도 관측)
 - [x] job 인자 직렬화 (Marshal vs JSON, `on_complex_arguments`) → [정리](concepts/sidekiq-marshal-vs-json-serialization.md) | [배운 작업](work-log/2026-07-03-sidekiq-job-args-and-slack-investigation.md)
 
 ### 기타
@@ -241,7 +245,7 @@
 
 > 팀 시니어(juhoLee)와의 대화에서 나온 "2PC → Saga → Outbox" 순서, "MSA 이해하려면 DDD로 돌아가야 한다"는 관점을 정리했다.
 
-- [x] 분산 트랜잭션 전략: 2PC → Saga → Outbox → [레슨](lessons/0032-distributed-transaction-2pc-saga-outbox.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md)
+- [x] 분산 트랜잭션 전략: 2PC → Saga → Outbox → [레슨](lessons/0032-distributed-transaction-2pc-saga-outbox.html) · 서비스 *내부* 트랜잭션 경계 분리 용도 → [레슨 56](lessons/0056-outbox-moving-the-transaction-boundary.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md) · **아웃박스는 서비스 *내부*에서도 쓴다** — 서비스 간 메시지 유실 방지가 아니라, 같은 DB 안에서 무거운 후처리를 커밋 밖으로 빼되 "후처리가 필요하다"는 사실만은 원자적으로 남기려는 용도. 후처리를 별도 트랜잭션으로 열 수 있게 되면서 잠금·격리수준을 그 트랜잭션이 직접 소유하게 된다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
 - [x] 언제 카프카를 쓰면 안 되는가 (기술 선택 기준) → [레슨](lessons/0033-when-not-to-use-kafka.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md)
 - [x] MSA와 DDD의 관계 (아키텍처는 구조, 패턴은 전략) → [레슨](lessons/0034-msa-ddd-and-not-knowing-everything.html) | [배운 작업](work-log/2026-07-06-pr-1294-transaction-atomicity-and-msa-discussion.md)
 
