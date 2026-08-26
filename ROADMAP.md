@@ -26,7 +26,7 @@
 - [ ] REST란? (RESTful 설계 원칙)
 - [ ] JSON 데이터 형식
 - [ ] API 버전 관리 (v1, v2)
-- [x] API 요청/응답 구조 설계 — 벌크 처리 엔드포인트는 "전부 성공/전부 실패"(단일 트랜잭션)와 "부분 성공"(항목별 트랜잭션 + success_count/error_count/errors)이 서로 다른 응답 계약이라, 트랜잭션 경계를 바꾸는 순간 API 응답 형태도 같이 바뀐다는 걸 실제 트레이드오프 논의에서 체감했다. 이 레포엔 "동기 엔드포인트 + 항목별 격리 + 부분 성공 응답"을 완전히 만족하는 선례가 아직 없다는 것도 grep으로 확인 → [배운 작업](work-log/2026-08-25-key-result-auto-checkin-reflect-batch-approval-async-pattern-research.md)
+- [x] API 요청/응답 구조 설계 — 벌크 처리 엔드포인트는 "전부 성공/전부 실패"(단일 트랜잭션)와 "부분 성공"(항목별 트랜잭션 + success_count/error_count/errors)이 서로 다른 응답 계약이라, 트랜잭션 경계를 바꾸는 순간 API 응답 형태도 같이 바뀐다는 걸 실제 트레이드오프 논의에서 체감했다. 이 레포엔 "동기 엔드포인트 + 항목별 격리 + 부분 성공 응답"을 완전히 만족하는 선례가 아직 없다는 것도 grep으로 확인 → [배운 작업](work-log/2026-08-25-key-result-auto-checkin-reflect-batch-approval-async-pattern-research.md) · **API 응답 계약이 비대칭이면 클라이언트의 `Promise.all`이 정보를 삼킨다** — 목표 승인은 200+바디(부분실패)로 바뀌는데 가중치 승인은 그대로 실패 시 reject라서, 프론트가 `Promise.all`로 두 호출을 묶으면 가중치가 reject하는 순간 이미 온 목표 응답의 바디를 읽을 기회 자체가 사라진다. `Promise.allSettled`로 바꿔서 두 결과를 독립적으로 봐야 한다는 걸 실제 훅 코드(`useSubmitBulkApprove.ts`)로 확인했다 → [배운 작업](work-log/2026-08-26-key-result-auto-checkin-reflect-batch-approval-response-contract-and-error-isolation.md)
 
 ### 아키텍처
 
@@ -92,7 +92,7 @@
 - [ ] 조건문 (if, unless, case)
 - [ ] 반복문 (while, loop)
 - [ ] 이터레이터 (each, map, select, reduce)
-- [ ] 예외 처리 (begin / rescue / ensure)
+- [x] 예외 처리 (begin / rescue / ensure) — **`case`/`when`에 `else`가 없으면 "예상 밖 상태"는 예외가 아니라 조용한 no-op이 된다.** 벌크 승인 로직(`case obj.stage; when 'pending_create' ...; end`)이 다른 사람이 먼저 처리해 `stage`가 이미 매칭 안 되는 값이 되어 있어도 그냥 아무 것도 안 하고 지나간다 — 예외가 안 나니 `rescue StandardError`가 못 잡고, 그 항목은 실패가 아니라 성공으로 집계된다. "에러를 잡는 것"과 "예상과 다른 모든 경로를 잡는 것"은 다르다 → [배운 작업](work-log/2026-08-26-key-result-auto-checkin-reflect-batch-approval-response-contract-and-error-isolation.md)
 
 ### 객체지향
 
@@ -130,6 +130,7 @@
 - [x] `has_one` 연관에서 FK는 상대 테이블에 있다 — `section.score?`가 부르는 `score_setting`은 `appraisal_sections`의 컬럼이 아니라 `has_one`으로 연결된 별도 테이블(`appraisal_section_score_settings`)이라, `.includes(:appraisal_sections)`만으로는 preload가 안 되고 섹션 수만큼 N+1이 생긴다. `includes(appraisal_sections: [:score_setting, :rating_setting])`처럼 중첩 preload로 해결 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 - [x] 연관관계 스코프의 비대칭 — `has_many`의 람다 스코프는 **조인 대상 테이블의 컬럼만** 검사하고 그 레코드가 속한 부모의 상태는 보지 않는다. 소프트 삭제가 부모 쪽에서만 일어나는 설계(`stage: :archived`만 바꾸고 자식의 `active`는 그대로)에서는, 자식 연관관계가 삭제된 부모의 자식을 계속 들고 온다. 이름이 대칭인 두 연관관계라도 정책이 같다고 믿으면 안 됨 → [레슨](lessons/0051-association-scope-asymmetry.html) | [정리](concepts/association-scope-asymmetry.md) | [배운 작업](work-log/2026-08-06-key-result-auto-reflect-1n-split.md)
 - [x] 폴리모픽 연관관계 (`belongs_to ..., polymorphic: true`) → [레슨](lessons/0036-polymorphic-association.html) | [배운 작업](work-log/2026-07-09-review-remind-notification-split.md) · 반대쪽 `has_many`에 `as:`를 빼먹으면 존재하지 않는 `<모델>_id` 컬럼을 찾는다. 조회 경로가 없으면 배포 후에도 안 터지고, `destroy` 같은 드문 경로에서만 드러난다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
+- [x] **association 문법을 흉내 내는 일반 메서드는 진짜 association이 아니다** — `ObjectiveWeight#user_cycle`은 `belongs_to :user_cycle`처럼 보이지만 실제로는 `UserCycle.find_by(user_id:, cycle_id:)`를 매번 호출하는 메서드였다. 진짜 복합키 association 선언(`belongs_to :user_cycle, foreign_key: %i[user_id cycle_id], primary_key: %i[user_id cycle_id]`)은 양쪽 모델에 주석 처리된 채 남아 있었다. `includes`로 preload가 안 되니 N+1이 구조적으로 못 없어지고, 이것 때문에 서로 다른 단위(`objective_id` 단위 vs `user_id`+`cycle_id` 단위)로 묶인 두 벌크 처리를 하나의 파이프라인으로 합치기가 실질적으로 어렵다는 걸 스키마로 확인했다 → [배운 작업](work-log/2026-08-26-key-result-auto-checkin-reflect-batch-approval-response-contract-and-error-isolation.md)
 - [x] 유효성 검사 (`validates`) → [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
 - [x] 스코프(Scope)란? → [레슨](lessons/0049-where-not-nor-vs-and.html) | [배운 작업](work-log/2026-07-27-ppback-pr-5506-review.md)
 - [x] 콜백 (`before_save`, `after_create` 등) → [레슨](lessons/0019-timestamps-and-hidden-callbacks.html) | [정리](concepts/timestamps-and-callbacks.md) | [배운 작업](work-log/2026-07-01-objective-updated-at-and-key-result-history.md)
