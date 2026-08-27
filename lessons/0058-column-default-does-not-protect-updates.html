@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 58 — DB default는 "수정"을 보호하지 않는다</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>DB <code>default</code>는 <em>"수정"</em>을 보호하지 않는다</h1>
+  <div class="lesson-meta">
+    <span>레슨 058</span>
+    <span>컬럼 default · nil vs 키 없음 · mass assignment 비대칭</span>
+    <span>~12분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 핵심성과 태그 필수 옵션 request spec을 쓰다가, <code>weight</code>를 안 보냈다는 이유만으로
+    500이 나는 걸 발견하고 코드를 3단계로 따라가 원인을 확인한 과정 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>상황 — 태그만 고치려던 요청이 500이 됐다</h2>
+
+  <p>
+    핵심성과 태그를 필수로 만드는 기능을 검증하려고, 기존 핵심성과에 <code>tag_ids</code>만
+    추가하는 PUT 요청 스펙을 썼다. <code>weight</code>는 이미 있는 값을 그대로 둘 생각이라
+    요청에 안 넣었다.
+  </p>
+
+<pre><code>put "/api/v2/workspaces/#{workspace.hash_id}/objectives/#{objective.id}", params: {
+  key_results_attributes: [{
+    id: key_result.id,
+    name: key_result.name,
+    kind: key_result.kind,
+    target: key_result.target,
+    tag_ids: [key_result_tag.id],   # weight는 안 보냄 — 어차피 안 바꾸니까
+  }],
+}</code></pre>
+
+  <p>
+    돌아온 건 200이 아니라 500이었다.
+  </p>
+
+<pre><code>Mysql2::Error: Column 'weight' cannot be null</code></pre>
+
+  <p>
+    스키마를 확인했다. <code>weight</code>는 <strong>default가 있는 NOT NULL 컬럼</strong>이다.
+  </p>
+
+<pre><code># key_results 테이블
+weight :decimal(13, 8) default(100.0), not null</code></pre>
+
+  <p>
+    직관적으로는 말이 안 됐다. <strong>default가 있으면 값을 안 줘도 알아서 채워지는 거 아닌가?</strong>
+    안 보낸 필드 때문에 왜 NULL을 넣으려고 하지?
+  </p>
+
+  <h2>코드를 3단계로 따라가 보니</h2>
+
+  <p>
+    <code>weight</code>는 요청에 없었다. 그런데 어딘가에서 그 "없음"이 <code>nil</code>이 되고,
+    그 <code>nil</code>이 그대로 DB까지 흘러간 것이다. 실제 반영 경로를 순서대로 짚었다.
+  </p>
+
+  <h3>1단계 — 요청이 diff로 변환된다</h3>
+
+  <p>
+    목표 수정 요청은 바로 저장되지 않고, 먼저 <code>ObjectiveUpdateDiff</code>가 "무엇이
+    바뀌는지"를 계산한다. 핵심성과 하나당 요청 파라미터를 그대로 훑는다.
+  </p>
+
+<pre><code># app/services/objective_update_diff.rb
+key_results_attributes.each do |item|
+  next_data = %i[name description kind target weight position tag_ids]
+    .index_with {|key| item[key] }
+  ...</code></pre>
+
+  <p>
+    <code>item</code>은 요청에서 온 그 핵심성과 항목의 해시다. <code>item[:weight]</code>는
+    요청에 <code>weight</code> 키가 없으니 당연히 <code>nil</code>이다. 여기까지는 자연스럽다 —
+    문제는 이 <code>nil</code>이 그대로 다음 단계로 넘어간다는 것.
+  </p>
+
+<pre><code># 같은 파일, 기존 핵심성과를 "수정"으로 분류하는 분기
+next_hash = {
+  id: item[:id],
+  name: item[:name],
+  ...
+  weight: item[:weight],   # nil이면 nil 그대로
+  ...
+}</code></pre>
+
+  <h3>2단계 — 그 diff가 진짜 저장 값으로 재사용된다</h3>
+
+  <p>
+    <code>next_hash</code>는 "변경 이력 기록용"처럼 보이지만, 실제로는 승인 시점에
+    <strong>그대로 <code>update</code>의 인자로 재사용된다.</strong>
+  </p>
+
+<pre><code># app/services/objective_approve_update.rb
+def approve_key_result(value)
+  ...
+  if value[:prev].present? && value[:next].present?
+    @objective.key_results.find_by(id: value[:prev][:id])&.update(value[:next])
+    #                                                       ^^^^^^^^^^^^^^^^^^
+    #                                     1단계에서 만든 next_hash가 그대로 여기로
+  end
+end</code></pre>
+
+  <p>
+    <code>value[:next]</code>가 곧 1단계의 <code>next_hash</code>다. 그 안에 <code>weight: nil</code>이
+    들어 있으니, <code>update(value[:next])</code>는 결국 <code>weight = nil</code>을 명시적으로
+    대입하는 것과 같다.
+  </p>
+
+  <div class="flow">
+    <div class="flow-step">요청에 <code>weight</code> 없음</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><code>item[:weight]</code><br><code>nil</code></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><code>next_hash[:weight]</code><br><code>nil</code> 그대로 보존</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><code>key_result.update(</code><br><code>weight: nil)</code></div>
+  </div>
+
+  <h3>3단계 — DB가 거절한다</h3>
+
+  <p>
+    ActiveRecord는 <code>weight</code> 속성이 <code>nil</code>로 <strong>변경됐다고 판단</strong>하고
+    (Dirty Tracking — <a href="0020-dirty-tracking-and-partial-writes.html">레슨 20</a>),
+    <code>UPDATE ... SET weight = NULL ...</code>을 실행한다. MySQL은 NOT NULL 제약을 보고
+    그 자리에서 거절한다. <code>default(100.0)</code>은 이 순간 아무 역할도 하지 못했다.
+  </p>
+
+  <h2>결정적 단서 — 생성 경로는 이미 이걸 막아뒀다</h2>
+
+  <p>
+    같은 파일에서 딱 몇 줄 위, <strong>새 핵심성과를 만드는 분기</strong>를 봤다.
+  </p>
+
+<pre><code># 같은 change_or_create_key_result 메서드, 신규 생성 분기
+next_key_result = {
+  name: next_data[:name],
+  ...
+  weight: next_data[:weight] || BigDecimal('100.0'),  # ← nil이면 100.0으로!
+  ...
+}</code></pre>
+
+  <p>
+    <strong>정확히 같은 상황(요청에 weight가 없어서 nil)을, 생성 분기는 이미 방어하고 있었다.</strong>
+    <code>|| BigDecimal('100.0')</code> 한 줄이 그 방어다. 그런데 바로 아래, 기존 핵심성과를
+    수정하는 분기(<code>weight: item[:weight]</code>)에는 이 방어가 빠져 있다.
+  </p>
+
+  <div class="analogy">
+    <a href="0051-association-scope-asymmetry.html">레슨 51</a>에서 본 것과 같은 모양이다 —
+    이름도 같고 다루는 개념도 같은 두 코드 경로가, 실제로는 서로 다른 정책으로 짜여 있었다.
+    "생성이 안전하니 수정도 안전하겠지"는 근거 없는 가정이었다.
+  </div>
+
+  <h2>왜 default는 "수정"에서 못 지켜주는가</h2>
+
+  <p>
+    DB의 <code>default</code>는 <strong>컬럼을 아예 건드리지 않은 새 레코드</strong>에만 적용된다.
+    <code>KeyResult.new</code>로 만든 뒤 <code>weight</code>를 한 번도 대입하지 않고 저장하면,
+    INSERT 문에 그 컬럼이 값 없이 들어가거나 스키마 기본값이 실려서 DB가 <code>100.0</code>을 채운다.
+  </p>
+
+  <p>
+    반대로 <strong>이미 존재하는 레코드에 <code>weight: nil</code>을 명시적으로 대입</strong>하면,
+    Rails 입장에서는 "이 속성이 nil로 바뀌었다"는 확정된 변경이다. Dirty Tracking이 이걸
+    변경분으로 잡아 UPDATE 문의 <code>SET</code> 절에 넣고, MySQL은 그 값을 보고 거절한다.
+    <strong>default는 CREATE 시점의 개념이지, UPDATE 시점에는 아무 개입도 하지 않는다.</strong>
+  </p>
+
+  <h2>더 파고들면 — nil은 "안 보냄"과 "명시적으로 null"을 구분 못한다</h2>
+
+  <p>
+    한 단계 더 근본 원인이 있다. <code>item[:weight]</code>가 <code>nil</code>인 이유가
+    "클라이언트가 그 키를 아예 안 보내서"인지, "클라이언트가 명시적으로 <code>null</code>을
+    보내서"인지 — Ruby의 <code>Hash#[]</code>는 이 둘을 구분하지 않는다.
+  </p>
+
+<pre><code>{}[:weight]           # =&gt; nil  (키가 아예 없음)
+{ weight: nil }[:weight]  # =&gt; nil  (키는 있는데 값이 nil)
+# 완전히 같은 결과. 구분하려면:
+{}.key?(:weight)            # =&gt; false
+{ weight: nil }.key?(:weight) # =&gt; true</code></pre>
+
+  <div class="analogy">
+    TypeScript로 치면 <code>interface Props { weight?: number }</code>(키가 없을 수 있음)와
+    <code>interface Props { weight: number | null }</code>(키는 반드시 있고 값이 null일 수 있음)는
+    타입 레벨에서 서로 다른 타입이라 컴파일러가 구분을 강제한다. Ruby 해시나 JSON 파싱 결과에는
+    이런 구분이 타입으로 남지 않는다 — <code>[]</code>로 그냥 꺼내면 둘 다 <code>nil</code>이고,
+    구분하고 싶으면 <code>key?</code>로 <strong>직접 물어봐야</strong> 한다.
+  </div>
+
+  <p>
+    이건 이미 배운 개념의 연장선이다 — <code>nil</code>(값을 안 보냄)과 <code>false</code>(false라는
+    값)를 구분해야 한다는 것처럼, <code>nil</code> 안에도 "그 필드를 안 보냄"과 "명시적으로 null을
+    보냄"이라는 서로 다른 두 가지 의도가 뭉개져 있을 수 있다.
+  </p>
+
+  <h2>고친다면 이렇게 — 값이 아니라 "보냈는지"부터 물어야 한다</h2>
+
+<pre><code># 수정 분기도 생성 분기와 같은 방식으로:
+weight: item.key?(:weight) ? item[:weight] : original.weight</code></pre>
+
+  <p>
+    <code>|| BigDecimal('100.0')</code> 방식(생성 분기)은 "값이 없으면 기본값"이라 새 레코드엔
+    맞지만, 기존 레코드를 수정할 땐 기본값이 아니라 <strong>원래 값을 유지</strong>해야 한다.
+    그래서 수정 분기의 올바른 방어는 <code>key?</code>로 "이 필드를 요청이 건드렸는가"부터
+    확인하는 것이다.
+  </p>
+
+  <p class="soft" style="color:var(--muted); font-size:0.95rem;">
+    이번 작업에서는 이 버그가 내가 만들던 태그 기능과 무관한 기존 코드였다. 범위를 지키기 위해
+    고치지 않고, 스펙에 <code>weight</code>를 명시적으로 포함해 우회했다. 대신 work-log에 남겨서
+    다음 작업 후보로 넘겼다 — <strong>범위를 지키는 것과 발견한 버그를 못 본 척하는 것은 다르다.</strong>
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — 왜 생성은 안전하고 수정만 깨지는가</h3>
+    <p class="quiz-q">같은 <code>weight</code> 필드인데, 왜 <strong>생성</strong> 요청은 문제없이
+      통과하고 <strong>수정</strong> 요청만 NOT NULL 위반이 나는가?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">MySQL이 INSERT에만 NOT NULL 제약을 적용하고 UPDATE에는 적용하지 않아서</button></li>
+      <li><button onclick="answer(this,'q1',true)">생성 분기 코드는 <code>weight</code>가 없으면 <code>|| BigDecimal('100.0')</code>로 방어하지만, 수정 분기는 <code>item[:weight]</code>를 그대로 꺼내 쓰기 때문에</button></li>
+      <li><button onclick="answer(this,'q1',false)">accepts_nested_attributes_for가 생성 시점에만 유효성 검사를 실행해서</button></li>
+      <li><button onclick="answer(this,'q1',false)">프론트가 생성 요청에는 weight를 항상 채워서 보내기로 약속돼 있어서</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — 안 보냄과 null을 구분하려면</h3>
+    <p class="quiz-q"><code>item[:weight]</code>가 <code>nil</code>일 때, 그게 "클라이언트가
+      안 보낸 것"인지 "명시적으로 null을 보낸 것"인지 코드에서 구분하려면?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)"><code>BigDecimal(nil)</code>의 반환값을 확인하면 자동으로 구분된다</button></li>
+      <li><button onclick="answer(this,'q2',true)"><code>item.key?(:weight)</code>로 그 키가 애초에 요청 해시에 존재했는지 따로 물어봐야 한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">Grape가 optional 파라미터에 대해서는 항상 예외를 던지므로 구분할 필요가 없다</button></li>
+      <li><button onclick="answer(this,'q2',false)">params.to_json으로 원본 요청 문자열을 다시 파싱해야 한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>한 줄로 남기면</h2>
+
+  <p>
+    <strong>DB <code>default</code>는 컬럼을 아예 건드리지 않은 새 레코드에만 작동한다.</strong>
+    부분 수정 코드가 요청 파라미터를 그대로 대입하면, "그 필드를 안 보냄"과 "명시적으로 null을
+    보냄"이 똑같이 <code>nil</code>로 뭉개져 default를 무력화한다. 방어하려면 <strong>값이 뭔지</strong>가
+    아니라 <strong>그 키가 있었는지</strong>부터 물어야 한다.
+  </p>
+
+  <p class="source">
+    참고: <a href="https://guides.rubyonrails.org/active_record_migrations.html#column-modifiers" target="_blank">Rails Guides — Active Record Migrations, Column Modifiers(default)</a> ·
+    <a href="https://docs.ruby-lang.org/en/3.4/Hash.html#method-i-key-3F" target="_blank">Ruby Hash#key?</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 Grape 파라미터 레벨에서 "이 필드를 안 보냄"과 "명시적으로 null을 보냄"을 구분하고 싶을 때
+    실무에서 흔히 쓰는 관례(PATCH 시맨틱, JSON Merge Patch 등)가 궁금하면 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="0057-work-unit-vs-contention-unit.html">← 레슨 57: 작업 단위가 경쟁 단위와 다르면 코드 절반이 조율이 된다</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. change_or_create_key_result의 생성 분기는 weight: next_data[:weight] || BigDecimal('100.0')로 nil을 방어하지만, 수정 분기는 weight: item[:weight]를 그대로 씁니다. 같은 개념(값이 없을 때)을 다루는 두 경로가 서로 다른 정책으로 짜여 있던 것입니다.",
+        wrong: "아니에요. NOT NULL 제약은 INSERT/UPDATE 모두에 동일하게 적용되고, 이 요청 경로엔 별도 유효성 검사나 프론트 강제가 없습니다. 원인은 생성 분기에만 있는 || BigDecimal('100.0') 방어가 수정 분기엔 빠져 있다는 것입니다."
+      },
+      q2: {
+        correct: "맞아요. Hash#[]는 키가 없을 때도 nil, 값이 nil로 저장돼 있을 때도 nil을 반환해 구분이 안 됩니다. key?로 그 키가 요청에 실제로 존재했는지부터 확인해야 '안 보냄'과 '명시적 null'을 나눌 수 있습니다.",
+        wrong: "아니에요. BigDecimal이나 Grape 예외, JSON 재파싱으로는 이 구분이 안 됩니다. Ruby Hash 자체가 '키 없음'과 '값이 nil'을 같은 nil로 반환하기 때문에, key?로 키의 존재 여부를 직접 물어보는 것만이 정확한 방법입니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>

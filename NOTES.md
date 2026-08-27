@@ -43,6 +43,7 @@
 - `ActiveSupport::CurrentAttributes` (요청/잡 단위 스레드 로컬 상태, executor가 자동 리셋) — 2026-08-11
 - DatabaseCleaner `:transaction` vs `:truncation`, 다중 커넥션 동시성 스펙, `filter_run_excluding`의 CI 공백 — 2026-08-11
 - MySQL REPEATABLE READ read view 고정 **시점** (`FOR UPDATE`는 안 열고 첫 비잠금 SELECT가 연다) — 2026-08-11
+- DB 컬럼 `default`는 CREATE에서만 작동하고 UPDATE에서 명시적 `nil` 대입은 막아주지 않는다 (`key?`로 "안 보냄"과 "명시적 null"을 구분해야 함) — 2026-08-27
 
 ## 주의사항
 
