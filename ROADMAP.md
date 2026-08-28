@@ -171,7 +171,7 @@
 - [x] DB 정리 전략 (`DatabaseCleaner` `:transaction` vs `:truncation`) — `:transaction`은 예제를 **미커밋 트랜잭션으로 감싸서** 빠르게 되돌리는 대신, 그 픽스처가 **다른 커넥션에는 보이지 않는다.** `:truncation`은 실제로 커밋되지만 매 예제마다 테이블을 비워서 느리다 → [레슨](lessons/0054-database-cleaner-strategy-and-concurrency-spec.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md) · 바깥 트랜잭션이 **첫 예제에만 열려 있고 이후 예제엔 없다** — 그래서 `transaction(isolation:)`처럼 중첩을 못 견디는 코드는 어떤 예제가 먼저 실행되느냐에 따라 통과/실패가 갈린다. 격리수준을 쓰는 스펙 파일은 태그로 아예 `:truncation`에 태워야 한다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
 - [x] **회귀 스펙의 판별력 검증** ([레슨 55](lessons/0055-regression-spec-discriminating-power.html)) — 초록색은 아무것도 증명하지 않을 수 있다. 고친 코드를 임시로 되돌려 그 스펙이 **실제로 실패하는지** 확인해야 한다. 동시성 회귀는 특히 그런데, 경합 상태를 만들어두지 않으면(예: 두 입력이 워커 실행 전에 이미 커밋돼 있으면) 두 실행이 같은 값을 계산해 경합 자체가 성립하지 않는다. 인터리빙을 `Queue` 등으로 강제해야 한다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
 - [x] 다중 커넥션(스레드) 동시성 스펙 — 진짜 동시성 버그(lost update, 데드락)는 커넥션 2개를 실제로 띄워야 재현된다. 픽스처가 커밋돼 있어야 하므로 `:truncation` 전환이 전제. 부수적으로, 테스트 하네스가 연 트랜잭션은 `joinable: false`로 열려서 앱이 연 트랜잭션(`true`)과 `current_transaction.joinable?`로 구분할 수 있다 → [레슨](lessons/0054-database-cleaner-strategy-and-concurrency-spec.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md)
-- [x] 태그 기반 스펙 제외 (`config.filter_run_excluding`)와 그 대가 — 느리거나 flaky한 스펙을 기본 스위트에서 빼는 표준 방법이지만, **그 태그를 실행하는 경로를 확인하지 않으면 회귀 방어가 0이 된다** (초록 CI가 아무것도 보장하지 않게 됨) → [레슨](lessons/0054-database-cleaner-strategy-and-concurrency-spec.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md) · **확인 방법을 틀렸던 사례**: `.github/workflows`에 rspec이 없어 "스펙 CI 부재"로 단정했는데 실제 파이프라인은 AWS 쪽에 있었다. CI 정의가 레포 밖에 있을 수 있다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
+- [x] 태그 기반 스펙 제외 (`config.filter_run_excluding`)와 그 대가 — 느리거나 flaky한 스펙을 기본 스위트에서 빼는 표준 방법이지만, **그 태그를 실행하는 경로를 확인하지 않으면 회귀 방어가 0이 된다** (초록 CI가 아무것도 보장하지 않게 됨) → [레슨](lessons/0054-database-cleaner-strategy-and-concurrency-spec.html) | [배운 작업](work-log/2026-08-11-ppback-pr-5532-lost-update-lock-review.md) · **확인 방법을 틀렸던 사례**: `.github/workflows`에 rspec이 없어 "스펙 CI 부재"로 단정했는데 실제 파이프라인은 AWS 쪽에 있었다. CI 정의가 레포 밖에 있을 수 있다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md) · **한 번 잡은 gap도 재확인 안 하면 여러 커밋을 그냥 통과한다**: 08-11에 지적한 뒤로도 08-19, 08-28 커밋까지 `aws/buildspec-test.yml`이 안 고쳐진 채 남아 있다가, 2차 전체 리뷰에서 다시 짚고서야 실제로 수정됐다 → [배운 작업](work-log/2026-08-28-key-result-auto-checkin-reflect-full-branch-review.md)
 
 ---
 
@@ -196,14 +196,14 @@
 - [x] Pundit 정책(Policy)이란? → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
 - [ ] `policy_scope`란?
 - [x] `authorize`란? (실패 시 `record.errors.add`로 사유 기록 → `errors.empty? && 조건`으로 최종 판정하는 패턴) → [배운 작업](work-log/2026-07-23-key-result-auto-checkin-reflect-design-and-schema.md)
-- [x] `authorize`는 컨트롤러에서 명시적으로 호출한 곳에서만 강제됨 — 서비스 객체를 직접 호출하면 정책 체크가 통째로 우회됨 → [레슨](lessons/0046-pundit-authorize-scope-and-hr-admin-duality.html) | [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-manual-scenario-testing.md)
+- [x] `authorize`는 컨트롤러에서 명시적으로 호출한 곳에서만 강제됨 — 서비스 객체를 직접 호출하면 정책 체크가 통째로 우회됨 → [레슨](lessons/0046-pundit-authorize-scope-and-hr-admin-duality.html) | [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-manual-scenario-testing.md) · **변주 — 인가 지점을 워커로 옮기면 옆에 있던 다른 side effect도 같이 재검토해야 한다**: 목표별 `authorize`를 워커(비동기)로 이관했는데, 같은 액션의 알림 발행 워커 호출은 컨트롤러에 그대로 남아 워크스페이스 소속만 확인한 채(개별 인가 결과와 무관하게) 실행된다 → [배운 작업](work-log/2026-08-28-key-result-auto-checkin-reflect-full-branch-review.md)
 - [x] `has_flags`(비트마스크 플래그 컬럼) 패턴과, 같은 개념(HR admin)이 조인 테이블과 비트마스크 두 곳에 독립적으로 존재해 서로 어긋날 수 있다는 것 → [레슨](lessons/0046-pundit-authorize-scope-and-hr-admin-duality.html) | [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-manual-scenario-testing.md)
 - [x] 테넌트 격리 가드 패턴 (멀티 workspace에서 FK 소속 검증) — 같은 user가 여러 workspace에 속할 수 있는 멀티테넌시에서는, 파라미터로 받은 id가 "존재하는가"가 아니라 "현재 요청 중인 workspace에 속하는가"를 별도로 확인해야 한다. `AppraisalProcess.joins(appraisal_group: :appraisal).exists?(id:, appraisals: { workspace_id: })` 같은 join + `exists?`로 소속을 검증하고, 실패 시 존재 자체를 노출하지 않도록 403이 아니라 404로 처리한다 → [배운 작업](work-log/2026-08-04-ppback-pr-5528-review.md)
 
 ### 도메인 이벤트
 
 - [x] 문자열 상수(`event_type`)로 분기하는 도메인 이벤트를 추가할 때의 파급 범위 — enum이나 타입이 아니라 문자열이라 컴파일러가 누락을 안 잡아준다. 이벤트 하나 추가에 메시지 팩토리(안 넣으면 `raise`), 히스토리 스코프, 안읽음 카운트 제외 목록, 노출 제외 목록, 시리얼라이저, 엔티티의 `case`까지 6곳이 얽혔다 → [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-branch-review.md)
-- [ ] 1:N 팬인(여러 하위 → 하나의 상위) 값 반영 semantics — 마지막이 이김 / 평균 / 합계 중 무엇이 기본이어야 하나
+- [x] 1:N 팬인(여러 하위 → 하나의 상위) 값 반영 semantics — 마지막이 이김 / 평균 / 합계 중 무엇이 기본이어야 하나 → **평균(1/n 균등분할)로 결정** — 하위 하나만 대입하면 처리 순서에 따라 최종값이 달라지고, 재귀 반영에서 이 비결정성이 위로 증폭된다. 연계된 하위 전체에서 매번 다시 계산하면 순서 무관하게 같은 값에 수렴한다. 하위 수가 많고 target이 작으면 정수 반올림 때문에 한동안 계단식으로 오르지만(예: target 10·하위 72개, 1건→0, 4건→1), 매번 전량 재계산이라 하위 전체가 완료되면 정확히 target에 도달한다 → [배운 작업](work-log/2026-08-06-key-result-auto-reflect-1n-split.md)
 
 ### 백그라운드 잡
 
