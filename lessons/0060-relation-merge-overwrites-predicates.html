@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 60 — merge는 조건을 합치지 않고 덮어쓴다</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1><code>merge</code>는 조건을 합치지 않고 <em>덮어쓴다</em></h1>
+  <div class="lesson-meta">
+    <span>레슨 060</span>
+    <span>Relation#merge · where 체이닝 · 서브쿼리 스코프</span>
+    <span>~12분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 PR #5585(평가 결과 검색) 리뷰에서 내가 지적한 성능 개선이 다음 커밋에서 반영됐는데,
+    그 개선이 안전 범위 필터를 같이 날려버린 것을 찾아낸 과정 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>상황 — 성능 개선이 필터를 같이 지웠다</h2>
+
+  <p>
+    평가 결과 검색은 "마감된 평가에서 조건에 맞는 사람을 찾는" 어드민 화면이다.
+    조건 하나가 <code>평가 → 그룹 → 프로세스 → 영역</code>을 지정하고 등급이나 점수를 덧붙인다.
+    <strong>판정 단위가 "행"이 아니라 "사람"</strong>인 게 특징이다 — 업적 행과 역량 행은 별개 행이라
+    한 행이 두 조건을 동시에 만족할 수 없으니, "그 사람이 조건마다 해당 행을 하나씩 갖고 있는가"로 본다.
+  </p>
+
+  <p>
+    그래서 쿼리가 두 갈래로 돈다. 이 구분이 이번 버그의 열쇠였다.
+  </p>
+
+<pre><code>relation
+  .where(matched_rows(...))                                   # (가) 어떤 행을 보여줄까
+  .where(appraisee_user_id: matched_appraisee_user_ids(...))   # (나) 어떤 사람만 남길까</code></pre>
+
+  <div class="flow">
+    <div class="flow-step">(가) 표시 행<br>조건들을 <code>OR</code>로<br><strong>바깥 WHERE에 얹음</strong></div>
+    <div class="flow-arrow">vs</div>
+    <div class="flow-step">(나) 대상자 판정<br><code>IN (SELECT ...)</code><br><strong>독립 서브쿼리</strong></div>
+  </div>
+
+  <p>
+    내가 앞선 리뷰에서 "(가)에 조건마다 안전 범위가 통째로 복제된다"고 지적했고,
+    작성자가 그걸 고쳐 서브쿼리 등장 횟수를 <strong>6회 → 2회</strong>로 줄였다.
+    그런데 <strong>(나)에서도 같이 걷어낸 것</strong>이 문제였다.
+  </p>
+
+  <h2>먼저 — <code>base</code>가 왜 있나</h2>
+
+  <p>
+    <code>appraisal_id</code> 같은 값은 <strong>브라우저가 보내는 값</strong>이다. 개발자도구로 바꿀 수도
+    있고, 화면이 낡은 값을 들고 있을 수도 있다. 그래서 서버는 자기 범위를 항상 덧씌운다.
+  </p>
+
+<pre><code>AppraisalReadOnlyResponse
+  .where(workspace_id: workspace.id,
+         appraisal_id: finished_appraisal_ids)   # ← 이 두 개가 안전 범위
+  .where(appraiser_status: 'completed')
+  .joins(...)</code></pre>
+
+  <p>
+    이게 <code>base</code>다. 이 레포 <code>AGENTS.md</code>에도 <strong>"객체 ID만 믿지 않는다"</strong>로
+    적혀 있는 규칙이고, 원래 코드 주석도 <code>unscope(:where)</code>를 피한 이유로 정확히 이걸 적어뒀었다.
+  </p>
+
+  <h2>핵심 — <code>where</code> 체이닝과 <code>merge</code>는 다르다</h2>
+
+  <p>
+    ActiveRecord의 <code>where</code>는 즉시 DB에 가지 않는다. <code>Relation</code>이라는
+    "조립 중인 SQL 객체"를 돌려주고, 실제 실행은 <code>count</code>나 <code>to_a</code>를 부를 때 일어난다.
+    그래서 계속 이어 붙일 수 있다. 붙이는 방법이 두 가지인데 <strong>같은 컬럼이 겹칠 때 동작이 반대</strong>다.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th></th><th>동작</th><th>같은 컬럼이 겹치면</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>.where(a).where(b)</code></td><td>조건을 <strong>누적</strong></td><td>둘 다 남고 <code>AND</code>로 묶임</td></tr>
+      <tr><td><code>.merge(other)</code></td><td>다른 Relation을 <strong>합침</strong></td><td><strong>뒤에 온 쪽이 앞의 것을 덮어씀</strong></td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    <code>merge</code>는 원래 "기본 조건을 갖고 있다가 나중에 덮어쓰고 싶을 때" 쓰는 도구다.
+    이번엔 덮어쓰면 안 되는 걸 덮어썼다. 실제로 생성되는 SQL을 뽑아 비교했다.
+  </p>
+
+<pre><code>-- merge 로 붙였을 때 (버그)
+SELECT ... FROM appraisal_read_only_responses
+   WHERE workspace_id = 2
+     AND appraisal_id = 4              -- ← 마감 평가 제한이 통째로 사라졌다
+     AND appraisal_group_id = 4</code></pre>
+
+<pre><code>-- where 체이닝으로 붙였을 때 (정상)
+SELECT ... FROM appraisal_read_only_responses
+   WHERE workspace_id = 2
+     AND appraisal_id IN (SELECT appraisals.id FROM appraisals
+                          WHERE appraisals.workspace_id = 2
+                            AND appraisals.status IN (2, 3)      -- closed, completed
+                            AND appraisals.deleted_at IS NULL)
+     AND appraisal_id = 4              -- ← 둘 다 남아 있다
+     AND appraisal_group_id = 4</code></pre>
+
+  <p>
+    <code>workspace_id = 2</code>는 살아남았다. <strong>조건 쪽에 <code>workspace_id</code>가 없어서
+    겹치지 않았기 때문</strong>이다. 반면 <code>appraisal_id</code>는 양쪽에 다 있어서 조건 쪽 값이
+    <code>base</code>의 것을 밀어냈다. 즉 <strong>테넌트 격리는 우연히 살아남았고,
+    마감 범위 방어만 정확히 사라졌다</strong> — 이 우연이 사고를 더 찾기 어렵게 만든다.
+  </p>
+
+  <p class="soft" style="color:var(--muted); font-size:0.95rem;">
+    (<code>status IN (2, 3)</code>처럼 숫자가 보이는 건 Rails <code>enum</code>이 상태를 정수로
+    저장하기 때문이다 — <code>closed</code>=2, <code>completed</code>=3.)
+  </p>
+
+  <h2>그래서 무슨 일이 벌어졌나</h2>
+
+  <p>
+    정상 SQL의 <code>appraisal_id IN (마감 평가들) AND appraisal_id = 4</code>를 보자.
+    평가 4가 진행 중이면 마감 목록에 없으니 <strong>두 조건을 동시에 만족하는 행이 존재할 수 없어
+    결과가 0건</strong>이다. 이게 의도한 동작이다.
+  </p>
+
+  <p>
+    버그 상태에서는 앞쪽이 사라져 <code>appraisal_id = 4</code>만 남는다. 그러면
+    <strong>진행 중 평가의 데이터로 사람을 골라내게</strong> 된다. 한 조건 그룹에 마감 평가 조건과
+    진행 중 평가 조건을 함께 넣어 로컬에서 재현했다.
+  </p>
+
+  <table>
+    <thead><tr><th></th><th>대상자 판정</th><th>최종</th></tr></thead>
+    <tbody>
+      <tr><td>버그 이전</td><td><code>[]</code> (공집합)</td><td>0건</td></tr>
+      <tr><td>버그 상태</td><td><code>[35]</code></td><td><strong>1건</strong></td></tr>
+      <tr><td>수정 후</td><td><code>[]</code></td><td>0건 ✅</td></tr>
+    </tbody>
+  </table>
+
+  <div class="analogy">
+    <strong>왜 눈에 안 띄었나가 이 버그의 성격이다.</strong> 보여주는 행은 (가)를 통과해야 하고
+    거기엔 마감 제한이 살아 있다. 그래서 진행 중 평가의 행이 화면에 뜨지는 않는다. 대신
+    <strong>대상자 명단만 조용히 틀린다.</strong> 예외도 없고 화면도 정상으로 보이는데
+    Calibration 대상자를 추리는 결과가 잘못 나온다 — 에러 나는 버그보다 나쁘다.
+  </div>
+
+  <h2>고치는 방법 — 시작 지점을 인자로 넘긴다</h2>
+
+  <p>
+    <code>merge</code>를 버리고, <strong>어디서부터 조건을 얹을지를 키워드 인자로 받게</strong> 했다.
+  </p>
+
+<pre><code>def appraisee_scope(conditions)                    # (나) 대상자 판정
+  conditions.inject(base.section_data) do |scope, condition|
+    matched = condition_scope(condition, from: base.section_data)  # base 에서 시작
+                .select(:appraisee_user_id)
+    scope.where(appraisee_user_id: matched)
+  end
+end
+
+def condition_scope(condition, from: AppraisalReadOnlyResponse)    # 기본값은 맨 relation
+  scope = from.where(                              # ← from 위에 조건을 얹기만 한다
+    appraisal_id: condition[:appraisal_id],
+    appraisal_group_id: condition[:appraisal_group_id],
+    ...
+  )
+  scope = rank(scope, condition[:rating_item_id])
+  score(scope, condition[:score], condition[:score_operator])
+end</code></pre>
+
+  <p>
+    인자 하나로 두 용도를 나눈 게 포인트다.
+  </p>
+
+  <table>
+    <thead><tr><th>호출</th><th><code>from</code></th><th>왜</th></tr></thead>
+    <tbody>
+      <tr><td><code>condition_scope(condition)</code> — (가) 표시 술어</td><td>기본값(맨 relation)</td><td>바깥 <code>WHERE</code>에 이미 <code>base</code>가 <code>AND</code>로 있으니 또 넣으면 중복</td></tr>
+      <tr><td><code>condition_scope(condition, from: base.section_data)</code> — (나) 판정</td><td><code>base</code></td><td><strong>따로 실행되는 서브쿼리</strong>라 자기 안에 안전 범위가 있어야 함</td></tr>
+    </tbody>
+  </table>
+
+  <h2>성능 숫자가 6 → 2 → 4로 움직인 이유</h2>
+
+  <p>
+    같은 조건(그룹 1개 × 조건 2개)에서 마감 평가 서브쿼리(<code>FROM appraisals</code>)가
+    SQL에 몇 번 등장하는지 셌다.
+  </p>
+
+  <table>
+    <thead><tr><th></th><th>등장 횟수</th><th>상태</th></tr></thead>
+    <tbody>
+      <tr><td>원래 코드</td><td>6회</td><td>정확하지만 중복이 많음</td></tr>
+      <tr><td>성능 개선 후</td><td>2회</td><td>빠르지만 <strong>필터가 사라짐</strong></td></tr>
+      <tr><td>최종 수정</td><td>4회</td><td>정확하고, 중복은 여전히 줄어듦</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    원래 6회가 나온 이유는 <code>condition_scope</code>가 <code>base</code>에서 출발했고
+    그 결과를 <strong>(가) 표시 술어에도 통째로 박아 넣었기</strong> 때문이다. 조건마다 안전 범위가 복사됐다.
+    (가)에서 그 중복을 걷어낸 것은 <strong>정당한 개선</strong>이다. 문제는 (나)에서도 같이 걷어낸 것이었다.
+    최종 수정은 <strong>(가)의 개선은 유지하고 (나)만 되돌린다.</strong> 늘어난 2회가 곧 마감 범위 방어다.
+  </p>
+
+  <div class="analogy">
+    <a href="0007-subquery.html">레슨 7</a>에서 서브쿼리를 "쿼리 안의 쿼리"로 배웠는데,
+    그때는 <strong>모양</strong>만 봤다. 이번에 배운 건 <strong>서브쿼리가 자기만의 WHERE를 갖는
+    독립 스코프</strong>라는 점이다. 바깥 쿼리에 필터가 있어도 서브쿼리에는 적용되지 않는다.
+    "바깥에 있으니 괜찮다"는 (가)처럼 <strong>같은 WHERE에 얹히는 경우</strong>에만 참이다.
+  </div>
+
+  <h2>어떻게 확인했나 — 코드를 일부러 되돌렸다</h2>
+
+  <p>
+    작성자가 회귀 테스트를 함께 추가했다. "테스트를 추가했다"만으로는 그 테스트가 이 버그를 잡는지
+    알 수 없어서, <strong><code>merge</code>로 되돌려 다시 돌려봤다.</strong>
+  </p>
+
+<pre><code>merge 로 되돌린 상태: 68 examples, 1 failure
+  rspec ./spec/api/v2/admins/appraisal_results_spec.rb:738
+    # 진행 중 평가의 조건은 대상자 판정에 쓰이지 않는다</code></pre>
+
+  <p>
+    정확히 그 example 하나만 실패했다. 이런 검증을 <strong>뮤테이션 테스트</strong>라고 한다 —
+    <a href="0055-regression-spec-discriminating-power.html">레슨 55</a>의 판별력 기준을
+    남의 PR 리뷰에 적용한 것이다. 다른 것도 같이 실패했다면 그 테스트가 무엇을 지키는지 불분명하다는 뜻이다.
+  </p>
+
+  <div class="quiz">
+    <h3>퀴즈 1 — 왜 테넌트 격리는 살아남았나</h3>
+    <p class="quiz-q"><code>merge</code>가 <code>appraisal_id</code> 제한은 날렸는데
+      <code>workspace_id = 2</code>는 그대로 남았다. 왜인가?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)"><code>merge</code>가 테넌트 관련 컬럼을 특별 취급해서 보호한다</button></li>
+      <li><button onclick="answer(this,'q1',true)">덮어쓰기는 <strong>같은 컬럼이 양쪽에 있을 때만</strong> 일어난다 — 조건 쪽에 <code>workspace_id</code> 술어가 없어서 겹치지 않았고, 그래서 우연히 살아남았다</button></li>
+      <li><button onclick="answer(this,'q1',false)"><code>workspace_id</code>가 먼저 선언돼서 우선순위가 높다</button></li>
+      <li><button onclick="answer(this,'q1',false)">서브쿼리가 아닌 단순 등호 조건은 <code>merge</code> 대상이 아니다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <h3>퀴즈 2 — 같은 개선을 (가)에는 해도 되고 (나)에는 안 되는 이유</h3>
+    <p class="quiz-q">조건 술어에서 <code>base</code>를 걷어내는 것이 (가) 표시 술어에서는 안전하고
+      (나) 대상자 판정에서는 위험했다. 판단 기준은 무엇인가?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">(가)는 읽기 전용이고 (나)는 쓰기이므로</button></li>
+      <li><button onclick="answer(this,'q2',false)">(나)가 더 많은 행을 다루므로 방어가 더 필요하다</button></li>
+      <li><button onclick="answer(this,'q2',true)"><strong>그 술어가 어디서 실행되는지</strong>다. (가)는 바깥 <code>WHERE</code>에 <code>AND</code>로 얹히므로 <code>base</code>가 이미 같은 절에 있어 중복이다. (나)는 <code>IN (SELECT ...)</code>로 <strong>따로 실행되는 독립 쿼리</strong>라 자기 안에 안전 범위가 없으면 아무 제한 없이 돈다</button></li>
+      <li><button onclick="answer(this,'q2',false)">(가)는 인덱스를 타고 (나)는 못 타므로</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>한 줄로 남기면</h2>
+
+  <p>
+    <strong><code>Relation#merge</code>는 같은 컬럼의 술어를 <code>AND</code>하지 않고 덮어쓴다.</strong>
+    안전 범위(테넌트·상태·soft delete)를 담은 relation에 사용자 입력을 붙일 때는 <code>merge</code>가 아니라
+    <code>where</code> 체이닝을 써야 한다. 그리고 <strong>서브쿼리는 자기만의 WHERE를 갖는 독립 스코프</strong>라
+    바깥 필터가 적용되지 않는다 — 성능 개선으로 조건을 걷어낼 때 "이 술어가 어디서 실행되는지"를
+    먼저 확인해야, 중복 제거가 안전한 자리와 방어를 없애는 자리를 구분할 수 있다.
+  </p>
+
+  <p class="source">
+    참고: <a href="https://api.rubyonrails.org/classes/ActiveRecord/SpawnMethods.html#method-i-merge" target="_blank">Rails API — ActiveRecord::SpawnMethods#merge</a> ·
+    <a href="https://api.rubyonrails.org/classes/ActiveRecord/QueryMethods.html#method-i-rewhere" target="_blank">Rails API — rewhere (덮어쓰기를 명시적으로 원할 때)</a> ·
+    <a href="0007-subquery.html">레슨 7 — 서브쿼리</a> ·
+    <a href="0055-regression-spec-discriminating-power.html">레슨 55 — 회귀 스펙의 판별력</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 <code>merge</code>의 덮어쓰기 규칙이 정확히 어떤 노드에 적용되는지(<code>WhereClause#merge</code>의
+    <code>predicates_unreferenced_by</code>), 또 <code>rewhere</code>·<code>and</code>·<code>or</code>가
+    각각 어떤 상황용인지 같이 파보고 싶으면 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="0059-let-it-be-stale-attribute-skips-update-sql.html">← 레슨 59: 값이 같으면 UPDATE는 SQL조차 안 나간다</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. merge의 덮어쓰기는 양쪽 relation에 같은 컬럼의 술어가 있을 때만 일어납니다. 조건 쪽은 appraisal_id·appraisal_group_id·appraisal_process_id·appraisal_section_id만 갖고 있어서 workspace_id는 겹치지 않았고, 그래서 base의 것이 그대로 남았습니다. 즉 테넌트 격리가 지켜진 건 설계가 아니라 우연이고, 그 우연 때문에 사고 범위가 좁아 보여 더 찾기 어려웠습니다.",
+        wrong: "아니에요. merge에 컬럼별 특별 취급이나 선언 순서 우선순위, 노드 타입에 따른 예외는 없습니다. 규칙은 하나입니다 — 같은 컬럼이 양쪽에 있으면 인자로 들어온 쪽이 이깁니다. workspace_id는 조건 쪽에 아예 없어서 겹치지 않았을 뿐입니다."
+      },
+      q2: {
+        correct: "맞아요. 기준은 '그 술어가 어디서 실행되는가'입니다. (가)는 바깥 WHERE에 AND로 합쳐지므로 base가 이미 같은 절에 있어 조건마다 또 넣으면 순수 중복입니다. (나)는 IN (SELECT ...) 안에서 따로 실행되는 독립 쿼리라, 자기 WHERE에 안전 범위가 없으면 바깥에 뭐가 있든 제한 없이 돕니다. 그래서 같은 리팩터링이 한쪽에서는 개선이고 다른 쪽에서는 방어 제거가 됩니다.",
+        wrong: "아니에요. 둘 다 읽기이고, 행 수나 인덱스 사용 여부는 정확성과 무관합니다. 핵심은 실행 위치입니다 — 같은 WHERE에 AND로 얹히는지, 아니면 독립 서브쿼리로 따로 실행되는지."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>
