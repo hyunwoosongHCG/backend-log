@@ -64,7 +64,7 @@
   </div>
 
   <p>
-    "돌고 돌아 DDD"라는 농담이 웃기면서도 정확하다. 이미 레슨 3·6(도메인이란? 도메인 vs 엔티티)에서
+    "돌고 돌아 DDD"라는 농담이 웃기면서도 정확하다. 이미 레슨 6(도메인과 엔티티, 뭐가 다른가)에서
     도메인의 책임 경계를 배웠는데, 그게 바로 MSA에서 "이 서비스와 저 서비스를 어디서 자를 것인가"를
     정하는 기준(Bounded Context)이 된다. <strong>도메인 개념 → MSA의 서비스 경계 → 그 경계를 넘나드는 트랜잭션 전략</strong>이
     하나의 사슬로 이어져 있다는 걸 이번에 처음 실감했다.
@@ -92,7 +92,7 @@
   <h2>이번에 되짚어본 사슬</h2>
 
   <div class="flow">
-    <div class="flow-step">도메인(Domain)의 책임 경계 — 레슨 3, 6</div>
+    <div class="flow-step">도메인(Domain)의 책임 경계 — 레슨 6</div>
     <div class="flow-arrow">↓ 그 경계를 물리적으로 나누면</div>
     <div class="flow-step">MSA — 서로 다른 서비스, 서로 다른 배포 주기, 서로 다른 팀</div>
     <div class="flow-arrow">↓ 나뉜 서비스 사이에 데이터 일관성이 필요해지면</div>
