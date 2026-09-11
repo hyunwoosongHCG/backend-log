@@ -211,6 +211,13 @@
 - [x] 문자열 상수(`event_type`)로 분기하는 도메인 이벤트를 추가할 때의 파급 범위 — enum이나 타입이 아니라 문자열이라 컴파일러가 누락을 안 잡아준다. 이벤트 하나 추가에 메시지 팩토리(안 넣으면 `raise`), 히스토리 스코프, 안읽음 카운트 제외 목록, 노출 제외 목록, 시리얼라이저, 엔티티의 `case`까지 6곳이 얽혔다 → [배운 작업](work-log/2026-07-27-key-result-auto-checkin-reflect-branch-review.md)
 - [x] 1:N 팬인(여러 하위 → 하나의 상위) 값 반영 semantics — 마지막이 이김 / 평균 / 합계 중 무엇이 기본이어야 하나 → **평균(1/n 균등분할)로 결정** — 하위 하나만 대입하면 처리 순서에 따라 최종값이 달라지고, 재귀 반영에서 이 비결정성이 위로 증폭된다. 연계된 하위 전체에서 매번 다시 계산하면 순서 무관하게 같은 값에 수렴한다. 하위 수가 많고 target이 작으면 정수 반올림 때문에 한동안 계단식으로 오르지만(예: target 10·하위 72개, 1건→0, 4건→1), 매번 전량 재계산이라 하위 전체가 완료되면 정확히 target에 도달한다 → [배운 작업](work-log/2026-08-06-key-result-auto-reflect-1n-split.md)
 
+### 외부 시스템 연동 (HR 동기화)
+
+- [x] 외부 연동 실패의 두 계층 — "매칭 실패"(로그 있음) vs "소스 데이터 자체 부재"(로그 없음) — 발령 동기화 코드는 발령 레코드가 있는데 참조하는 member_uid/organization_uid가 안 맞을 때만 에러 로그를 남긴다. 대상이 소스 피드에 아예 없으면 그 코드 경로 자체가 안 돌아서 아무 로그도 없이 `status=completed / error_code=ok`로 끝난다 — "에러 로그 없음"이 "정상"을 보장하지 않는다 → [배운 작업](work-log/2026-09-11-hyundai-department-store-organization-sync-investigation.md)
+- [x] 동기화 스냅샷(JSON 컬럼)으로 원본 피드를 그대로 재현해서 검증하기 — `Synchronization#data`(JSON)에 그 회차 users/organizations/appointments 배열 전체가 보존돼 있어서, 특정 대상이 그 회차 소스 피드에 포함됐는지를 코드 추측이 아니라 실제 데이터로 확인할 수 있다 → [배운 작업](work-log/2026-09-11-hyundai-department-store-organization-sync-investigation.md)
+- [x] 동기화 트리거 주체(`member_id`)와 동기화 대상(피드 안 `EMP_ID`)은 다른 축이다 — `Synchronization#member_id`는 수동 재동기화를 누른 관리자이지 동기화되는 대상이 아니다. 특정 대상을 찾으려면 `data` JSON 내부를 뒤져야 한다 → [배운 작업](work-log/2026-09-11-hyundai-department-store-organization-sync-investigation.md)
+- [x] 활성화 시각(`last_activate_at`)을 배치 스케줄과 대조해 수동 조치인지 자동 동기화 결과인지 구분하기 — 대상 레코드의 활성화 시각이 최근 배치 시각들과 하나도 안 맞으면, 그 활성화는 이번 동기화가 아니라 수동 처리(관리자/CS)였다고 추론할 수 있다 → [배운 작업](work-log/2026-09-11-hyundai-department-store-organization-sync-investigation.md)
+
 ### 백그라운드 잡
 
 - [ ] Sidekiq란?
@@ -282,6 +289,7 @@
 - [x] `runtimePlatform`(CPU 아키텍처 명시)과 ARM64/Graviton 선택이 EC2→Fargate 전환과 독립적으로 유지된다는 것 → [레슨](lessons/0040-ecs-ec2-vs-fargate.html) | [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md) · [배운 작업](work-log/2026-07-15-pr-274-ecs-ec2-removal-review.md)
 - [x] Placement Strategy는 Fargate 미지원(AWS가 서브넷 간 자동 분산) → [레슨](lessons/0040-ecs-ec2-vs-fargate.html) | [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md)
 - [x] ECS Exec — SSM 세션 관리로 SSH 없이 컨테이너 접속 → [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md)
+- [x] awslogs 로그 그룹 위치 — CloudWatch 로그 그룹은 클러스터/서비스가 아니라 Task Definition의 컨테이너별 `logConfiguration.options`(`awslogs-group`/`awslogs-stream-prefix`)에 있다. `ecs describe-task-definition`으로 그때그때 읽으면 하드코딩 없이 정확한 그룹을 찾을 수 있고, 스트림명 규칙(`{prefix}/{컨테이너명}/{taskId}`)으로 같은 그룹을 공유하는 다른 컨테이너(app/sidekiq)의 로그와 안 섞이게 좁힐 수 있다 → [배운 작업](work-log/2026-09-11-hyundai-department-store-organization-sync-investigation.md)
 - [x] Deployment Circuit Breaker — 배포 실패 시 즉시 롤백 → [배운 작업](work-log/2026-07-15-pr-273-ecs-fargate-migration-review.md)
 - [ ] AWS Application Auto Scaling — CPU/메모리 알람 기준 태스크 개수 조정 원리
 - [ ] IAM Role의 `assumedBy` vs managed/inline policy, taskRole vs executionRole vs serverRole 차이
@@ -305,3 +313,5 @@
 ### 개발 도구
 
 - [x] git worktree로 로컬 브랜치 안 건드리고 다른 브랜치 격리 테스트 → [배운 작업](work-log/2026-07-15-pr-274-ecs-ec2-removal-review.md)
+- [x] `aws logs filter-log-events`의 `nextToken` 페이지네이션엔 직접 상한(cap)을 걸어야 한다 — 안 그러면 넓은 기간·느슨한 필터에서 무한히 페이지를 따라가며 출력이 폭주할 수 있다 → [배운 작업](work-log/2026-09-11-hyundai-department-store-organization-sync-investigation.md)
+- [x] 컨테이너 이미지의 `base64`가 BusyBox(Alpine 계열)면 GNU 롱옵션(`--decode`)이 없다 — `-d`만 지원해서, 로컬(macOS)에서 만든 명령을 그대로 넣으면 `unrecognized option`으로 조용히 실패한다. 세션이 1~2초 만에 끝나는 증상만 보면 완전히 다른 원인(S3 세션로그 검증 실패)으로 오판하기 쉽다 → [배운 작업](work-log/2026-09-11-hyundai-department-store-organization-sync-investigation.md)
