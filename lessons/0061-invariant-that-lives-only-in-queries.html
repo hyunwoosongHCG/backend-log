@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레슨 61 — 선언되지 않은 불변식은 조회 조건에 숨어 있다</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>선언되지 않은 불변식은 <em>조회 조건</em>에 숨어 있다</h1>
+  <div class="lesson-meta">
+    <span>레슨 061</span>
+    <span>도메인 불변식 · 상태 전이 · where 조건의 반복</span>
+    <span>~10분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 평가자 상태를 되돌리는 코드 한 줄을 넣었는데, 다른 영역에 남아 있던 응답이 화면에서 사라지고
+    재제출하면 조용히 지워지던 버그를 만들고 고친 과정 — <a href="../MISSION.md">MISSION.md</a>
+  </div>
+
+  <h2>상황 — 상태만 바꿨는데 데이터가 사라졌다</h2>
+
+  <p>
+    직무 역량 양식 영역의 응답만 초기화하는 기능을 만들었다. 응답을 지웠으면 그 평가자는 더 이상
+    "응답 완료"가 아니니, 상태도 <code>closed</code>(응답 이전)로 되돌리는 게 자연스러워 보였다.
+  </p>
+
+  <pre><code># 초안 — 응답을 지운 평가자를 응답 이전으로 되돌린다
+AppraisalAppraiser.where(id: target_ids)
+  .update_all(status: :closed, response_created_at: nil)</code></pre>
+
+  <p>
+    직무 영역만 쓰는 그룹에서는 잘 동작했다. 그런데 <strong>목표 영역과 직무 영역을 같이 쓰는 그룹</strong>에서
+    평가자가 화면에 들어가면, 지우지도 않은 <strong>목표 영역 응답이 빈칸으로 보였다.</strong>
+    DB에는 멀쩡히 남아 있는데도.
+  </p>
+
+  <h2>왜 안 보였나</h2>
+
+  <p>
+    이 도메인에는 규칙이 하나 있다. <strong>응답 행의 <code>status</code>는 그 응답을 쓴 평가자의
+    <code>status</code>와 같다.</strong> 평가자가 <code>completed</code>면 그 사람의 응답 행도
+    <code>completed</code>고, <code>tempsaved</code>면 응답도 <code>tempsaved</code>다.
+  </p>
+
+  <p>
+    그래서 조회가 전부 이렇게 생겼다.
+  </p>
+
+  <pre><code># v2/appraisals/appraisal_responses.rb:123
+appraiser.appraisal_responses.where(status: appraiser.status)
+
+# entities/appraisers/appraisal_response_entity.rb:31
+object.section_responses.reject { |res| res.status != object.status }
+
+# v2/exports/xlsx.rb:253 · v1/appraisals/appraisal_sections.rb:147 · …</code></pre>
+
+  <p>
+    이 조건이 코드베이스에 <strong>9곳</strong> 있다. 평가자를 <code>closed</code>로 바꾸는 순간,
+    <code>tempsaved</code>로 남아 있던 목표 영역 응답은 모든 조회에서 걸러진다.
+    데이터는 있는데 어디서도 안 보인다.
+  </p>
+
+  <div class="analogy">
+    📦 창고에 물건은 있는데 <strong>선반 번호표만 바꿔 단</strong> 격이다.
+    재고 조회는 전부 "그 사람 선반 번호"로 찾으니, 물건이 사라진 것처럼 보인다.
+  </div>
+
+  <h2>진짜 위험한 건 그다음이었다</h2>
+
+  <p>
+    안 보이는 것으로 끝나지 않았다. 평가자가 화면에서 다시 응답을 제출하면 이 코드가 돈다.
+  </p>
+
+  <pre><code># status: 2(완료) 제출 경로
+appraiser.completed_responses&.discard_all
+check_and_init_responses(appraiser, 'completed', responses)</code></pre>
+
+  <div class="flow">
+    <div class="flow-step">평가자 <code>closed</code>로 변경</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">목표 영역 응답이 화면에서 <strong>안 보임</strong></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">제출 payload에 <strong>안 실림</strong></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><code>discard_all</code>이 그 행을 <strong>지움</strong></div>
+  </div>
+
+  <p>
+    사용자는 자기 목표 영역 응답이 사라진 줄도 모른다. 화면에 안 보였으니 지워졌다는 인식조차 없다.
+    <strong>조용히 틀리는 쪽</strong>이라 더 나쁘다.
+  </p>
+
+  <h2>단서는 이미 코드에 있었다</h2>
+
+  <p>
+    기존 코드에 <code>Appraisal::UpdateAppraiserStatusService</code>가 있고, 그 안에 이런 메서드가 있다.
+  </p>
+
+  <pre><code>def dup_and_update_status_res(appraiser)
+  appraiser.appraisal_responses.where(status: appraiser.status).map do |res|
+    dup_res = res.dup
+    dup_res.status = @after_status   # 새 상태로 복제
+    dup_res.save!                    # 원본은 이력으로 남긴다
+  end
+end</code></pre>
+
+  <p>
+    처음 봤을 땐 왜 복제까지 하나 싶었다. 상태 컬럼 하나 바꾸면 될 것을.
+    <strong>그 복제가 바로 불변식을 지키는 장치였다.</strong> 상태를 바꾸면 응답도 같이 옮겨야
+    조회가 계속 찾을 수 있다.
+  </p>
+
+  <p>
+    즉 규칙은 어디에도 <em>선언</em>돼 있지 않지만, 그것을 지키는 코드와 그것에 의존하는 코드가
+    이미 코드베이스에 깔려 있었다. 나는 그 사이에 규칙을 모르는 코드를 하나 끼워 넣은 것이다.
+  </p>
+
+  <h2>어떻게 알아챘어야 했나</h2>
+
+  <p>
+    신호는 <strong>같은 조건이 여러 조회에 반복된다</strong>는 것이었다.
+    <code>where(status: appraiser.status)</code>가 아홉 군데에 있으면 그건 우연한 중복이 아니라
+    <strong>계약</strong>이다. 누군가 그 계약을 지키고 있기 때문에 모두가 그렇게 조회할 수 있다.
+  </p>
+
+  <p>
+    상태 컬럼을 건드리는 코드를 쓸 때 던져야 했던 질문은 이것이다 —
+    <em>"이 컬럼을 읽는 쪽은 이 값에 대해 무엇을 가정하고 있나?"</em>
+    <code>git grep "status: appraiser.status"</code> 한 번이면 나왔을 질문이다.
+  </p>
+
+  <h2>고친 방법</h2>
+
+  <pre><code>if appraiser.appraisal_responses.empty?
+  # 남은 응답이 없으면 '응답 이전'이 사실과 맞다
+  appraiser.update!(status: :closed, response_created_at: nil)
+elsif appraiser.completed?
+  # 남은 응답이 있으면 그 응답도 같이 옮긴다
+  dup_responses_as_tempsaved(appraiser)
+  appraiser.update!(status: :tempsaved)
+end</code></pre>
+
+  <p>
+    남은 응답이 없으면 <code>closed</code>가 사실과 맞다. 남아 있으면 그 평가자는 "아무것도 안 쓴 사람"이
+    아니라 "쓰다 만 사람"이므로 <code>tempsaved</code>가 맞고, 응답 행도 같은 상태로 복제한다.
+    <strong>상태는 데이터를 설명해야 하고, 데이터보다 먼저 바뀌면 안 된다.</strong>
+  </p>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 1 — 직무 영역만 쓰는 그룹에서는 왜 버그가 안 보였나?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">영역이 하나뿐이라 조회 조건이 다르게 동작해서</button></li>
+      <li><button onclick="answer(this,'q1',true)"><strong>지울 응답이 전부였기 때문</strong>이다. 남은 응답이 0건이면 <code>closed</code>가 사실과 맞아서 불일치 자체가 생기지 않는다. 불변식은 <strong>일부만 지웠을 때</strong> 깨진다</button></li>
+      <li><button onclick="answer(this,'q1',false)">직무 영역은 <code>status</code>를 안 쓰기 때문</button></li>
+      <li><button onclick="answer(this,'q1',false)">테스트 데이터가 우연히 <code>closed</code>였기 때문</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 2 — "응답이 화면에서 안 보인다"와 "응답이 지워진다" 중 어느 쪽이 발견하기 어려운가, 그리고 왜인가?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">지워지는 쪽. 복구가 불가능하므로</button></li>
+      <li><button onclick="answer(this,'q2',true)"><strong>안 보이는 쪽</strong>이다. 지워지는 건 결과지만, 안 보이는 건 <strong>원인이자 은폐 수단</strong>이다 — 화면에 없으니 제출 payload에도 없고, 사용자는 잃은 줄도 모른다. 에러도 로그도 안 남는다</button></li>
+      <li><button onclick="answer(this,'q2',false)">둘 다 같다. 어차피 데이터는 DB에 남아 있으므로</button></li>
+      <li><button onclick="answer(this,'q2',false)">지워지는 쪽. 스펙으로 잡기 어려우므로</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <h2>한 줄로 남기면</h2>
+
+  <p>
+    <strong>같은 조건이 여러 조회에 반복되면 그건 중복이 아니라 선언되지 않은 계약이다.</strong>
+    그 조건에 등장하는 컬럼을 쓰기 전에, 읽는 쪽이 그 값에 대해 무엇을 가정하는지 먼저 세어봐야 한다
+    (<code>git grep</code> 한 번이면 된다). 특히 <strong>상태 컬럼은 데이터를 설명하는 값</strong>이라,
+    데이터를 그대로 두고 상태만 바꾸면 그 데이터는 존재하되 아무도 찾지 못하는 상태가 된다 —
+    그리고 그 보이지 않음이 다음 쓰기에서 조용한 삭제로 이어진다.
+  </p>
+
+  <p class="source">
+    참고: <a href="0019-timestamps-and-hidden-callbacks.html">레슨 19 — 타임스탬프와 숨은 콜백</a> ·
+    <a href="0052-transaction-boundary-ownership.html">레슨 52 — 트랜잭션 경계 소유권</a> ·
+    <a href="0058-column-default-does-not-protect-updates.html">레슨 58 — 컬럼 default는 UPDATE를 지켜주지 않는다</a> ·
+    <a href="../work-log/2026-09-11-ppback-pr-5606-job-template-response-reset.md">배운 작업 — ppback PR #5606</a>
+  </p>
+
+  <div class="ask-teacher">
+    💬 이런 불변식을 코드로 강제하는 방법(모델 콜백·DB 제약·상태 머신 gem)과 각각의 대가,
+    그리고 "선언은 없지만 모두가 지키는 규칙"을 발견하는 다른 신호들이 궁금하면 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="0060-relation-merge-overwrites-predicates.html">← 레슨 60: merge는 조건을 합치지 않고 덮어쓴다</a>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. 불변식은 '일부만 지웠을 때' 깨집니다. 전부 지우면 남은 응답이 0건이라 closed가 사실과 일치하고, 조회 조건도 걸러낼 대상이 없습니다. 그래서 단일 영역 그룹에서는 통과하고 혼합 영역 그룹에서만 드러났습니다 — 픽스처를 한 종류만 만들면 못 잡는 종류의 버그입니다.",
+        wrong: "아니에요. 조회 조건도 status 컬럼도 영역 종류와 무관하게 똑같이 동작합니다. 차이는 '지우고 남은 것이 있는가'입니다. 직무 영역만 쓰는 그룹은 지울 대상이 전부라 남는 게 없었고, 그래서 closed가 사실과 맞아 불일치가 생기지 않았습니다."
+      },
+      q2: {
+        correct: "맞아요. 안 보이는 것이 원인이자 은폐 수단입니다. 화면에 없으니 제출 payload에 안 실리고, 그래서 discard_all이 지워도 아무도 모릅니다. 예외도 로그도 안 남고 사용자는 잃은 줄도 모릅니다. 지워지는 것은 그 은폐의 결과일 뿐이라, 고쳐야 할 지점은 '왜 안 보이는가'입니다.",
+        wrong: "아니에요. 삭제는 결과이고 발견은 오히려 쉬운 편입니다(데이터가 없어졌으니 언젠가 드러납니다). 어려운 쪽은 '안 보이는 것'입니다 — 그것이 제출 payload 누락으로 이어져 삭제를 만들고, 그 과정 어디에도 에러나 로그가 남지 않습니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>
