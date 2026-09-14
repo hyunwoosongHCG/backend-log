@@ -323,3 +323,75 @@
 - [x] git worktree로 로컬 브랜치 안 건드리고 다른 브랜치 격리 테스트 → [배운 작업](work-log/2026-07-15-pr-274-ecs-ec2-removal-review.md)
 - [x] `aws logs filter-log-events`의 `nextToken` 페이지네이션엔 직접 상한(cap)을 걸어야 한다 — 안 그러면 넓은 기간·느슨한 필터에서 무한히 페이지를 따라가며 출력이 폭주할 수 있다 → [배운 작업](work-log/2026-09-11-hyundai-department-store-organization-sync-investigation.md)
 - [x] 컨테이너 이미지의 `base64`가 BusyBox(Alpine 계열)면 GNU 롱옵션(`--decode`)이 없다 — `-d`만 지원해서, 로컬(macOS)에서 만든 명령을 그대로 넣으면 `unrecognized option`으로 조용히 실패한다. 세션이 1~2초 만에 끝나는 증상만 보면 완전히 다른 원인(S3 세션로그 검증 실패)으로 오판하기 쉽다 → [배운 작업](work-log/2026-09-11-hyundai-department-store-organization-sync-investigation.md)
+
+---
+
+## 섹션 7. Java / Spring (뿌)
+
+> 자체 프로젝트 **뿌(부동산을 부탁해)** 의 백엔드를 직접 설계·구현하며 배우는 것들.
+> Rails 와 같은 개념은 [Rails에서 이미 아는 것 → Spring에서 이름만 다른 것] 으로 연결하고,
+> Ruby/JS 비유가 안 통하는 지점만 A-Z 로 판다.
+> 스택: Java 21 · Spring Boot · Gradle 멀티모듈(core/api/collector) · PostgreSQL + PostGIS · Flyway
+
+### Java 언어 기초 (Ruby/JS 와 갈리는 지점만)
+
+- [ ] 정적 타입과 제네릭 — 컴파일러가 잡아주는 것 / 여전히 못 잡는 것
+- [ ] `record` 와 불변 객체 — DTO 를 왜 record 로 만드나
+- [ ] `Optional` — Ruby 의 `nil` 안전 연산자, TS 의 `?.` 와 뭐가 다른가
+- [ ] 체크 예외 vs 언체크 예외 — Ruby 에는 없는 구분
+- [ ] 인터페이스와 추상 클래스 — Ruby 모듈(믹스인)과의 대응
+- [ ] Stream API — Ruby 의 `map`/`select`/`reduce` 대응과 지연 평가 차이
+
+### Spring 핵심 (첫 주에 반드시 걸리는 것)
+
+- [ ] **의존성 주입(DI)과 IoC 컨테이너** — Rails 는 `Service.new`, Spring 은 컨테이너가 주입한다
+- [ ] **`@Transactional` 이 프록시로 걸린다** — 같은 클래스 내부 호출(self-invocation)은 트랜잭션이 안 걸림. [레슨 52](lessons/0052-transaction-boundary-ownership.html) 의 Java 판 함정
+- [ ] `@Component` / `@Service` / `@Repository` / `@Configuration` 의 구분
+- [ ] Bean 스코프와 생명주기 — 싱글턴 빈에 상태를 두면 안 되는 이유
+- [ ] `application.yml` 과 프로파일(local/dev/prod), 환경변수 주입
+- [ ] Spring Boot 자동 설정(auto-configuration)이 뭘 켜고 있는지 확인하는 법
+
+### JPA / Hibernate (ActiveRecord 와 가장 다른 곳)
+
+- [ ] **영속성 컨텍스트와 dirty checking** — ActiveRecord 는 `save!` 를 불러야 하지만 JPA 는 **값만 바꿔도 커밋 시 UPDATE 가 나간다**. [정리](concepts/dirty-tracking.md) 와 이름은 같은데 동작이 반대
+- [ ] 엔티티 생명주기 (transient / managed / detached / removed)
+- [ ] 지연 로딩과 `LazyInitializationException` — 영속성 컨텍스트 밖에서 프록시를 건드리면 터진다
+- [ ] **JPA 의 N+1 과 `fetch join`** — Rails `includes` 대응. [레슨 9](lessons/0009-n-plus-1.html) 와 같은 문제, 다른 도구
+- [ ] `@Transactional(readOnly = true)` 와 읽기 전용 최적화
+- [ ] 벌크 연산(`@Modifying`)이 영속성 컨텍스트를 우회한다 — Rails `update_all` 과 같은 함정
+- [ ] **PostGIS 공간 쿼리는 JPA 로 안 된다** — 네이티브 SQL 또는 JdbcTemplate 으로 내려가야 하는 경계
+
+### 마이그레이션과 스키마
+
+- [ ] **Flyway** — Rails 는 마이그레이션이 내장이지만 Spring 은 직접 붙인다. [정리](concepts/migration.md) 와 대조
+- [ ] 버전 네이밍 규칙과 체크섬 — 이미 적용된 마이그레이션 파일을 고치면 왜 터지나
+- [ ] `baseline` 과 기존 DB 에 Flyway 를 나중에 붙이는 경우
+
+### 외부 API 수집 (뿌 고유)
+
+- [ ] `RestClient` / `WebClient` — 타임아웃·재시도·백오프 설정
+- [ ] **HTTP 200 에 에러가 실려 오는 API** — 국토부 계열은 `resultCode` 를 명시적으로 봐야 한다. 안 보면 빈 결과를 정상으로 적재
+- [ ] Jackson XML 로 XML 파싱 (Nokogiri 대응)
+- [ ] **멱등 upsert** — 재수집이 전제인 데이터에서 자연키 해시 + `ON CONFLICT DO UPDATE`. [레슨 31](lessons/0031-atomicity-vs-idempotency.html) 의 실적용
+- [ ] 외부 API 쿼터 관리 — 일일 호출 상한을 코드로 강제하는 법 (ODsay 30건/일)
+- [ ] `@Scheduled` 와 `ApplicationRunner` — Sidekiq 워커 대응, 별도 프로세스로 띄우는 이유
+
+### 응답과 검증
+
+- [ ] DTO 와 매퍼 — Grape::Entity 와 달리 **자동 노출이 없다.** [레슨 10](lessons/0010-grape-entity-and-n-plus-1-trace.html) 과 대조
+- [ ] Bean Validation (`@Valid`, `@NotNull`, 커스텀 validator) — Grape `params do` 대응
+- [ ] `@RestControllerAdvice` 로 예외를 응답으로 변환 — Grape `rescue_from` 대응
+- [ ] springdoc(OpenAPI) 문서 자동 생성과 `openapi-typescript` 로 프론트 타입 뽑기
+
+### 테스트
+
+- [ ] JUnit 5 + AssertJ 기초 — RSpec `describe`/`it`/`expect` 대응
+- [ ] `@SpringBootTest` vs `@DataJpaTest` vs `@WebMvcTest` — 뭘 띄우고 뭘 안 띄우나
+- [ ] **Testcontainers** — PostGIS 를 진짜 띄워서 테스트. 공간 쿼리는 H2 로 검증 불가
+- [ ] 트랜잭션 롤백 테스트와 그 한계 — [레슨 54](lessons/0054-database-cleaner-strategy-and-concurrency-spec.html) 의 DatabaseCleaner `:transaction` 과 같은 함정
+
+### 빌드와 실행
+
+- [ ] Gradle 멀티모듈 — 모듈 간 의존 방향, `api` vs `implementation`
+- [ ] `bootJar` 와 실행 가능 jar — api 와 collector 를 별도 프로세스로 띄우는 구조
+- [ ] Docker Compose 로 로컬 PostGIS 띄우기
