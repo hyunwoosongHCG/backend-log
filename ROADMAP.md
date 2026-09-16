@@ -225,6 +225,9 @@
 - [x] 동기화 스냅샷(JSON 컬럼)으로 원본 피드를 그대로 재현해서 검증하기 — `Synchronization#data`(JSON)에 그 회차 users/organizations/appointments 배열 전체가 보존돼 있어서, 특정 대상이 그 회차 소스 피드에 포함됐는지를 코드 추측이 아니라 실제 데이터로 확인할 수 있다 → [배운 작업](work-log/2026-09-11-hyundai-department-store-organization-sync-investigation.md)
 - [x] 동기화 트리거 주체(`member_id`)와 동기화 대상(피드 안 `EMP_ID`)은 다른 축이다 — `Synchronization#member_id`는 수동 재동기화를 누른 관리자이지 동기화되는 대상이 아니다. 특정 대상을 찾으려면 `data` JSON 내부를 뒤져야 한다 → [배운 작업](work-log/2026-09-11-hyundai-department-store-organization-sync-investigation.md)
 - [x] 활성화 시각(`last_activate_at`)을 배치 스케줄과 대조해 수동 조치인지 자동 동기화 결과인지 구분하기 — 대상 레코드의 활성화 시각이 최근 배치 시각들과 하나도 안 맞으면, 그 활성화는 이번 동기화가 아니라 수동 처리(관리자/CS)였다고 추론할 수 있다 → [배운 작업](work-log/2026-09-11-hyundai-department-store-organization-sync-investigation.md)
+- [x] **서비스 간 동기화가 항상 Kafka는 아니다 — Sidekiq 크로스 앱 job push** — theplus-back→ppback 구간(`Performance::OrganizationWorker`/`MemberWorker` 등)은 ppback 안에 enqueue 코드가 없고 `karafka.rb`엔 활성 consumer route도 없다. theplus-back이 공유 Redis에 job class 이름 문자열만으로 직접 push하는 구조로 보인다 → [배운 작업](work-log/2026-09-16-nhqv-organization-member-excel-sync-review.md)
+- [x] `SyncMessage::Type`(CREATE/UPDATE/DELETE) envelope로 동기화 메세지 종류를 구분하는 패턴 → [배운 작업](work-log/2026-09-16-nhqv-organization-member-excel-sync-review.md)
+- [x] `Team#update`는 삭제 후 재생성이 아니라, 원하는 멤버 목록과 현재 `end_team_joins`를 diff해서 추가/삭제분만 반영한다 — in-place 동기화 갱신의 실사례 → [배운 작업](work-log/2026-09-16-nhqv-organization-member-excel-sync-review.md)
 
 ### 백그라운드 잡
 
