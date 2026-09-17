@@ -21,6 +21,7 @@
 | `realign_appraisers` 세 번째 갈래 | 스펙 **0건** — 가드를 지워도 1787 예제가 전부 초록 | 스펙 2건, 같은 변이에서 그 둘만 빨강 |
 | multi 대시보드 예제 | 서비스 본문을 비워도 통과(`be_present`만 확인) | 점수로 갈라 양방향 고정, 변이에서 빨강 |
 | 내 리뷰 지적 6건 | — | 3건 반영 / **3건은 착수 전 철회**(그중 1건은 실동작 회귀였음) |
+| 내가 쓴 근거 서술 | — | 사용자 지적 5건을 조사에 걸어 **4건 정정**(대시보드 버그 조건·PERF 귀속·v2 완화 근거·스펙 실패 37건) |
 
 **측정 방법**
 
@@ -34,14 +35,13 @@
 **검증 근거**
 
 ```
-spec/services/appraisal/  spec/workers/appraisals/  spec/api/v1/appraisal/
-spec/api/v2/admins/appraisees_bulk_reset_spec.rb
-→ 1097 examples, 0 failures
+spec/services/appraisal/  spec/workers/appraisals/  spec/api/v1/appraisal/  spec/api/v2/admins/
+→ 1361 examples, 0 failures
 ```
 
 - 변이 4종으로 새 스펙의 판별력 확인 (가드 제거 → 새 예제 2건만 빨강 / 대시보드 재생성 제거 → 강화한 예제 빨강)
 - rubocop 변경 파일 offense 0
-- `spec/api/v2/admins/` 전체의 `279 examples, 37 failures`는 **변경 전 커밋과 같은 seed로 동일** — 기존 실패로 분류
+- 한때 `spec/api/v2/admins/`에서 37 failures가 나와 '기존 실패'로 분류했는데 **오분류였다**(아래 참조). 원인을 제거하니 0이다
 
 ## 이 작업에서 처음 배운 개념
 
@@ -162,6 +162,26 @@ expect(appraisee.appraisal_dash_board_data.where(appraisal_process_id: multi_pro
 
 `realign_appraisers`에는 갈래가 셋인데, 세 번째(응답이 남았는데 완료도 아니라 아무것도 안 함)에 `else raise "..."`를 꽂고 관련 스펙 1787 예제를 돌려도 **0 failures**였다. 단언이 약한 게 아니라 **그 갈래에 도달하는 예제가 하나도 없었다.** 그리고 하필 그 갈래가 이번 위임이 반드시 보존해야 하는 곳이었다.
 
+### [보편] 격리했더니 격리한 것이 원인이 된다 — 검증 환경이 만든 가짜 실패
+
+worktree로 격리해 돌렸더니 `spec/api/v2/admins/`에서 37건이 깨졌다. 변경 전 커밋과 같은 seed로 수치가 **동일**했기 때문에 "이 브랜치와 무관한 기존 실패"로 분류하고 PR 본문에까지 적었다.
+
+그게 틀렸다. 인과는 이랬다.
+
+```
+git worktree add  →  gitignore된 config/credentials/test.key 가 안 따라옴
+  → PpBack.credentials 전부 nil
+  → SuperAdminIp::YANGJAE = nil  →  SuperAdminIp.list.compact == []
+  → super_admin_ip? == false
+  → GrapeBase#workspace 의 슈퍼어드민 분기가 403 DENIED_IP
+```
+
+그리고 왜 하필 그 7개 파일이었냐면, 스펙이 `create(:workspace, hr_admins: [user])`를 쓰면 `WorkHrAdministration`의 `status`가 기본값 0 = `super`로 생성돼 **그 유저가 슈퍼어드민이 된다.** `grep -c "hr_admins:"`가 1 이상인 파일이 정확히 실패한 7개였다.
+
+`-e RAILS_MASTER_KEY="$(tr -d '\n\r' < config/credentials/test.key)"` 하나 넣으니 `279 examples, 0 failures`. `origin/dev`에서도 키 없으면 똑같이 깨지고 키 있으면 깨끗했다.
+
+**"변경 전후가 같으니 내 탓이 아니다"는 '기존 실패'의 증거가 아니다.** 내가 바꾼 건 코드가 아니라 **측정 환경**이었고, 그건 변경 전후 양쪽에 똑같이 걸린다. 403을 Pundit 인가 실패로 지레짐작하고 응답 본문(`keyword: "DENIED_IP"`)을 안 읽은 것도 같은 게으름이다.
+
 ## 작업하면서 막혔던 것과 해결 방법
 
 ### [보편] 같은 워킹트리를 두 세션이 동시에 쓰면 검증이 오염된다
@@ -208,7 +228,6 @@ Mysql2::Error: SAVEPOINT active_record_1 does not exist
 
 ## 다음에 더 공부하고 싶은 것
 
-- `spec/api/v2/admins/`의 기존 실패 37건(전부 `expected :ok but was :forbidden`) — 브랜치가 아니라 공유 test DB 상태 쪽으로 보이는데 확인 안 함
 - Rails 트랜잭션 중첩과 savepoint — `requires_new: true` 없이 중첩하면 안쪽이 바깥에 흡수된다는 것은 이번에 "감싸 봤자 의미 없다"의 근거로 썼는데, 롤백 전파 규칙을 정확히는 모른다
 - Grape `params`가 넘어온 배열에 `Enumerable#pluck`이 먹는 이유 (`HashWithIndifferentAccess` + ActiveSupport 확장) — 동작은 확인했지만 경계를 모른다
 
@@ -226,6 +245,8 @@ Mysql2::Error: SAVEPOINT active_record_1 does not exist
 - 테스트 › 차등 실행으로 리팩터링 동치성 확인하기
 - 기타 › compose의 named volume이 사실 bind mount일 수 있다, worktree로 격리 실행하기
 - 기타 › `git checkout -- <path>`는 HEAD가 아니라 인덱스에서 복원한다
+
+- 기타 › 격리 환경이 만든 가짜 실패 — worktree에는 gitignore된 크리덴셜 키가 안 따라온다
 
 **미체크 유지**
 
