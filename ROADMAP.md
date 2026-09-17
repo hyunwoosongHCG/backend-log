@@ -37,7 +37,7 @@
 - [x] **선언되지 않은 불변식은 조회 조건에 숨어 있다** ([레슨 61](lessons/0061-invariant-that-lives-only-in-queries.html)) — "응답 행의 status는 평가자의 status와 같다"가 모델·스키마·주석 어디에도 없고 `where(status: appraiser.status)` 라는 조회 조건 9곳에만 존재했다. 상태 컬럼만 바꾸자 남은 응답이 모든 조회에서 걸러져 화면에서 사라졌고, 화면에 없으니 제출 payload에도 빠져 `discard_all` 이 조용히 지웠다. **같은 조건이 여러 조회에 반복되면 중복이 아니라 계약이다** — 그 컬럼을 쓰기 전에 읽는 쪽의 가정을 `git grep` 으로 세어봐야 한다. 기존 `UpdateAppraiserStatusService#dup_and_update_status_res` 가 상태 전이 시 응답을 새 상태로 복제하던 것이 바로 그 계약을 지키는 장치였다 → [배운 작업](work-log/2026-09-11-ppback-pr-5606-job-template-response-reset.md)
 - [x] **fail-open vs fail-closed — 틀릴 때 어느 방향으로 틀리는가** — 잠금 판정에 필요한 옵션을 누락하면 뒤 순번 목록이 빈 배열이 되어 "잠기지 않음"으로 판정됐다. 방어 기능이 열리는 쪽으로 틀리는 설계다. 호출처가 하나뿐이라 당장은 안전해도, 누락 시 기본값이 어느 방향인지는 명시적으로 정해야 한다(`ArgumentError` 로 전환) → [배운 작업](work-log/2026-09-11-ppback-pr-5606-job-template-response-reset.md)
 - [x] **같은 판정이 프론트와 백엔드에 따로 살면 값이 갈린다** — 문항 설정 잠금의 `RESPONDED_STATUSES` 가 양쪽에 각각 있었고 백엔드는 `completed` 만, 프론트는 `tempsaved` 까지 봤다. 화면에서 막은 요청이 서버에서 통과하는 상태였다. 판정을 서버 한 벌로 모으고 결과만 내려주면 노출도 줄어든다(남의 상태 전체 대신 잠금 여부와 사유만) → [배운 작업](work-log/2026-09-11-ppback-pr-5606-job-template-response-reset.md)
-- [ ] 미들웨어(Middleware)란?
+- [x] **미들웨어(Middleware)란? — 체인은 먼저 추가한 것이 바깥쪽이다** — Sidekiq 서버 미들웨어 체인은 Rack 미들웨어·서블릿 필터 체인과 같은 모양이다: `chain.add`로 먼저 넣은 미들웨어일수록 pre-yield 코드가 먼저, post-yield 코드가 나중에 실행되는 **바깥쪽**이다. `insert_before(oldklass, newklass)`로 특정 미들웨어 앞에 넣으면 그 미들웨어의 post-yield 코드보다 **뒤에** 내 코드가 돌게 만들 수 있다. 같은 버그 패턴이 여러 파일에 반복될 때 파일마다 patch하는 대신 이 레이어에서 한 번에 계약(성공한 작업은 진행률도 100%)을 강제하면, 과거·미래의 모든 워커가 함께 방어된다 — 자바 Spring의 AOP/인터셉터로 옮겨도 같은 결정 축이다 → [배운 작업](work-log/2026-09-17-ppback-pr-5612-bulk-worker-progress-middleware-fix.md)
 - [ ] 모놀리식 vs 마이크로서비스
 - [x] **작업 단위와 경쟁 단위** ([레슨 57](lessons/0057-work-unit-vs-contention-unit.html)) — 작업을 쪼개는 축(원인)과 경합이 일어나는 축(대상)이 다르면 그 둘을 맞추는 조율 코드(잠금 목록 사전 계산·정렬 잠금·전제 가드·재시도·후보 부분집합 판정)가 생긴다. 조율 코드가 계속 늘어나면 정교화를 멈추고 **작업 단위를 경쟁 단위에 맞추는 것**을 검토해야 한다 — 잠글 대상이 잡 인자로 오면 알아낼 것이 없고, 알아낼 것이 없으면 낡을 수도 없다 → [배운 작업](work-log/2026-08-19-key-result-auto-reflect-decision-timeline.md)
 
@@ -72,7 +72,7 @@
 ### 기타 기초
 
 - [ ] 환경변수(Environment Variable)란?
-- [ ] 백그라운드 잡(Background Job)이란?
+- [x] 백그라운드 잡(Background Job)이란? — Sidekiq이 대표적 구현체다. `Sidekiq::Status`(gem)로 진행률(`at`/`total`/`pct_complete`)을 추적할 수 있는데, 성공 시 gem이 저장하는 건 `status`/`ended_at`뿐이라 워커가 마지막에 `at`을 안 부르면 job은 성공인데 진행률만 영원히 100%에 못 미친다. 서버 미들웨어(`Sidekiq.configure_server`)는 `Sidekiq.server?`가 true인 실제 sidekiq 프로세스에서만 즉시 실행되므로 Rails web/test 프로세스에서는 안 돈다 — `Sidekiq::Testing.inline!`조차 별도의 빈 미들웨어 체인을 써서, RSpec으로는 서버 미들웨어 경로를 재현할 수 없다 → [배운 작업](work-log/2026-09-17-ppback-pr-5612-bulk-worker-progress-middleware-fix.md)
 - [ ] 캐시(Cache)란?
 - [ ] 로깅(Logging)이란?
 
