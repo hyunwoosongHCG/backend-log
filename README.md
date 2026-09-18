@@ -13,6 +13,25 @@ backend-log/
 └── work-log/           # 어떤 작업에서 배웠는지
 ```
 
+## 뷰어 실행
+
+```bash
+./serve.sh        # http://localhost:8000
+./serve.sh 8080    # 포트 지정
+```
+
+`index.html`이 로컬 md 파일을 `fetch`로 불러오므로 `file://`로 직접 열면 CORS에 막힌다. 반드시 위 명령으로 띄운 뒤 브라우저에서 접속한다.
+
+## 학습 워크플로우 (Claude + teach 스킬)
+
+백엔드 관련 개발 작업(PR, 과제)을 할 때는 이 레포를 workspace로 삼는 `teach` 스킬로 학습을 이어간다 — 세션을 넘나들며 누적되는 stateful 워크플로우다.
+
+- **세션 시작**: 특정 PR/과제인지 확인해 work-log 기록 여부를 정하고, 새로 마주칠 개념이 있으면 `ROADMAP.md` 체크 목록과 대조한다 (doctor·설정 변경 같은 순수 유지보수 세션은 건너뛴다)
+- **세션 진행 중**: 백엔드 개념(모델, 컨트롤러, 마이그레이션, 서비스 객체 등)이 처음 등장하면 `ROADMAP.md`의 어느 섹션 항목인지 바로 짚는다
+- **세션 종료 전**: 새로 배운 개념을 정리해 `work-log/`에 기록할 항목으로 요약한다
+
+학습 소스는 두 갈래다 ([MISSION.md](MISSION.md) 참고): Performance Plus(실무, Rails) / 뿌(자체 프로젝트, Spring). 그래서 work-log에 개념을 적을 때는 `[보편]` / `[Rails 전용]` / `[Spring 전용]` 태그로 구분한다 — 스택이 바뀌어도 남는 지식과 프레임워크를 떠나면 버리는 지식을 가르기 위해서다. 형식은 [`work-log/_template.md`](work-log/_template.md) 참고.
+
 ## 사용법
 
 1. 작업을 하다가 새 개념을 마주치면 ROADMAP.md에서 찾는다
