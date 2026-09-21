@@ -6,3 +6,4 @@
 
 # 로컬 검증 스크린샷
 backend-log-*.png
+.gstack/
