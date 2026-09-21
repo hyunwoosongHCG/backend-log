@@ -11,6 +11,8 @@ backend-log/
 ├── ROADMAP.md          # 섹션별 체크리스트 ← 여기서 시작
 ├── concepts/           # 개념별 상세 정리
 └── work-log/           # 어떤 작업에서 배웠는지
+    ├── *.md            # Performance Plus(실무, Rails)
+    └── ppu/            # 뿌(자체 프로젝트, Spring)
 ```
 
 ## 뷰어 실행
@@ -30,7 +32,7 @@ backend-log/
 - **세션 진행 중**: 백엔드 개념(모델, 컨트롤러, 마이그레이션, 서비스 객체 등)이 처음 등장하면 `ROADMAP.md`의 어느 섹션 항목인지 바로 짚는다
 - **세션 종료 전**: 새로 배운 개념을 정리해 `work-log/`에 기록할 항목으로 요약한다
 
-학습 소스는 두 갈래다 ([MISSION.md](MISSION.md) 참고): Performance Plus(실무, Rails) / 뿌(자체 프로젝트, Spring). 그래서 work-log에 개념을 적을 때는 `[보편]` / `[Rails 전용]` / `[Spring 전용]` 태그로 구분한다 — 스택이 바뀌어도 남는 지식과 프레임워크를 떠나면 버리는 지식을 가르기 위해서다. 형식은 [`work-log/_template.md`](work-log/_template.md) 참고.
+학습 소스는 두 갈래다 ([MISSION.md](MISSION.md) 참고): Performance Plus(실무, Rails) / 뿌(자체 프로젝트, Spring). 로그도 갈래별로 나눠 둔다 — 실무 로그는 `work-log/` 루트에, 뿌 로그는 [`work-log/ppu/`](work-log/ppu/)에 남긴다. 뿌 작업은 자바/스프링이 처음인 상태에서 하는 것이라 작업 자체가 학습이므로, 개발할 때마다 `teach` 스킬로 레슨을 만들고 [ROADMAP.md 섹션 7](ROADMAP.md)을 백로그처럼 쌓아 간다 — 7-A는 뿌에서 실제로 부딪힌 문제, 7-B는 김영한 로드맵 3개의 커리큘럼 목차 203항목 커버리지다. 강의를 듣는 게 아니라 뿌를 만들면서 채우는 목록이라, 체크는 "강의를 봤다"가 아니라 "코드에서 써봤고 설명할 수 있다"를 뜻한다. 그리고 work-log에 개념을 적을 때는 `[보편]` / `[Rails 전용]` / `[Spring 전용]` 태그로 구분한다 — 스택이 바뀌어도 남는 지식과 프레임워크를 떠나면 버리는 지식을 가르기 위해서다. 형식은 [`work-log/_template.md`](work-log/_template.md) 참고.
 
 ## 사용법
 
