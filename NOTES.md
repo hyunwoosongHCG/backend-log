@@ -3,8 +3,10 @@
 ## 사용자 프로필
 
 - **배경**: React/TypeScript 프론트엔드 개발자 → Rails 백엔드 개발자 전환 중
-- **현재 프로젝트**: Performance Plus (Rails 7.2, Ruby 3.4, Grape API, MySQL, Sidekiq, Pundit)
+- **현재 프로젝트 (실무)**: Performance Plus (Rails 7.2, Ruby 3.4, Grape API, MySQL, Sidekiq, Pundit)
+- **현재 프로젝트 (자체)**: 뿌(부동산을 부탁해) — Java 21, Spring Boot, PostgreSQL+PostGIS. 백엔드 전담. **자바는 처음이다**
 - **학습 방식**: 실무 작업을 통해 배운다 — 강의 순서가 아닌 작업 순서로
+- **자바/스프링은 강의를 듣지 않는다**: 인프런 김영한 로드맵의 커리큘럼 목차만 커버리지 기준으로 쓰고(ROADMAP 7-B, 203항목), 뿌를 바이브 코딩하면서 필요한 순간에 레슨으로 배운다. 자바 트랙 레슨은 `lessons/java-NN-*.html`, `index.html` 의 `track: 'java'`
 
 ## 교육 선호
 
@@ -13,7 +15,7 @@
   - TypeScript 타입 → DB 스키마
   - 이벤트 핸들러 → 컨트롤러 액션
 - **개념 먼저, 코드 나중**: 왜 필요한지 → 어떻게 생겼는지 → 실무 예시 순서
-- **코드는 실무 코드 기반**: Performance Plus 실제 코드를 예시로 사용할 것
+- **코드는 실무 코드 기반**: Performance Plus 실제 코드를 예시로 사용할 것. 자바 트랙은 뿌에서 곧 쓸 코드(엔티티·DTO·수집기) 형태로 예시를 든다
 - **A-Z 설명**: 당연한 것도 설명한다 (백엔드 기초가 없으므로)
 
 ## 이미 알고 있는 것 (가르치지 않아도 됨)
@@ -44,6 +46,7 @@
 - DatabaseCleaner `:transaction` vs `:truncation`, 다중 커넥션 동시성 스펙, `filter_run_excluding`의 CI 공백 — 2026-08-11
 - MySQL REPEATABLE READ read view 고정 **시점** (`FOR UPDATE`는 안 열고 첫 비잠금 SELECT가 연다) — 2026-08-11
 - DB 컬럼 `default`는 CREATE에서만 작동하고 UPDATE에서 명시적 `nil` 대입은 막아주지 않는다 (`key?`로 "안 보냄"과 "명시적 null"을 구분해야 함) — 2026-08-27
+- [자바] 클래스 정의 = 타입 생성, 명목적 타이핑(이름이 다르면 다른 타입), 필드 자동 초기화와 기본형의 "값 없음" 표현 불가 — 2026-09-21
 
 ## 주의사항
 

@@ -472,7 +472,7 @@
 > 초급 · 98강 16h51m · [강의](https://www.inflearn.com/course/김영한의-실전-자바-기본편)  
 > 엔티티·서비스 클래스를 스스로 설계하려면 필수. `static`/`final`/접근 제어자는 Ruby에 대응이 없다
 
-- [ ] `java-10` 클래스와 데이터
+- [x] `java-10` 클래스와 데이터 → [레슨](lessons/java-10-class-and-data.html)
 - [ ] `java-11` 기본형과 참조형
 - [ ] `java-12` 객체 지향 프로그래밍
 - [ ] `java-13` 생성자
