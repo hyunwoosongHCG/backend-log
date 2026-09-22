@@ -489,7 +489,7 @@
 > 엔티티·서비스 클래스를 스스로 설계하려면 필수. `static`/`final`/접근 제어자는 Ruby에 대응이 없다
 
 - [x] `java-10` 클래스와 데이터 → [레슨](lessons/java-10-class-and-data.html) · 클래스·객체·인스턴스 세 단어 구분과 참조변수 aliasing 추가(2026-09-22)
-- [ ] `java-11` 기본형과 참조형
+- [x] `java-11` 기본형과 참조형 → [레슨](lessons/java-11-primitive-and-reference.html)
 - [ ] `java-12` 객체 지향 프로그래밍
 - [ ] `java-13` 생성자
 - [ ] `java-14` 패키지

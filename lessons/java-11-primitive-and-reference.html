@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>기본형과 참조형 — 자바</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>기본형과 참조형</h1>
+  <div class="lesson-meta">
+    <span>자바 · 실전 자바 기본편</span>
+    <span>섹션 3</span>
+    <span>~20분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 <a href="java-10-class-and-data.html">레슨 java-10</a>에서 <code>Student b = a;</code> 뒤에
+    <code>b.name</code>을 바꿨더니 <code>a.name</code>도 바뀌는 것을 봤다.
+    이번에는 그 현상을 <strong>문장 하나로 된 대원칙</strong>으로 설명하고,
+    메서드 호출과 <code>null</code>까지 밀고 간다.<br>
+    <small>강의를 수강하지 않고 작성한 레슨이다. 김영한 「실전 자바 - 기본편」 섹션 3의
+    <strong>전개와 예제는 수강생 정리 글 3편을 교차 확인</strong>해 따라갔고(하단 출처),
+    Ruby·TypeScript 대비와 뿌 연결은 직접 쓴 것이다.</small>
+  </div>
+
+  <h2>핵심 한 줄</h2>
+
+  <p>
+    <strong>자바는 항상 변수에 들어 있는 값을 복사해서 대입한다.</strong>
+    예외가 없다. 기본형이면 그 안의 실제 값이 복사되고, 참조형이면 그 안의 <em>참조값(주소)</em>이 복사된다.
+    "어떤 때는 복사되고 어떤 때는 공유된다"가 아니라, <strong>항상 복사하는데 복사되는 것이 무엇이냐가 다를 뿐</strong>이다.
+  </p>
+
+  <h2>두 종류의 타입</h2>
+
+  <table style="width:100%;border-collapse:collapse;margin:1rem 0;font-size:0.9rem;">
+    <thead>
+      <tr style="background:var(--surface2,#1e1e2e);text-align:left;">
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"></th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">기본형 (primitive type)</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">참조형 (reference type)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">변수에 담기는 것</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">실제 값 (<code>10</code>)</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">객체의 위치 (<code>x001</code>)</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">쓰는 법</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">바로 쓴다</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"><code>.</code>이나 <code>[]</code>로 찾아가야 쓴다</td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">연산</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"><code>a + b</code> ⭕</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"><code>s1 + s2</code> ❌ 컴파일 에러</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">대입할 때 복사되는 것</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">값 → 서로 독립</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">주소 → 같은 객체를 가리킴</td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">기본값</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"><code>0</code>, <code>0.0</code>, <code>false</code></td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"><code>null</code></td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;">종류</td>
+        <td style="padding:0.5rem 0.75rem;"><code>int</code> <code>long</code> <code>double</code> <code>boolean</code> 등 8개</td>
+        <td style="padding:0.5rem 0.75rem;"><strong>그 8개를 뺀 전부</strong> (클래스·배열)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    구분하는 눈에 띄는 단서가 하나 있다. <strong>기본형은 소문자로 시작하고 참조형은 대문자로 시작한다</strong>
+    (<code>int</code> vs <code>Integer</code>, <code>double</code> vs <code>Double</code>).
+    클래스 이름이 대문자 카멜 케이스라는 관례의 자연스러운 결과다.
+  </p>
+
+  <p>
+    <strong><code>String</code>만 예외처럼 보인다.</strong> 대문자로 시작하니 참조형이 맞는데,
+    <code>String s = "안녕";</code>처럼 기본형같이 값을 바로 대입할 수 있다.
+    문자열을 워낙 자주 다루니 자바가 특별히 편의를 봐준 것이고, <strong>실체는 참조형</strong>이다.
+    (그래서 문자열 비교에 <code>==</code>를 쓰면 안 된다는 이야기가 뒤에 나온다.)
+  </p>
+
+  <h2>대원칙에는 예외가 없다</h2>
+
+  <pre><code>// 기본형 — 값이 복사된다
+int a = 10;
+int b = a;      // b에 "10"이 복사됨
+a = 20;
+// a = 20, b = 10   서로 독립
+
+// 참조형 — 주소가 복사된다
+Data dataA = new Data();
+dataA.value = 10;
+Data dataB = dataA;   // dataB에 "x001"이 복사됨
+dataA.value = 20;
+// dataA.value = 20, dataB.value = 20   같은 객체</code></pre>
+
+  <p>
+    두 경우 모두 <strong>변수에 든 값을 복사했다</strong>는 점에서 하는 일이 완전히 같다.
+    다만 <code>b</code>가 받은 건 숫자 <code>10</code>이고 <code>dataB</code>가 받은 건 주소 <code>x001</code>이라,
+    <code>dataB</code>를 통해 그 주소로 찾아가면 <code>dataA</code>가 보던 것과 같은 객체가 있을 뿐이다.
+    java-10에서 본 "블록 하나에 송장 번호 둘"이 바로 이것이다.
+  </p>
+
+  <h2>메서드 호출도 대입이다</h2>
+
+  <p>
+    여기가 이 섹션의 핵심이다. <strong>매개변수(파라미터)도 결국 변수다.</strong>
+    그러니 메서드에 인자를 넘기는 것도 대입이고, 같은 대원칙이 그대로 적용된다.
+  </p>
+
+  <pre><code>static void changePrimitive(int x) { x = 20; }
+
+int a = 10;
+changePrimitive(a);
+System.out.println(a);   // 10 — 그대로다</code></pre>
+
+  <pre><code>static void changeReference(Data d) { d.value = 20; }
+
+Data data = new Data();
+data.value = 10;
+changeReference(data);
+System.out.println(data.value);   // 20 — 바뀌었다</code></pre>
+
+  <p>
+    "기본형은 값 전달, 참조형은 참조 전달"이라고 외우면 <strong>다음 코드에서 반드시 틀린다.</strong>
+  </p>
+
+  <pre><code>static void replace(Data d) {
+    d = new Data();      // 새 객체를 만들어 d에 대입
+    d.value = 99;
+}
+
+Data data = new Data();
+data.value = 10;
+replace(data);
+System.out.println(data.value);   // 10 — 안 바뀐다!</code></pre>
+
+  <p>
+    참조형인데 왜 안 바뀌었나. <code>d</code>는 <code>data</code>가 들고 있던 <strong>주소의 복사본</strong>일 뿐이라,
+    <code>d</code>에 다른 주소를 넣는다고 <code>data</code>가 들고 있는 주소가 달라지지 않는다.
+    <strong>객체 안의 내용을 고치면 원본에 보이고, 변수가 가리키는 대상을 갈아끼우면 원본에 안 보인다.</strong>
+    자바에 진짜 의미의 참조 전달(pass by reference)은 없다 — 전부 값 전달인데, 그 값이 주소일 뿐이다.
+  </p>
+
+  <div class="analogy">
+    JS에서 <code>function f(o) { o.x = 1 }</code>은 원본이 바뀌지만
+    <code>function f(o) { o = {x: 1} }</code>은 안 바뀌던 것, Ruby에서 <code>arr &lt;&lt; 1</code>은 원본이 바뀌지만
+    <code>arr = [1]</code>은 안 바뀌던 것과 <strong>완전히 같은 규칙</strong>이다. 새로 배울 개념은 없다.
+    자바가 얹는 것은 하나다 — JS·Ruby에서는 "원시값이냐 객체냐"가 런타임 성질이지만,
+    자바는 <strong>선언한 타입이 미리 결정</strong>한다. <code>int</code>라고 쓰는 순간 값이고,
+    <code>Integer</code>라고 쓰는 순간 주소다.
+  </div>
+
+  <h2>뿌에서 물리는 지점 ① — 넘긴 엔티티가 바뀐다</h2>
+
+  <pre><code>public void applyDiscount(Listing listing) {
+    listing.setPrice(listing.getPrice() - 1000);   // 원본이 바뀐다
+}</code></pre>
+
+  <p>
+    Rails에서 객체를 넘겨 고치는 것과 감각은 같지만, JPA에서는 여기에 한 겹이 더 얹힌다.
+    <strong>영속성 컨텍스트가 관리 중인 엔티티는 값을 바꾸기만 해도 커밋 시점에 UPDATE가 나간다</strong>(dirty checking).
+    즉 위 메서드는 "객체 하나 고친 것"으로 끝나지 않고 <strong>DB를 고친 것</strong>이 된다.
+    <code>save()</code>를 부르지 않았는데도. 그 출발점이 바로 이 레슨의 참조 공유다.
+  </p>
+
+  <h2>초기화 — 필드는 봐주고 지역 변수는 안 봐준다</h2>
+
+  <pre><code>public class InitData {
+    int value1;         // 자동으로 0
+    int value2 = 10;    // 직접 지정도 가능
+}
+
+public static void main(String[] args) {
+    int a;
+    System.out.println(a);   // ❌ 컴파일 에러: variable a might not have been initialized
+}</code></pre>
+
+  <p>
+    같은 <code>int</code>인데 대우가 다르다. <strong>멤버 변수(필드)는 자동 초기화되고, 지역 변수는 직접 초기화해야 한다.</strong>
+    필드는 객체와 함께 만들어지므로 자바가 값을 채워줄 수 있지만, 지역 변수는 메서드가 실행되는 동안만 잠깐 존재해서
+    <strong>안 채운 건 실수일 가능성이 높다</strong>고 보고 컴파일러가 막는 것이다.
+    매개변수도 지역 변수의 한 종류인데, 이쪽은 호출할 때 반드시 값이 들어오니 문제가 없다.
+  </p>
+
+  <h2><code>null</code>과 NullPointerException</h2>
+
+  <p>
+    <code>null</code>은 <strong>참조형 변수가 가리키는 객체가 없다</strong>는 뜻의 특별한 값이다.
+    택배 송장은 발급됐는데 배송지가 아직 안 정해진 상태다.
+    그 상태에서 주소로 찾아가려 하면 터지는 것이 <strong>NullPointerException(NPE)</strong>다.
+  </p>
+
+  <pre><code>Data data = null;
+System.out.println(data.value);
+// 💥 NullPointerException — 갈 곳이 없는데 찾아가라고 했다</code></pre>
+
+  <p>
+    반대로 <code>null</code>을 넣는 것은 "이제 이 객체 안 쓴다"는 뜻이기도 하다.
+    아무도 참조하지 않게 된 객체는 JVM의 <strong>GC(가비지 컬렉션)</strong>가 알아서 회수한다.
+    Ruby도 같은 방식이라 새로울 건 없다.
+  </p>
+
+  <h2>뿌에서 물리는 지점 ② — <code>int</code>와 <code>Integer</code>를 섞을 때</h2>
+
+  <pre><code>Integer price = listing.getPrice();   // 국토부 API에 가격이 없으면 null
+int won = price;                      // 💥 NullPointerException</code></pre>
+
+  <p>
+    <code>Integer</code>(참조형)를 <code>int</code>(기본형)에 넣을 때 자바가 자동으로 값을 꺼내주는데(언박싱),
+    꺼낼 객체가 없으면 그 자리에서 NPE다. <strong>대입문 한 줄에 예외가 숨어 있다</strong>는 게 고약한 점이다.
+    수집한 데이터에 빈 필드가 흔한 뿌에서는 이게 실제로 자주 터진다.
+  </p>
+
+  <div class="analogy">
+    같은 상황에서 다른 언어는 이렇게 반응한다. Ruby는 <code>nil + 1</code>에 <code>NoMethodError</code>를 내고,
+    <strong>JS는 <code>undefined + 1</code>을 <code>NaN</code>으로 조용히 넘긴다.</strong>
+    자바의 NPE는 요란하지만 <strong>그 줄에서 멈춰준다</strong>는 점에서 JS보다 낫다 —
+    NaN이 계산을 타고 흘러 DB까지 들어가는 사고가 없다.
+  </div>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 1 — 메서드 안에서 <code>d = new Data(); d.value = 99;</code> 를 했다. 호출한 쪽의 <code>data.value</code>는?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">99 — 참조형이므로 메서드 안의 변경이 원본에 반영된다</button></li>
+      <li><button onclick="answer(this,'q1',true)"><strong>원래 값 그대로</strong> — 주소의 복사본을 갈아끼웠을 뿐이다</button></li>
+      <li><button onclick="answer(this,'q1',false)">99 — 같은 타입이면 새 객체라도 원본과 동기화된다</button></li>
+      <li><button onclick="answer(this,'q1',false)">컴파일 에러 — 매개변수에는 재대입을 할 수 없다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 2 — <code>int a;</code> 를 선언만 하고 출력했다. 필드일 때와 지역 변수일 때 각각 어떻게 되나?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">둘 다 <code>0</code> — <code>int</code> 의 기본값은 선언 위치와 무관하다</button></li>
+      <li><button onclick="answer(this,'q2',false)">둘 다 컴파일 에러 — 자바는 초기화를 항상 강제하고 있다</button></li>
+      <li><button onclick="answer(this,'q2',true)"><strong>필드는 <code>0</code>, 지역 변수는 컴파일 에러</strong> — 지역은 안 봐준다</button></li>
+      <li><button onclick="answer(this,'q2',false)">필드는 <code>null</code>, 지역 변수는 <code>0</code> — 필드는 참조로 다뤄진다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 3 — <code>Integer price = null; int won = price;</code> 에서 예외가 나는 이유는?</p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">타입이 달라서 — <code>Integer</code> 는 <code>int</code> 에 대입할 수 없다</button></li>
+      <li><button onclick="answer(this,'q3',false)"><code>null</code> 이 <code>0</code> 으로 바뀌면서 오버플로가 발생하기 때문이다</button></li>
+      <li><button onclick="answer(this,'q3',false)">기본형 변수는 <code>null</code> 을 담을 수 있어 검증에서 걸리기 때문이다</button></li>
+      <li><button onclick="answer(this,'q3',true)"><strong>언박싱 때문</strong> — 값을 꺼내려는데 꺼낼 객체가 없어서 NPE</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <h2>한 줄로 남기면</h2>
+
+  <p>
+    <strong>자바는 언제나 값을 복사한다. 질문은 "복사되느냐"가 아니라 "복사되는 그 값이 실제 값이냐 주소냐"다.</strong>
+    그리고 그 답은 런타임이 아니라 <strong>내가 타입을 쓰는 순간</strong> 정해진다.
+    그래서 뿌에서 필드 타입을 <code>int</code>로 할지 <code>Integer</code>로 할지 고르는 일은
+    취향이 아니라 <strong>"이 값이 없을 수 있는가"에 대한 선언</strong>이고,
+    잘못 고르면 0원으로 조용히 저장되거나 NPE로 요란하게 터진다.
+  </p>
+
+  <p class="source">
+    커버리지 항목: <a href="../ROADMAP.md">ROADMAP 섹션 7-B</a> · <code>java-11</code>
+    (김영한 「실전 자바 - 기본편」 섹션 3 ·
+    <a href="https://www.inflearn.com/course/%EA%B9%80%EC%98%81%ED%95%9C%EC%9D%98-%EC%8B%A4%EC%A0%84-%EC%9E%90%EB%B0%94-%EA%B8%B0%EB%B3%B8%ED%8E%B8">강의 페이지</a>)<br>
+    강의 전개·예제 확인에 참고한 수강생 정리 글:
+    <a href="https://mynamesieun.github.io/java/%EA%B9%80%EC%98%81%ED%95%9C%EC%9D%98-%EC%8B%A4%EC%A0%84-%EC%9E%90%EB%B0%94-%EA%B8%B0%EB%B3%B8%ED%8E%B8-2-%EA%B8%B0%EB%B3%B8%ED%98%95%EA%B3%BC-%EC%B0%B8%EC%A1%B0%ED%98%95/">Dev sieun</a> ·
+    <a href="https://velog.io/@apple896/%EC%84%B9%EC%85%983.-%EA%B8%B0%EB%B3%B8%ED%98%95%EA%B3%BC-%EC%B0%B8%EC%A1%B0%ED%98%95">juri.log</a> ·
+    <a href="https://velog.io/@biiit4894/%EA%B9%80%EC%98%81%ED%95%9C%EC%9D%98-%EC%8B%A4%EC%A0%84-%EC%9E%90%EB%B0%94%EA%B8%B0%EB%B3%B8%ED%8E%B8-%EC%84%B9%EC%85%98-2-%EA%B8%B0%EB%B3%B8%ED%98%95%EA%B3%BC-%EC%B0%B8%EC%A1%B0%ED%98%95-%EC%A0%95%EB%A6%AC">doitrightnow.log</a><br>
+    Ruby·TypeScript 대비, 언박싱 NPE와 뿌 연결은 직접 작성 (자바 언어 사양 근거)<br>
+    이어지는 곳: <code>java-12</code> 객체 지향 프로그래밍 — 데이터에 기능을 붙이기 시작한다
+  </p>
+
+  <div class="ask-teacher">
+    💬 <code>String</code> 비교에 왜 <code>==</code> 대신 <code>equals</code>를 쓰는지, <code>Integer</code> 캐싱(-128~127)이
+    <code>==</code> 결과를 어떻게 뒤집는지, 뿌 엔티티에서 <code>int</code>와 <code>Integer</code>를 고르는 기준이
+    궁금하면 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="java-10-class-and-data.html">← 섹션 2: 클래스와 데이터</a>
+    <span>섹션 3: 기본형과 참조형</span>
+  </div>
+
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. d 는 data 가 들고 있던 주소의 복사본입니다. d 에 new Data() 의 새 주소를 넣어도 바뀌는 건 복사본뿐이고, data 가 들고 있는 주소는 그대로입니다. 그래서 새 객체에 99 를 넣은 것은 호출한 쪽에서 보이지 않습니다. 객체 '안'을 고치면(d.value = 99) 보이고, 가리키는 '대상'을 갈아끼우면 안 보입니다.",
+        wrong: "아니에요. 참조형이라고 무조건 원본이 바뀌는 게 아닙니다. 메서드가 받은 d 는 주소의 복사본이라, 거기에 다른 주소를 대입해도 원본 변수 data 의 주소는 그대로입니다. 원본에 반영되려면 받은 주소를 그대로 따라가서 객체 안을 고쳐야 합니다(d.value = 99). 매개변수 재대입 자체는 문법적으로 허용됩니다."
+      },
+      q2: {
+        correct: "맞아요. 멤버 변수는 객체와 함께 생성되므로 자바가 기본값(int면 0)으로 채워주지만, 지역 변수는 그렇지 않습니다. 메서드 실행 중에만 잠깐 존재하는 변수라 초기화를 빠뜨린 것은 실수일 가능성이 높다고 보고, 컴파일러가 'variable a might not have been initialized' 로 막습니다.",
+        wrong: "아니에요. 같은 int 라도 선언 위치에 따라 다릅니다. 필드는 자동으로 0 이 되고, 메서드 안의 지역 변수는 초기화하지 않고 읽으면 컴파일 에러입니다. 참고로 매개변수도 지역 변수지만 호출 시점에 값이 들어오므로 문제가 없습니다."
+      },
+      q3: {
+        correct: "맞아요. Integer 를 int 에 넣을 때 자바가 자동으로 값을 꺼내는데(언박싱, 내부적으로 price.intValue() 호출), price 가 null 이면 꺼낼 객체가 없어 그 자리에서 NullPointerException 이 납니다. 타입 불일치가 아니라 '없는 주소를 따라간 것'이 원인입니다.",
+        wrong: "아니에요. Integer 를 int 에 대입하는 것 자체는 자바가 자동으로 값을 꺼내주므로(언박싱) 정상입니다. 문제는 꺼낼 대상이 없다는 것입니다 — null 인 참조를 따라가 intValue() 를 부르는 셈이라 NPE 가 납니다. 참고로 int 는 null 을 담을 수 없습니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>
