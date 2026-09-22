@@ -12,7 +12,7 @@
   <div class="lesson-meta">
     <span>자바 · 실전 자바 기본편</span>
     <span>섹션 2</span>
-    <span>~15분</span>
+    <span>~20분</span>
   </div>
 
   <div class="mission-link">
@@ -167,10 +167,105 @@ student1.grade = 90;</code></pre>
     <li><strong>인스턴스(instance)</strong> — 같은 것을 가리키되 <em>"어느 클래스로부터"</em>인지 관계를 강조할 때 쓴다. "<code>student1</code>은 <strong>Student의</strong> 인스턴스다."</li>
   </ul>
 
+  <h3>거푸집으로 보면</h3>
+
+  <div class="flow">
+    <div class="flow-step">
+      <strong><code>Student.java</code> — 거푸집</strong><br>
+      "이름 칸 하나, 나이 칸 하나, 성적 칸 하나"라는 <strong>홈이 파여 있을 뿐</strong> 값은 없다.
+    </div>
+    <div class="flow-arrow">↓ <code>new Student()</code> = 재료를 부어 찍어내는 행위(인스턴스화)</div>
+    <div class="flow-step">
+      <strong>메모리에 생긴 덩어리 — 객체</strong><br>
+      찍혀 나온 블록 하나. 블록 A에 파란 페인트를 칠해도 블록 B는 그대로다 —
+      <code>student1.name</code>을 바꿔도 <code>student2</code>가 멀쩡한 것이 이 이야기다.
+    </div>
+    <div class="flow-arrow">↓ "이 덩어리는 어느 거푸집에서 나왔나?"</div>
+    <div class="flow-step">
+      <strong>"<code>student1</code>은 <code>Student</code>의 인스턴스다" — 인스턴스</strong><br>
+      객체와 <strong>다른 것을 가리키는 말이 아니다.</strong> 같은 덩어리를,
+      출신 거푸집을 밝히면서 부르는 것뿐이다.
+    </div>
+  </div>
+
+  <p>
+    그래서 <strong>객체는 홀로 쓰는 말, 인스턴스는 "~의"를 달고 쓰는 말</strong>이다.
+    한국어의 "사람"과 "아들" 같은 관계다. 철수는 사람이면서 동시에 아버지의 아들인데,
+    둘은 다른 존재가 아니라 어떤 관계를 드러내며 부르느냐의 차이다.
+  </p>
+
+  <table style="width:100%;border-collapse:collapse;margin:1rem 0;font-size:0.9rem;">
+    <thead>
+      <tr style="background:var(--surface2,#1e1e2e);text-align:left;">
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">문장</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">자연스러운가</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"><code>student1</code>은 <strong>객체</strong>다</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">⭕ 실체가 있다는 뜻</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"><code>student1</code>은 <code>Student</code>의 <strong>인스턴스</strong>다</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">⭕ 출신을 밝힘</td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"><code>student1</code>은 <code>Student</code>의 <strong>객체</strong>다</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">△ 통하지만 어색</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;"><code>student1</code>은 <strong>인스턴스</strong>다</td>
+        <td style="padding:0.5rem 0.75rem;">△ "뭐의?"가 남는다</td>
+      </tr>
+    </tbody>
+  </table>
+
   <p>
     실무에서 객체와 인스턴스는 거의 구분 없이 쓰인다.
     다만 "인스턴스"라고 말할 때는 <strong>어느 클래스의</strong>가 따라붙는다고 기억하면 된다.
   </p>
+
+  <h3>거푸집 비유가 깨지는 두 지점</h3>
+
+  <p>
+    비유는 여기까지가 안전하다. 더 밀면 나중에 헷갈리므로 미리 금을 긋는다.
+  </p>
+
+  <p>
+    <strong>① 거푸집은 공장에 놓인 도구일 뿐이지만, 클래스도 런타임에 실체가 있다.</strong>
+    자바에서 <code>Student.class</code>는 그 자체로 <code>Class&lt;Student&gt;</code> 타입의 <em>객체</em>다.
+    Ruby에서 <code>Student.class # =&gt; Class</code>가 나오는 것과 같은 구조다.
+    <strong>설계도에도 주소가 있는 셈</strong>이고, 이것이 나중에 <code>static</code> 필드("거푸집 자체에 붙은 상태")와
+    리플렉션 — 스프링이 어노테이션을 읽어 빈을 만드는 그 메커니즘 — 의 근거가 된다.
+  </p>
+
+  <p>
+    <strong>② <code>student1</code>은 엄밀히 말하면 객체가 아니다.</strong>
+    앞에서 본 대로 힙에 만들어진 덩어리가 객체이고, <code>student1</code>은 그 덩어리의
+    <strong>주소를 들고 있는 참조변수</strong>다. 블록 자체가 아니라 블록에 붙은 택배 송장 번호에 가깝다.
+    이 구분이 실제로 물리는 순간이 곧 온다.
+  </p>
+
+  <pre><code>Student a = new Student();
+Student b = a;          // 객체는 하나, 송장 번호만 둘
+b.name = "형우";
+System.out.println(a.name);  // "형우" — a도 같이 바뀐다</code></pre>
+
+  <p>
+    거푸집 비유만 들고 있으면 "블록이 두 개니까 따로 놀겠지"라고 착각하게 되는데,
+    실제로는 <strong>블록 하나를 둘이 가리키고 있는 것</strong>이다.
+    <code>new</code>가 나온 횟수만큼만 객체가 생긴다 — 위 코드에서 <code>new</code>는 한 번뿐이다.
+  </p>
+
+  <div class="analogy">
+    TS에서 객체 리터럴을 변수 둘에 담았을 때 같이 변하던 것, Ruby에서 <code>dup</code> 없이
+    넘겼더니 원본이 바뀌던 것과 완전히 같은 이야기다. 자바가 얹는 규칙은 하나다 —
+    <strong>기본형(<code>int</code>, <code>double</code>)은 값이 복사되고 참조형은 주소가 복사된다.</strong>
+    JS처럼 런타임에 정해지는 성질이 아니라 <strong>선언한 타입이 결정</strong>한다.
+    뿌에서 조회해온 엔티티를 다른 메서드에 넘겼는데 원본이 바뀌어 있는 사고가
+    바로 여기에서 나온다(영속성 컨텍스트가 여기에 한 겹 더 얹힌다).
+  </div>
 
   <h2>그리고 다시 배열로</h2>
 
@@ -315,6 +410,17 @@ public class Listing {              // ← 클래스 하나 = 타입 하나 = �
     <div class="quiz-result" id="q3-result"></div>
   </div>
 
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 4 — <code>Student a = new Student(); Student b = a; b.name = "형우";</code> 를 실행했다. 객체는 몇 개이고 <code>a.name</code>은 무엇인가?</p>
+    <ul class="options" id="q4">
+      <li><button onclick="answer(this,'q4',false)">객체 2개 · <code>a.name</code>은 <code>null</code> — 변수가 둘이니 블록도 둘이다</button></li>
+      <li><button onclick="answer(this,'q4',true)"><strong>객체 1개 · <code>a.name</code>은 "형우"</strong> — 송장 번호만 둘이고 블록은 하나다</button></li>
+      <li><button onclick="answer(this,'q4',false)">객체 2개 · <code>a.name</code>은 "형우" — 대입할 때 필드까지 복사된다</button></li>
+      <li><button onclick="answer(this,'q4',false)">객체 1개 · <code>a.name</code>은 <code>null</code> — <code>b</code>로 바꾼 값은 <code>b</code>에만 반영된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q4-result"></div>
+  </div>
+
   <h2>한 줄로 남기면</h2>
 
   <p>
@@ -356,6 +462,10 @@ public class Listing {              // ← 클래스 하나 = 타입 하나 = �
       q2: {
         correct: "맞아요. student1이 담고 있는 것은 객체 자체가 아니라 객체가 있는 위치를 가리키는 참조값입니다. toString()을 따로 정의하지 않으면 자바는 '패키지.클래스명@참조값의 16진수 해시'를 기본으로 출력합니다. 필드 값을 보고 싶다면 student1.name 처럼 참조를 따라가 꺼내야 합니다.",
         wrong: "아니에요. 필드는 이미 채워져 있고 객체도 메모리에 만들어져 있습니다. 출력이 이상해 보이는 이유는 변수가 담고 있는 것이 객체가 아니라 참조값이고, toString()을 정의하지 않은 클래스는 '클래스명@해시' 형태를 기본으로 찍기 때문입니다."
+      },
+      q4: {
+        correct: "맞아요. 객체가 만들어지는 것은 new 가 실행될 때뿐이고, 여기서 new 는 한 번입니다. Student b = a; 는 객체를 복사하는 것이 아니라 a 가 들고 있던 참조값(주소)을 b 에도 복사해 넣는 것이라, 둘은 같은 덩어리를 가리킵니다. 그래서 b 로 바꾼 값이 a 에서도 보입니다. 진짜로 두 개를 만들려면 new 를 두 번 하거나 필드를 옮겨 담아야 합니다.",
+        wrong: "아니에요. 객체는 new 가 실행된 횟수만큼만 생기고 여기서는 한 번뿐입니다. Student b = a; 가 복사하는 것은 객체가 아니라 참조값이라, a 와 b 는 같은 덩어리를 가리키는 서로 다른 이름일 뿐입니다. 따라서 b.name 을 바꾸면 a.name 도 \"형우\"입니다 — 거푸집 비유를 '블록이 둘'로 밀면 정확히 여기서 틀립니다.",
       },
       q3: {
         correct: "맞아요. int는 기본형이라 null을 담을 수 없고 기본값이 0입니다. 그래서 '가격 미상'과 '0원'이 같은 값이 되고, 조회에서 둘을 구분할 방법이 사라집니다. 값 없음을 표현해야 하면 참조형인 Integer를 써서 null을 담을 수 있게 해야 합니다.",
