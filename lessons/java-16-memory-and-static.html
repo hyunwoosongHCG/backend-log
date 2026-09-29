@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>자바 메모리 구조와 static — 자바</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>자바 메모리 구조와 static</h1>
+  <div class="lesson-meta">
+    <span>자바 · 실전 자바 기본편</span>
+    <span>섹션 8</span>
+    <span>~25분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 지금까지 <code>new Student()</code>가 "메모리 어딘가에 객체를 만든다"고만 말하고 넘어갔다.
+    이번엔 그 "어딘가"를 정확히 나눠본다. 그리고 "인스턴스마다 따로가 아니라 클래스 전체에
+    딱 하나만 있어야 하는 값"(생성된 개수 세기 같은)을 어떻게 만드는지도 함께 본다.<br>
+    <small>강의를 수강하지 않고 작성한 레슨이다. 김영한 「실전 자바 - 기본편」 섹션 8의
+    <strong>전개와 예제는 수강생 정리 글을 교차 확인</strong>해 따라갔다(하단 출처 — 이번 섹션은
+    2편만 확인됐다, 정확한 출처만 밝힌다). Ruby·TypeScript 대비와 뿌 연결은 직접 쓴 것이다.</small>
+  </div>
+
+  <h2>핵심 한 줄</h2>
+
+  <p>
+    자바 메모리는 <strong>메서드 영역 · 스택 · 힙</strong> 세 곳으로 나뉜다.
+    <strong><code>static</code>은 인스턴스가 아니라 "클래스 자체"에 붙는 값</strong>이라,
+    객체를 몇 개를 만들든 메서드 영역에 <strong>딱 하나만</strong> 존재한다.
+  </p>
+
+  <h2>세 영역 — 메서드 영역 · 스택 · 힙</h2>
+
+  <div class="flow">
+    <div class="flow-step">
+      <strong>메서드 영역(Method Area)</strong><br>
+      클래스 정보를 보관한다 — <code>java-10</code>에서 본 <strong>거푸집 자체</strong>다.
+      실행 코드(바이트코드), 필드·메서드 정보, 그리고 오늘 배울 <code>static</code> 변수가 여기 있다.
+      프로그램 시작부터 끝까지 딱 하나, 모든 곳에서 공유된다.
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>스택 영역(Stack Area)</strong><br>
+      메서드를 호출할 때마다 스택 프레임이 하나씩 쌓인다. <strong>지역 변수(매개변수 포함)</strong>가
+      여기 담기고, 메서드가 끝나면 그 프레임째로 사라진다 — 생존 기간이 가장 짧다.
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">
+      <strong>힙 영역(Heap Area)</strong><br>
+      <code>new</code>로 만든 <strong>객체(인스턴스)</strong>가 실제로 담기는 곳 — 거푸집으로
+      찍어낸 <strong>블록 하나하나</strong>다. 아무도 참조하지 않게 되면 GC(가비지 컬렉션)가 회수한다.
+    </div>
+  </div>
+
+  <p>
+    <code>java-10</code>의 거푸집 비유를 메모리 영역에 그대로 포갤 수 있다: <strong>거푸집(클래스 정보)은
+    메서드 영역에 하나, 찍어낸 블록(인스턴스)은 힙에 여러 개.</strong> 그런데 거푸집 자체에도 값을
+    붙이고 싶을 때가 있다 — "지금까지 몇 개를 찍어냈나" 같은 값은 블록 하나하나가 아니라
+    <strong>거푸집 쪽에 있어야</strong> 앞뒤가 맞는다.
+  </p>
+
+  <h2>인스턴스 필드로는 안 되는 것</h2>
+
+  <p>
+    <code>Data</code> 객체가 지금까지 몇 개 만들어졌는지 세고 싶다고 하자. 인스턴스 필드로
+    시도하면 이렇게 된다.
+  </p>
+
+  <pre><code>public class Data3 {
+    String name;
+    int count;   // ❌ 인스턴스 필드로 시도
+
+    Data3(String name) {
+        this.name = name;
+        count++;          // 매번 자기 자신의 count만 1이 된다
+    }
+}
+
+Data3 data1 = new Data3("A");
+Data3 data2 = new Data3("B");
+System.out.println(data1.count);   // 1 — data2와 무관하게 자기 것만
+System.out.println(data2.count);   // 1 — 마찬가지</code></pre>
+
+  <p>
+    각 인스턴스는 힙에 <strong>따로</strong> 만들어지므로 <code>count</code>도 인스턴스마다 따로
+    생긴다. "전체 개수"라는 건 애초에 인스턴스 하나가 알 수 있는 값이 아니다 — <strong>클래스
+    자체가 기억해야 하는 값</strong>이다.
+  </p>
+
+  <h2><code>static</code> — 클래스에 딱 하나</h2>
+
+  <pre><code>public class Data3 {
+    String name;
+    static int count;   // static — 메서드 영역에 딱 하나
+
+    Data3(String name) {
+        this.name = name;
+        count++;
+    }
+}
+
+Data3 data1 = new Data3("A");
+System.out.println(Data3.count);   // 1
+Data3 data2 = new Data3("B");
+System.out.println(Data3.count);   // 2 — data1과 공유된다</code></pre>
+
+  <p>
+    <code>static</code>이 붙는 순간 <code>count</code>는 힙이 아니라 <strong>메서드 영역</strong>에
+    자리 잡고, <strong>모든 인스턴스가 같은 <code>count</code> 하나를 공유</strong>한다.
+    접근할 때도 <code>data1.count</code>가 아니라 <strong><code>Data3.count</code>처럼
+    클래스 이름으로</strong> 쓰는 게 관례다 — 인스턴스 것이 아니라는 걸 코드로도 드러낸다.
+  </p>
+
+  <div class="code-practice">
+    <p class="practice-prompt">
+      직접 타이핑해보기 — <code>Data3(String name)</code> 생성자를 작성하세요.
+      <code>this.name</code>에 매개변수를 대입하고, <code>static</code> 필드 <code>count</code>를
+      1 증가시킵니다.
+    </p>
+    <textarea class="practice-input" id="p1-input" spellcheck="false" rows="4"></textarea>
+    <div class="practice-actions">
+      <button onclick="checkPractice('p1')">확인</button>
+      <button class="practice-reveal" onclick="revealPractice('p1')">정답 보기</button>
+    </div>
+    <div class="practice-result" id="p1-result"></div>
+  </div>
+
+  <h2>인스턴스 변수 vs 클래스 변수</h2>
+
+  <table style="width:100%;border-collapse:collapse;margin:1rem 0;font-size:0.9rem;">
+    <thead>
+      <tr style="background:var(--surface2,#1e1e2e);text-align:left;">
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"></th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">인스턴스 변수</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">클래스 변수(<code>static</code>)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">저장 위치</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">힙 영역</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">메서드 영역</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">생성 시점</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"><code>new</code>할 때마다</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">클래스 로딩 시 딱 1개</td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">접근 방식</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">인스턴스 필요</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">클래스명으로 바로</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;">생명주기</td>
+        <td style="padding:0.5rem 0.75rem;">그 인스턴스가 GC될 때까지</td>
+        <td style="padding:0.5rem 0.75rem;">JVM이 끝날 때까지</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    생존 기간으로 줄 세우면 <strong>지역 변수 &lt; 인스턴스 변수 &lt; 클래스 변수</strong> 순으로
+    길어진다. <code>static</code>을 "정적"이라 부르는 이유도 여기 있다 — 프로그램이 시작할 때
+    자리를 잡고(=클래스 로딩 시점), 끝날 때까지 그 자리에서 안 움직인다.
+  </p>
+
+  <h2><code>static</code> 메서드 — 객체 없이 부르기</h2>
+
+  <pre><code>public class Data3 {
+    String name;
+    static int count;
+
+    Data3(String name) {
+        this.name = name;
+        count++;
+    }
+
+    static int getCount() {
+        return count;
+    }
+}
+
+System.out.println(Data3.getCount());   // 객체 없이, 클래스 이름으로 바로 호출</code></pre>
+
+  <p>
+    <code>static</code> 메서드는 <strong>객체를 만들지 않고도</strong> 클래스 이름으로 바로 부를 수
+    있다. 지금까지 써온 <code>public static void main(String[] args)</code>도 사실 <code>static</code>
+    메서드였다 — 프로그램이 시작될 때는 아직 만들어진 객체가 하나도 없으니, 객체 없이도 불릴 수
+    있는 진입점이 필요했던 것이다.
+  </p>
+
+  <p>
+    대신 대가가 있다. <strong><code>static</code> 메서드 안에서는 인스턴스 필드·인스턴스 메서드를
+    직접 쓸 수 없다.</strong> <code>static</code> 메서드는 "어느 인스턴스의 것"인지 알려주는
+    참조값 없이 클래스 이름만으로 호출되기 때문이다 — <code>this</code>가 가리킬 대상 자체가 없다.
+  </p>
+
+  <pre><code>static void wrong() {
+    name = "x";   // ❌ 컴파일 에러 — name은 인스턴스 필드라 "어느 객체의 name"인지 알 수 없다
+}
+
+static void okWithParam(Data3 data) {
+    data.name = "x";   // ✅ 매개변수로 받은 특정 인스턴스라면 접근 가능
+}</code></pre>
+
+  <p>
+    매개변수로 인스턴스를 직접 받으면 그 안에서는 인스턴스 필드도 건드릴 수 있다 — 막힌 건
+    "인스턴스 필드"가 아니라 <strong>"어느 인스턴스인지 모르는 상태에서 인스턴스 필드에
+    접근하는 것"</strong>이다.
+  </p>
+
+  <div class="code-practice">
+    <p class="practice-prompt">
+      직접 타이핑해보기 — 객체 없이도 호출할 수 있는 <code>getCount()</code> 메서드를 작성하세요.
+      <code>static</code> 필드 <code>count</code>를 반환합니다. 반환 타입은 <code>int</code>입니다.
+    </p>
+    <textarea class="practice-input" id="p2-input" spellcheck="false" rows="3"></textarea>
+    <div class="practice-actions">
+      <button onclick="checkPractice('p2')">확인</button>
+      <button class="practice-reveal" onclick="revealPractice('p2')">정답 보기</button>
+    </div>
+    <div class="practice-result" id="p2-result"></div>
+  </div>
+
+  <div class="analogy">
+    Ruby의 클래스 변수(<code>@@count</code>)와 클래스 메서드(<code>def self.count</code>)가
+    정확히 이 역할이다. TS의 <code>static</code> 키워드도 문법·의미가 자바와 거의 그대로 겹친다.
+    다만 Ruby의 <code>@@</code>는 상속 관계에서 자식·부모가 <strong>같은 변수를 진짜로 공유</strong>해서
+    의도치 않게 꼬이는 경우가 있는데, 자바의 <code>static</code>은 그런 함정 없이 "이 클래스에
+    딱 하나"라는 규칙이 더 단순하고 명확하다.
+  </div>
+
+  <h2>뿌에서는 이렇게 보인다</h2>
+
+  <p>
+    스프링 빈은 기본적으로 <strong>싱글턴</strong>이다 — 컨테이너 안에 그 타입의 인스턴스가
+    <strong>딱 하나만</strong> 만들어지고, 모든 요청이 그 하나를 공유한다. <code>static</code>
+    필드와 똑같지는 않지만(빈은 여전히 인스턴스 하나이지 클래스 자체는 아니다), <strong>"모두가
+    하나를 공유한다"는 위험만큼은 정확히 같다.</strong>
+  </p>
+
+  <pre><code>@Service
+public class ListingService {
+    private int callCount;   // ⚠️ 싱글턴 빈에 상태를 두면 모든 요청이 이 값을 같이 쓴다
+
+    public void search() {
+        callCount++;   // 동시에 두 요청이 들어오면 경쟁 상태(race condition)
+    }
+}</code></pre>
+
+  <p>
+    <code>callCount</code>는 <code>static</code>이 아니지만, 빈이 싱글턴이라 결과적으로
+    <strong>모든 요청이 같은 인스턴스의 같은 필드를 동시에 건드리게 된다.</strong> 오늘 배운
+    "<code>static</code>은 모두가 공유해서 위험할 수 있다"는 감각이, 스프링에서는
+    "싱글턴 빈에 상태를 두면 안 된다"는 규칙으로 그대로 이어진다.
+  </p>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 1 — <code>new Student()</code>로 만든 인스턴스는 어느 영역에 생기는가?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)">메서드 영역 — 클래스 정보와 함께 저장된다</button></li>
+      <li><button onclick="answer(this,'q1',false)">스택 영역 — 메서드 호출과 함께 생성된다</button></li>
+      <li><button onclick="answer(this,'q1',true)"><strong>힙 영역</strong> — <code>new</code>로 만든 객체가 담기는 곳이다</button></li>
+      <li><button onclick="answer(this,'q1',false)">세 영역에 나눠서 저장된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 2 — <code>static int count;</code>는 <code>Data3</code> 인스턴스를 100개 만들면 몇 개가 생기는가?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">100개 — 인스턴스마다 하나씩</button></li>
+      <li><button onclick="answer(this,'q2',true)"><strong>1개</strong> — 클래스에 딱 하나, 모든 인스턴스가 공유한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">0개 — <code>static</code> 필드는 인스턴스를 만들어야 비로소 생긴다</button></li>
+      <li><button onclick="answer(this,'q2',false)">99개 — 첫 번째 인스턴스는 기준값이라 제외된다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 3 — <code>static</code> 메서드 안에서 인스턴스 필드를 직접 못 쓰는 이유는?</p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)"><code>static</code> 메서드는 필드에 접근하는 문법 자체를 자바가 막아놨기 때문이다</button></li>
+      <li><button onclick="answer(this,'q3',true)"><strong>클래스 이름만으로 호출되어 "어느 인스턴스인지" 알려주는 참조값이 없기 때문이다</strong></button></li>
+      <li><button onclick="answer(this,'q3',false)"><code>static</code> 메서드는 컴파일이 먼저 끝나서 인스턴스 필드가 아직 안 만들어졌기 때문이다</button></li>
+      <li><button onclick="answer(this,'q3',false)">메모리 성능을 위해 의도적으로 제한해둔 것뿐, 근본적인 이유는 없다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 4 — 스프링 싱글턴 빈에 <code>callCount</code> 같은 상태를 두면 위험한 이유는, <code>static</code>의 어떤 성질과 닮았는가?</p>
+    <ul class="options" id="q4">
+      <li><button onclick="answer(this,'q4',true)"><strong>모두가 하나의 값을 공유한다는 점</strong> — 동시에 여러 요청이 같은 값을 건드릴 수 있다</button></li>
+      <li><button onclick="answer(this,'q4',false)"><code>static</code> 필드는 항상 스레드마다 따로 존재한다는 점</button></li>
+      <li><button onclick="answer(this,'q4',false)"><code>static</code> 필드는 애초에 값을 못 바꾼다는 점(불변)</button></li>
+      <li><button onclick="answer(this,'q4',false)"><code>static</code> 필드는 요청이 끝나면 자동으로 초기화된다는 점</button></li>
+    </ul>
+    <div class="quiz-result" id="q4-result"></div>
+  </div>
+
+  <h2>한 줄로 남기면</h2>
+
+  <p>
+    <strong>메서드 영역(클래스 정보 + <code>static</code>) · 스택(지역 변수) · 힙(인스턴스)</strong>
+    세 곳을 구분하면, <code>static</code>이 "왜 인스턴스마다 안 생기고 딱 하나뿐인지"가 자연스럽게
+    설명된다. 그리고 "모두가 공유하는 값은 그만큼 위험할 수 있다"는 감각은, 스프링의 싱글턴 빈을
+    설계할 때 그대로 다시 쓰인다.
+  </p>
+
+  <p class="source">
+    커버리지 항목: <a href="../ROADMAP.md">ROADMAP 섹션 7-B</a> · <code>java-16</code>
+    (김영한 「실전 자바 - 기본편」 섹션 8 ·
+    <a href="https://www.inflearn.com/course/%EA%B9%80%EC%98%81%ED%95%9C%EC%9D%98-%EC%8B%A4%EC%A0%84-%EC%9E%90%EB%B0%94-%EA%B8%B0%EB%B3%B8%ED%8E%B8">강의 페이지</a>)<br>
+    강의 전개·예제 확인에 참고한 수강생 정리 글:
+    <a href="https://velog.io/@tomy8964/%EC%9E%90%EB%B0%94-%EB%A9%94%EB%AA%A8%EB%A6%AC-%EA%B5%AC%EC%A1%B0%EC%99%80-static">가오리의 개발 블로그</a> ·
+    <a href="https://velog.io/@swsvelog/JAVA-%EA%B9%80%EC%98%81%ED%95%9C%EC%9D%98-%EC%8B%A4%EC%A0%84-%EC%9E%90%EB%B0%94-%EA%B8%B0%EB%B3%B8-1">swsvelog</a>
+    (두 글 모두 <code>Data3</code>/<code>count</code> 예제와 "붕어빵 틀" 비유가 동일해 상호 확인됨 —
+    세 번째 정리 글은 이번엔 못 찾았다)<br>
+    Ruby·TypeScript 대비, 뿌·스프링 싱글턴 연결은 직접 작성 (자바 언어 사양 근거)<br>
+    이어지는 곳: <code>java-17</code> <code>final</code> — 한 번 정하면 못 바꾸게 막기
+  </p>
+
+  <div class="ask-teacher">
+    💬 <code>static</code> 초기화 블록(<code>static { ... }</code>)이 언제 실행되는지, 상수를
+    <code>static final</code>로 같이 쓰는 이유가 뭔지, 뿌에서 유틸리티 메서드를 <code>static</code>으로
+    둘지 빈으로 둘지 판단 기준이 궁금하면 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="java-15-access-modifiers.html">← 섹션 7: 접근 제어자</a>
+    <span>섹션 8: 자바 메모리 구조와 static</span>
+  </div>
+
+  <script src="../assets/code-practice.js"></script>
+  <script>
+    registerPractice('p1', {
+      accepted: ['Data3(String name) {\n    this.name = name;\n    count++;\n}'],
+      explain: '정확합니다 — this.name은 인스턴스마다 다르지만, count는 static이라 모든 인스턴스가 함께 증가시킵니다.',
+      hint: '본문 두 줄: this.name = name; 과 count++; 입니다. count 앞에 this.를 붙이지 않는 것에 주의하세요(static이라 인스턴스 소유가 아닙니다).',
+    });
+    registerPractice('p2', {
+      accepted: ['static int getCount() {\n    return count;\n}'],
+      explain: '정확합니다 — static 메서드라 객체 없이 Data3.getCount()처럼 바로 호출할 수 있습니다.',
+      hint: '메서드 시그니처는 static int getCount() 입니다. 본문은 return count; 한 줄입니다.',
+    });
+  </script>
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. new로 만든 객체(인스턴스)는 힙 영역에 생깁니다. 메서드 영역은 클래스 정보와 static 변수, 스택은 지역 변수가 담기는 곳입니다.",
+        wrong: "아니에요. new로 만든 인스턴스는 힙 영역에 생깁니다. 메서드 영역은 클래스 정보(거푸집)와 static 변수를 담고, 스택은 메서드 호출마다 쌓이는 지역 변수를 담습니다 — 셋이 섞이지 않고 역할이 나뉘어 있습니다."
+      },
+      q2: {
+        correct: "맞아요. static 필드는 인스턴스가 아니라 클래스 자체에 붙기 때문에, 인스턴스를 몇 개 만들든 메서드 영역에 단 하나만 존재하고 모든 인스턴스가 그 하나를 공유합니다.",
+        wrong: "아니에요. static 필드는 인스턴스 개수와 무관하게 클래스가 로딩되는 시점에 딱 1개만 만들어집니다. 100개를 만들어도, 심지어 0개를 만들어도 static 필드는 이미 1개 존재합니다."
+      },
+      q3: {
+        correct: "맞아요. static 메서드는 클래스 이름만으로 호출되기 때문에 '어느 인스턴스의 필드인지'를 알려줄 참조값(this)이 없습니다. 매개변수로 특정 인스턴스를 직접 받으면 그 인스턴스의 필드는 접근할 수 있습니다 — 막힌 것은 '누구 것인지 모르는 상태의 접근'입니다.",
+        wrong: "아니에요. 자바가 임의로 문법을 막아놓은 것도, 컴파일 순서 문제도, 성능 때문도 아닙니다. static 메서드는 애초에 어느 인스턴스에 속한 호출인지 알려주는 참조값이 없어서, '이 인스턴스의 필드'라는 개념 자체가 성립하지 않는 것입니다."
+      },
+      q4: {
+        correct: "맞아요. static 필드가 모든 인스턴스에게 공유되는 것처럼, 싱글턴 빈의 필드도 그 빈을 쓰는 모든 요청에게 공유됩니다. 여러 요청이 동시에 값을 바꾸면 경쟁 상태가 생길 수 있다는 위험이 똑같습니다.",
+        wrong: "아니에요. static 필드는 스레드마다 따로 있지도, 불변이지도, 요청이 끝난다고 자동 초기화되지도 않습니다. 위험한 이유는 정반대로 '모두가 하나의 값을 공유한다'는 점 때문이고, 싱글턴 빈의 상태도 정확히 같은 이유로 위험합니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>

@@ -494,7 +494,7 @@
 - [x] `java-13` 생성자 → [레슨](lessons/java-13-constructors.html) · this 필수화 · 기본 생성자 조건부 소멸 · this() · JPA 빈 생성자 연결
 - [x] `java-14` 패키지 → [레슨](lessons/java-14-packages.html) · 이름공간 · a.b는 a와 무관 · FQCN · 디렉터리-이름 일치
 - [x] `java-15` 접근 제어자 → [레슨](lessons/java-15-access-modifiers.html) · private~public 4단계 · getter · JPA protected 생성자 완결
-- [ ] `java-16` 자바 메모리 구조와 static
+- [x] `java-16` 자바 메모리 구조와 static → [레슨](lessons/java-16-memory-and-static.html) · 메서드영역·스택·힙 · static 필드/메서드 · 스프링 싱글턴 빈 연결
 - [ ] `java-17` final
 - [ ] `java-18` 상속
 - [ ] `java-19` 다형성1
