@@ -747,6 +747,7 @@ let searchIndex = [];
 let searchIndexReady = false;
 let searchIndexPending = false;
 let scrollObserver = null;
+const loadedExternalScripts = new Set(); // src URLs already executed once this session
 
 /* ──────────────────────────────────────────
    Track / section helpers
@@ -936,12 +937,50 @@ async function loadLesson(index) {
     contentArea.appendChild(wrapper);
     contentArea.scrollTop = 0;
 
-    // Re-execute inline scripts (for quiz logic)
-    wrapper.querySelectorAll('script').forEach(oldScript => {
+    // Re-execute scripts (quiz logic, code-practice widgets, etc).
+    // Scripts inserted via innerHTML never run, so each is rebuilt and swapped in.
+    // External <script src> tags (e.g. assets/code-practice.js) are shared across
+    // lessons and declare top-level const/functions, so re-running the same file
+    // a second time throws "Identifier has already been declared" (the global
+    // scope persists across in-app lesson navigation, unlike a full page reload) —
+    // each src is therefore executed only once per session. Inline scripts still
+    // run every time (each lesson's own quiz/practice data differs), and a src
+    // script is awaited before the next script runs, since later inline scripts
+    // may call functions it defines (registerPractice).
+    for (const oldScript of [...wrapper.querySelectorAll('script')]) {
       const newScript = document.createElement('script');
-      newScript.textContent = oldScript.textContent;
-      oldScript.parentNode.replaceChild(newScript, oldScript);
-    });
+      for (const { name, value } of oldScript.attributes) {
+        newScript.setAttribute(name, value);
+      }
+
+      if (newScript.src) {
+        newScript.textContent = oldScript.textContent;
+        if (loadedExternalScripts.has(newScript.src)) {
+          oldScript.remove();
+          continue;
+        }
+        loadedExternalScripts.add(newScript.src);
+        await new Promise((resolve) => {
+          newScript.addEventListener('load', resolve);
+          newScript.addEventListener('error', resolve);
+          oldScript.parentNode.replaceChild(newScript, oldScript);
+        });
+      } else {
+        // Each lesson's inline script declares its own top-level const/let
+        // (quiz's `explanations`), which throws "already declared" the moment
+        // a second lesson (or the same one again) runs its script in this same
+        // still-open document — that lexical scope, unlike function-scoped var,
+        // can't be redeclared or torn down. Wrapping in an IIFE gives each
+        // execution a fresh scope so those declarations never collide. Lesson
+        // HTML calls back into this via inline onclick="answer(...)" attributes,
+        // which resolve bare identifiers against `window` — so the quiz's
+        // `answer` function is re-published there after the IIFE runs.
+        newScript.textContent =
+          '(function(){\n' + oldScript.textContent +
+          '\nif (typeof answer === "function") { window.answer = answer; }\n})();';
+        oldScript.parentNode.replaceChild(newScript, oldScript);
+      }
+    }
 
     // Build TOC and scroll spy
     buildTOC(wrapper, contentArea);
