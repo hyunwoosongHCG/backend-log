@@ -105,6 +105,20 @@ Data dataB = dataA;   // dataB에 "x001"이 복사됨
 dataA.value = 20;
 // dataA.value = 20, dataB.value = 20   같은 객체</code></pre>
 
+  <div class="code-practice">
+    <p class="practice-prompt">
+      직접 타이핑해보기 — <code>int</code> 변수 <code>count</code>를 선언해 <code>3</code>을 대입하고,
+      그 값을 <code>total</code>에 대입한 뒤 <code>count</code>를 <code>9</code>로 바꾸는 코드 세 줄을 작성하세요
+      (기본형이므로 <code>total</code>은 영향받지 않아야 한다).
+    </p>
+    <textarea class="practice-input" id="p1-input" spellcheck="false" rows="4"></textarea>
+    <div class="practice-actions">
+      <button onclick="checkPractice('p1')">확인</button>
+      <button class="practice-reveal" onclick="revealPractice('p1')">정답 보기</button>
+    </div>
+    <div class="practice-result" id="p1-result"></div>
+  </div>
+
   <p>
     두 경우 모두 <strong>변수에 든 값을 복사했다</strong>는 점에서 하는 일이 완전히 같다.
     다만 <code>b</code>가 받은 건 숫자 <code>10</code>이고 <code>dataB</code>가 받은 건 주소 <code>x001</code>이라,
@@ -145,6 +159,19 @@ Data data = new Data();
 data.value = 10;
 replace(data);
 System.out.println(data.value);   // 10 — 안 바뀐다!</code></pre>
+
+  <div class="code-practice">
+    <p class="practice-prompt">
+      직접 타이핑해보기 — <code>Data</code> 타입 매개변수 <code>d</code>를 받아, 그 안에 <strong>새 <code>Data</code> 객체를 대입</strong>하고
+      <code>value</code> 필드에 <code>55</code>를 넣는 정적 메서드 <code>replaceWith55(Data d)</code>를 작성하세요 (반환 타입은 <code>void</code>).
+    </p>
+    <textarea class="practice-input" id="p2-input" spellcheck="false" rows="4"></textarea>
+    <div class="practice-actions">
+      <button onclick="checkPractice('p2')">확인</button>
+      <button class="practice-reveal" onclick="revealPractice('p2')">정답 보기</button>
+    </div>
+    <div class="practice-result" id="p2-result"></div>
+  </div>
 
   <p>
     참조형인데 왜 안 바뀌었나. <code>d</code>는 <code>data</code>가 들고 있던 <strong>주소의 복사본</strong>일 뿐이라,
@@ -296,6 +323,21 @@ int won = price;                      // 💥 NullPointerException</code></pre>
     <span>섹션 3: 기본형과 참조형</span>
   </div>
 
+  <script src="../assets/code-practice.js"></script>
+  <script>
+    registerPractice('p1', {
+      accepted: ['int count = 3;\nint total = count;\ncount = 9;'],
+      explain: '정확합니다 — count와 total은 각자 독립된 값을 가진 서로 다른 상자입니다. count를 바꿔도 total의 값 3은 그대로입니다.',
+      hint: '변수 선언 두 개(count, total)와 재대입 한 번, 총 세 문장이 필요합니다. 타입은 모두 int입니다.',
+    });
+    registerPractice('p2', {
+      accepted: [
+        'static void replaceWith55(Data d) {\n    d = new Data();\n    d.value = 55;\n}',
+      ],
+      explain: '정확합니다 — 하지만 이 메서드를 호출해도 원본 data.value는 안 바뀝니다. d는 참조값의 복사본이라, d에 새 주소를 넣어도 호출한 쪽의 변수는 원래 주소를 그대로 가리키기 때문입니다.',
+      hint: '메서드 시그니처는 static void replaceWith55(Data d) 입니다. 본문에서 d에 new Data()를 새로 대입한 뒤, 그 d의 value 필드에 55를 넣으세요.',
+    });
+  </script>
   <script>
     const explanations = {
       q1: {

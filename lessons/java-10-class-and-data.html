@@ -97,6 +97,19 @@ student1.name = "학생1";      // . 으로 필드에 접근
 student1.age = 15;
 student1.grade = 90;</code></pre>
 
+  <div class="code-practice">
+    <p class="practice-prompt">
+      직접 타이핑해보기 — <code>student2</code>라는 변수를 선언해 <code>Student</code> 인스턴스를 생성해 대입하고,
+      <code>grade</code> 필드에 <code>88</code>을 대입하는 코드를 두 줄로 작성하세요.
+    </p>
+    <textarea class="practice-input" id="p1-input" spellcheck="false" rows="3"></textarea>
+    <div class="practice-actions">
+      <button onclick="checkPractice('p1')">확인</button>
+      <button class="practice-reveal" onclick="revealPractice('p1')">정답 보기</button>
+    </div>
+    <div class="practice-result" id="p1-result"></div>
+  </div>
+
   <p>
     주목할 곳은 <code>Student student1</code>의 <strong>왼쪽</strong>이다.
     <code>int</code>, <code>String</code>을 쓰던 자리에 내가 만든 이름이 들어갔다.
@@ -251,6 +264,19 @@ student1.grade = 90;</code></pre>
 Student b = a;          // 객체는 하나, 송장 번호만 둘
 b.name = "형우";
 System.out.println(a.name);  // "형우" — a도 같이 바뀐다</code></pre>
+
+  <div class="code-practice">
+    <p class="practice-prompt">
+      직접 타이핑해보기 — 위와 같은 상황을 재현해보세요. <code>a</code>로 <code>Student</code>를 생성하고,
+      <code>b</code>에 <code>a</code>를 대입한 뒤, <code>b.grade</code>를 <code>100</code>으로 바꾸는 코드 세 줄을 작성하세요.
+    </p>
+    <textarea class="practice-input" id="p2-input" spellcheck="false" rows="4"></textarea>
+    <div class="practice-actions">
+      <button onclick="checkPractice('p2')">확인</button>
+      <button class="practice-reveal" onclick="revealPractice('p2')">정답 보기</button>
+    </div>
+    <div class="practice-result" id="p2-result"></div>
+  </div>
 
   <p>
     거푸집 비유만 들고 있으면 "블록이 두 개니까 따로 놀겠지"라고 착각하게 되는데,
@@ -453,6 +479,19 @@ public class Listing {              // ← 클래스 하나 = 타입 하나 = �
     <span>섹션 2: 클래스와 데이터 — 자바 트랙 첫 레슨</span>
   </div>
 
+  <script src="../assets/code-practice.js"></script>
+  <script>
+    registerPractice('p1', {
+      accepted: ['Student student2 = new Student();\nstudent2.grade = 88;'],
+      explain: '정확합니다 — new Student()로 만든 인스턴스의 참조값이 student2에 담기고, .으로 필드에 접근했습니다.',
+      hint: '변수 선언(Student student2 = new Student();)과 필드 대입(student2.grade = 88;) 두 문장이 필요합니다. 세미콜론도 잊지 마세요.',
+    });
+    registerPractice('p2', {
+      accepted: ['Student a = new Student();\nStudent b = a;\nb.grade = 100;'],
+      explain: '정확합니다 — new는 한 번뿐이라 객체도 하나이고, a와 b는 같은 객체를 가리키는 서로 다른 참조값입니다. 그래서 a.grade도 100입니다.',
+      hint: '세 문장이 필요합니다: a 생성, b에 a 대입, b.grade에 100 대입. b도 Student 타입이라 앞에 타입을 다시 쓸 필요는 없습니다(재선언이 아니라 대입이므로).',
+    });
+  </script>
   <script>
     const explanations = {
       q1: {
