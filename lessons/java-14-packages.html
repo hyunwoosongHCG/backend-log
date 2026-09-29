@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>패키지 — 자바</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>패키지</h1>
+  <div class="lesson-meta">
+    <span>자바 · 실전 자바 기본편</span>
+    <span>섹션 6</span>
+    <span>~15분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 <code>java-10</code>에서 <code>System.out.println(student1)</code>을 찍었더니
+    <code>study_class1.Student@66a29884</code>가 나왔다. 그때는 뒷부분(참조값)만 보고
+    앞에 붙은 <code>study_class1.</code>은 그냥 넘어갔다. 그게 바로 패키지 이름이었다 — 지금 본다.<br>
+    <small>강의를 수강하지 않고 작성한 레슨이다. 김영한 「실전 자바 - 기본편」 섹션 6의
+    <strong>전개와 예제는 수강생 정리 글 3편을 교차 확인</strong>해 따라갔고(하단 출처),
+    Ruby·TypeScript 대비와 뿌 연결은 직접 쓴 것이다.</small>
+  </div>
+
+  <h2>핵심 한 줄</h2>
+
+  <p>
+    <strong>패키지(package)는 관련 있는 클래스를 묶는 폴더</strong>다. 폴더 이름이 점(<code>.</code>)으로
+    이어져 있어서 <code>a.b</code>가 <code>a</code>의 하위처럼 보이지만, <strong>자바에게는 이름이
+    다르면 그냥 완전히 다른 패키지</strong>다 — 부모·자식 관계 같은 건 없다.
+  </p>
+
+  <h2>왜 필요한가 — 이름이 겹친다</h2>
+
+  <p>
+    클래스가 몇 개뿐일 때는 이름이 안 겹친다. 그런데 여러 사람이, 또는 여러 라이브러리가 각자
+    <code>User</code>라는 클래스를 만들었다고 하자. 한 프로젝트 안에 <code>User</code>가 둘 있으면
+    자바는 어느 것을 말하는지 알 수 없다. <strong>패키지는 이 충돌을 이름공간(namespace)으로 분리</strong>한다.
+  </p>
+
+  <pre><code>package pack.a;
+
+public class User {
+    // pack.a 소속 User
+}</code></pre>
+
+  <pre><code>package pack.b;
+
+public class User {
+    // pack.b 소속 User — 이름은 같지만 완전히 다른 클래스
+}</code></pre>
+
+  <p>
+    클래스 파일 맨 위에 쓰는 <code>package pack.a;</code>가 "이 클래스는 <code>pack.a</code>라는
+    묶음에 속한다"는 선언이다. 이제 두 <code>User</code>는 <code>pack.a.User</code>와
+    <code>pack.b.User</code>라는 서로 다른 이름이 되어 공존할 수 있다.
+  </p>
+
+  <h2>계층처럼 보이지만 — 사실은 전부 남남</h2>
+
+  <p>
+    <code>pack</code>, <code>pack.a</code>, <code>pack.b</code>는 점으로 이어져 있어서 마치
+    <code>pack</code>이 부모고 <code>pack.a</code>·<code>pack.b</code>가 그 자식처럼 보인다.
+    <strong>하지만 자바에게는 셋 다 완전히 다른, 서로 무관한 패키지다.</strong> <code>pack.a</code>
+    안에 있다고 해서 <code>pack</code>에 있는 것에 자동으로 접근할 수 있는 것도 아니고,
+    <code>pack.a</code>와 <code>pack.b</code>가 형제라서 서로 뭔가를 공유하는 것도 아니다.
+    이름이 계층처럼 생긴 것뿐이지, <strong>실제 관계는 폴더 경로 이상도 이하도 아니다.</strong>
+  </p>
+
+  <h2><code>import</code>와 완전한 이름</h2>
+
+  <p>
+    다른 패키지의 클래스를 쓰려면 <strong>완전한 이름(FQCN, Fully Qualified Class Name)</strong>을
+    쓰거나, <code>import</code>로 미리 알려두고 짧은 이름만 써야 한다.
+  </p>
+
+  <pre><code>import pack.a.User;   // 이 클래스 하나만 짧게 쓰겠다는 선언
+// import pack.a.*;   // pack.a 안의 클래스 전부를 짧게 쓰겠다는 선언(와일드카드)
+
+public class Main {
+    public static void main(String[] args) {
+        User userA = new User();                    // import 덕분에 짧게
+        pack.b.User userB = new pack.b.User();       // import 안 했으면 완전한 이름으로
+    }
+}</code></pre>
+
+  <p>
+    <code>pack.a.User</code>만 <code>import</code>했으므로 <code>User</code>라고 쓰면 그쪽을 가리킨다.
+    <code>pack.b.User</code>는 import하지 않았으니 <code>pack.b.User</code>라고 <strong>전체 경로를
+    다 써야</strong> 컴파일러가 어느 <code>User</code>인지 알 수 있다. 이름이 겹치는 두 클래스를
+    한 파일에서 동시에 쓸 때 이렇게 "하나는 짧게, 나머지는 완전한 이름으로" 구분한다.
+  </p>
+
+  <div class="code-practice">
+    <p class="practice-prompt">
+      직접 타이핑해보기 — <code>pack.b</code> 패키지의 <code>User</code>를 <strong>완전한 이름</strong>으로
+      생성해서 변수 <code>anotherUser</code>에 대입하는 코드 한 줄을 작성하세요 (import는 안 했다고 가정).
+    </p>
+    <textarea class="practice-input" id="p1-input" spellcheck="false" rows="2"></textarea>
+    <div class="practice-actions">
+      <button onclick="checkPractice('p1')">확인</button>
+      <button class="practice-reveal" onclick="revealPractice('p1')">정답 보기</button>
+    </div>
+    <div class="practice-result" id="p1-result"></div>
+  </div>
+
+  <h2>패키지 이름 = 폴더 위치</h2>
+
+  <p>
+    <strong>패키지 이름과 실제 디렉터리 구조는 반드시 같아야 한다.</strong> <code>package pack.a;</code>라고
+    쓴 파일은 실제로 <code>pack/a/</code> 폴더 안에 있어야 한다 — 관례가 아니라 컴파일러가 강제하는 규칙이다.
+    명명 규칙은 두 가지다: <strong>전부 소문자</strong>를 쓰고, <strong>회사 도메인을 거꾸로</strong> 적는다
+    (예: <code>hcg.com</code> → <code>com.hcg</code>). 전 세계 누구와도 이름이 안 겹치게 하려는 관례다.
+  </p>
+
+  <div class="analogy">
+    TS/JS의 <code>import { User } from './pack/b/User'</code>도 파일 경로로 모듈을 찾는다는 점은 비슷하다.
+    다른 점은, JS는 <code>import</code> 경로가 상대 경로·별칭(alias) 등으로 자유롭고 "모듈 이름"이라는
+    게 따로 강제되지 않는다. <strong>자바는 패키지 이름 자체가 곧 폴더 경로이고, 그 일치를 컴파일러가
+    검사한다.</strong> Ruby의 <code>module</code>은 이름공간을 만들지만 파일 위치와 강제로 묶이지 않는다
+    (관례일 뿐, <code>require</code>로 아무 경로나 불러올 수 있다). 자바만 "이름 = 위치"를 규칙으로 못 박는다.
+  </div>
+
+  <h2>뿌에서는 이렇게 보인다</h2>
+
+  <p>
+    스프링 부트 프로젝트에서 흔히 쓰는 계층형 패키지 구조는 이런 식이다.
+  </p>
+
+  <pre><code>com.hcg.ppu.domain        // 엔티티 (Listing, Member ...)
+com.hcg.ppu.repository    // JPA 리포지토리
+com.hcg.ppu.service        // 서비스 계층
+com.hcg.ppu.controller    // API 엔드포인트</code></pre>
+
+  <p>
+    <code>Listing</code>과 <code>ListingController</code>가 이름은 겹치지 않지만, 패키지를 계층별로
+    나눠두면 "이 클래스가 무슨 역할인지"가 위치만 보고도 드러난다. Rails의 <code>app/models</code>,
+    <code>app/controllers</code> 디렉터리 분리와 하는 일은 같다 — 다만 Rails는 파일 위치가 관례일
+    뿐이고, 자바는 그 위치가 <code>package</code> 선언과 정확히 일치해야 하는 <strong>컴파일 규칙</strong>이라는
+    점이 다르다.
+  </p>
+
+  <div class="code-practice">
+    <p class="practice-prompt">
+      직접 타이핑해보기 — <code>com.hcg.ppu.domain</code> 패키지에 속하는 <code>Listing</code> 클래스의
+      맨 위 <code>package</code> 선언 한 줄을 작성하세요.
+    </p>
+    <textarea class="practice-input" id="p2-input" spellcheck="false" rows="2"></textarea>
+    <div class="practice-actions">
+      <button onclick="checkPractice('p2')">확인</button>
+      <button class="practice-reveal" onclick="revealPractice('p2')">정답 보기</button>
+    </div>
+    <div class="practice-result" id="p2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 1 — <code>pack</code>, <code>pack.a</code>, <code>pack.b</code>의 관계는?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)"><code>pack.a</code>와 <code>pack.b</code>는 <code>pack</code>의 멤버를 자동으로 상속받는 하위 패키지다</button></li>
+      <li><button onclick="answer(this,'q1',true)"><strong>이름이 점으로 이어져 있을 뿐, 셋 다 서로 완전히 무관한 별개의 패키지다</strong></button></li>
+      <li><button onclick="answer(this,'q1',false)"><code>pack.a</code>와 <code>pack.b</code>는 형제 패키지라 서로의 클래스를 <code>import</code> 없이 쓸 수 있다</button></li>
+      <li><button onclick="answer(this,'q1',false)"><code>pack</code>은 추상 패키지이고 <code>pack.a</code>·<code>pack.b</code>가 이를 구현한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 2 — <code>pack.a.User</code>만 <code>import</code>한 상태에서 <code>pack.b.User</code>를 쓰려면?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">이미 <code>User</code>를 <code>import</code>했으므로 <code>User</code>라고만 쓰면 자바가 알아서 구분한다</button></li>
+      <li><button onclick="answer(this,'q2',false)">같은 클래스 이름은 한 파일에서 동시에 쓸 수 없어 컴파일 에러가 난다</button></li>
+      <li><button onclick="answer(this,'q2',true)"><strong><code>pack.b.User</code>처럼 완전한 이름(FQCN)을 그대로 써야 한다</strong></button></li>
+      <li><button onclick="answer(this,'q2',false)"><code>import pack.b.*;</code>를 추가로 쓰면 두 <code>User</code>가 자동으로 합쳐진다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 3 — 패키지 이름과 디렉터리 구조의 관계는?</p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)">권장 사항일 뿐, 달라도 컴파일은 항상 된다</button></li>
+      <li><button onclick="answer(this,'q3',true)"><strong>반드시 같아야 한다</strong> — 컴파일러가 검사하는 규칙이다</button></li>
+      <li><button onclick="answer(this,'q3',false)">패키지 이름은 폴더가 아니라 파일 이름과 같아야 한다</button></li>
+      <li><button onclick="answer(this,'q3',false)">IDE 설정에 따라 달라서 자바 언어 차원의 규칙은 없다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 4 — 회사 도메인이 <code>hcg.com</code>일 때, 관례를 따른 패키지 이름은?</p>
+    <ul class="options" id="q4">
+      <li><button onclick="answer(this,'q4',false)"><code>Hcg.Com</code> — 도메인을 그대로 대문자 카멜 케이스로</button></li>
+      <li><button onclick="answer(this,'q4',true)"><strong><code>com.hcg</code></strong> — 전부 소문자, 도메인을 거꾸로</button></li>
+      <li><button onclick="answer(this,'q4',false)"><code>hcg.com</code> — 도메인 표기를 그대로 패키지 이름으로</button></li>
+      <li><button onclick="answer(this,'q4',false)"><code>HCG_COM</code> — 상수처럼 대문자와 언더스코어로</button></li>
+    </ul>
+    <div class="quiz-result" id="q4-result"></div>
+  </div>
+
+  <h2>한 줄로 남기면</h2>
+
+  <p>
+    <strong>패키지는 이름이 겹치지 않게 클래스를 묶는 폴더이자 이름공간</strong>이다. 점으로 이어진
+    이름이 계층처럼 보여도 패키지끼리는 서로 아무 관계가 없고, 이름과 실제 폴더 위치가 어긋나면
+    아예 컴파일이 안 된다. <code>java-10</code>에서 본 <code>study_class1.Student@...</code>의
+    <code>study_class1.</code>이 바로 이 규칙의 결과였다 — 모든 클래스는, 이름을 안 정해도,
+    사실 어떤 패키지엔가는 반드시 속해 있다.
+  </p>
+
+  <p class="source">
+    커버리지 항목: <a href="../ROADMAP.md">ROADMAP 섹션 7-B</a> · <code>java-14</code>
+    (김영한 「실전 자바 - 기본편」 섹션 6 ·
+    <a href="https://www.inflearn.com/course/%EA%B9%80%EC%98%81%ED%95%9C%EC%9D%98-%EC%8B%A4%EC%A0%84-%EC%9E%90%EB%B0%94-%EA%B8%B0%EB%B3%B8%ED%8E%B8">강의 페이지</a>)<br>
+    강의 전개·예제 확인에 참고한 수강생 정리 글:
+    <a href="https://velog.io/@tomy8964/%ED%8C%A8%ED%82%A4%EC%A7%80-%EC%A0%91%EA%B7%BC-%EC%A0%9C%EC%96%B4%EC%9E%90">가오리의 개발 블로그</a> ·
+    <a href="https://velog.io/@swsvelog/JAVA-%EA%B9%80%EC%98%81%ED%95%9C%EC%9D%98-%EC%8B%A4%EC%A0%84-%EC%9E%90%EB%B0%94-%EA%B8%B0%EB%B3%B8-1">swsvelog</a> ·
+    <a href="https://velog.io/@njw4803/%ED%8C%A8%ED%82%A4%EC%A7%80Package">njw4803</a>
+    (세 글 모두 <code>pack.a.User</code>/<code>pack.b.User</code> 동일 예제를 써서 서로 교차 확인됨)<br>
+    Ruby·TypeScript 대비, 뿌 패키지 구조 연결은 직접 작성 (자바 언어 사양 근거)<br>
+    이어지는 곳: <code>java-15</code> 접근 제어자 — 패키지 경계로 "누가 볼 수 있는지"를 막기 시작한다
+  </p>
+
+  <div class="ask-teacher">
+    💬 <code>import static</code>은 일반 <code>import</code>와 뭐가 다른지, 같은 패키지 안에서는
+    왜 <code>import</code> 없이 클래스를 바로 쓸 수 있는지, 뿌 패키지 구조를 도메인별로 나눌지
+    계층별로 나눌지 궁금하면 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="java-13-constructors.html">← 섹션 5: 생성자</a>
+    <span>섹션 6: 패키지</span>
+  </div>
+
+  <script src="../assets/code-practice.js"></script>
+  <script>
+    registerPractice('p1', {
+      accepted: ['pack.b.User anotherUser = new pack.b.User();'],
+      explain: '정확합니다 — import 안 한 클래스는 완전한 이름(패키지 전체 + 클래스명)을 그대로 써야 합니다.',
+      hint: '타입 자리와 new 뒤 자리 둘 다 pack.b.User로 완전한 이름을 써야 합니다. 변수 이름은 anotherUser입니다.',
+    });
+    registerPractice('p2', {
+      accepted: ['package com.hcg.ppu.domain;'],
+      explain: '정확합니다 — package 선언은 파일 맨 위, 세미콜론으로 끝나는 한 줄입니다.',
+      hint: 'package 키워드 다음에 점으로 이어진 패키지 전체 경로, 그리고 세미콜론입니다.',
+    });
+  </script>
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. pack.a와 pack.b는 이름이 점으로 이어져 계층처럼 보이지만, 자바에게는 그냥 서로 다른 이름의 패키지일 뿐입니다. 상속도, 자동 접근 권한도, 형제 관계로 인한 공유도 없습니다 — import 규칙은 모든 다른 패키지에 똑같이 적용됩니다.",
+        wrong: "아니에요. 패키지 이름이 점으로 이어진 것은 계층처럼 보이는 표기일 뿐, 실제로 상속이나 자동 접근 권한, 형제 간 공유 같은 관계는 전혀 없습니다. pack.a에 있다고 pack이나 pack.b의 클래스에 특별히 더 쉽게 접근할 수 있는 게 아닙니다."
+      },
+      q2: {
+        correct: "맞아요. import는 클래스별로 하나씩 적용됩니다. pack.a.User를 import했다고 pack.b.User까지 짧게 쓸 수 있는 게 아니라, pack.b.User는 완전한 이름(FQCN)을 그대로 써야 컴파일러가 어느 클래스인지 구분할 수 있습니다.",
+        wrong: "아니에요. import는 이름이 같아도 자동으로 합쳐주거나 알아서 구분해주지 않습니다. import하지 않은 쪽은 pack.b.User처럼 패키지를 포함한 완전한 이름을 써야만 컴파일러가 어느 클래스를 가리키는지 알 수 있습니다."
+      },
+      q3: {
+        correct: "맞아요. package pack.a; 라고 선언한 파일은 반드시 pack/a/ 디렉터리 안에 있어야 합니다. 이름과 위치가 어긋나면 컴파일 자체가 안 됩니다 — 권장 사항이 아니라 자바 언어가 강제하는 규칙입니다.",
+        wrong: "아니에요. 패키지 이름과 디렉터리 구조의 일치는 선택이나 IDE 설정이 아니라, 자바 컴파일러가 직접 검사하는 규칙입니다. 어긋나면 컴파일이 되지 않습니다. 그리고 패키지는 파일이 아니라 폴더 단위입니다."
+      },
+      q4: {
+        correct: "맞아요. 패키지 이름은 전부 소문자로 쓰고, 회사 도메인을 거꾸로 적는 것이 관례입니다. hcg.com이면 com.hcg가 됩니다. 전 세계 어디서도 이름이 안 겹치게 하려는 목적입니다.",
+        wrong: "아니에요. 패키지 이름은 대문자나 언더스코어, 도메인 그대로의 순서를 쓰지 않습니다. 관례는 전부 소문자 + 도메인을 거꾸로 적는 것입니다(hcg.com → com.hcg)."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>

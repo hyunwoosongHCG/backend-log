@@ -237,12 +237,39 @@ public class Listing {
 // 💥 실행 시점에 JPA가 엔티티를 매개변수 없이 못 만들어서 에러가 난다</code></pre>
 
   <p>
-    JPA(Hibernate)는 DB에서 행을 읽어 엔티티 객체로 되돌릴 때, <strong>아직 컬럼 값을 모르는
-    상태로 일단 빈 객체부터 만들고</strong>(리플렉션으로), 그 다음에 필드를 하나씩 채워 넣는다.
-    그런데 위 코드처럼 매개변수 있는 생성자만 있으면 — 오늘 배운 규칙 그대로 — <strong>매개변수
-    없는 기본 생성자가 사라져서</strong> JPA가 "빈 객체"를 만들 방법이 없어진다. 그래서 JPA 엔티티에는
-    관례적으로 매개변수 없는 생성자를 하나 더 남겨둔다.
+    JPA(Hibernate)가 DB 행을 엔티티 객체로 되돌리는 과정은 사실 두 단계다.
   </p>
+
+  <pre><code>// 1단계 — 매개변수 없는 생성자로 "껍데기"만 만든다
+Listing listing = new Listing();
+
+// 2단계 — DB에서 읽은 값을 필드에 하나씩 직접 대입한다 (리플렉션으로)
+setField(listing, "address", resultSet.getString("address"));
+setField(listing, "price", resultSet.getInt("price"));</code></pre>
+
+  <p>
+    여기서 헷갈리기 쉬운 지점 하나: 2단계에서 채워 넣는 값은 <strong><code>Listing(String address, int price)</code>
+    생성자 안에 있던 값이 아니라, DB에서 막 읽어온 값</strong>이다. <strong>JPA는 이 2단계에서
+    생성자 코드를 아예 실행하지 않는다</strong> — <code>this.address = address;</code> 같은 줄은
+    한 번도 안 거친다. 그 매개변수 있는 생성자는 오직 <strong>여러분이 코드에서 직접
+    <code>new Listing("강남구", 50000)</code>을 부를 때만</strong> 쓰인다. JPA가 DB에서 읽어올 때는
+    완전히 다른 경로(1단계 빈 생성자 + 2단계 필드 직접 대입)를 탄다.
+  </p>
+
+  <p>
+    그런데 <strong>1단계에 쓸 매개변수 없는 생성자가 없으면 처음부터 실패한다.</strong> 위 코드처럼
+    매개변수 있는 생성자만 있으면 — 오늘 배운 규칙 그대로 — 기본 생성자가 사라져서 JPA가 "빈 껍데기"조차
+    못 만든다. 그래서 JPA 엔티티에는 관례적으로 매개변수 없는 생성자를 하나 더 남겨둔다.
+  </p>
+
+  <div class="analogy">
+    Rails도 똑같은 문제를 똑같은 방식으로 푼다. <code>Listing.new(address: ...)</code>처럼 직접 만들 때는
+    <code>initialize</code>가 불리지만, <strong>DB에서 레코드를 읽어올 때는 <code>initialize</code>를
+    아예 건너뛰고</strong> 빈 객체를 만든 다음 컬럼 값을 인스턴스 변수에 직접 꽂아 넣는다.
+    Rails는 동적 언어라 이 우회가 별다른 준비 없이 조용히 일어나지만, 자바는 "그러려면 매개변수
+    없는 생성자가 <strong>문법적으로 존재해야 한다</strong>"고 강제한다는 점만 다르다 — 같은 문제,
+    다른 해결 방식이다.
+  </div>
 
   <pre><code>protected Listing() {}   // JPA 전용 — 코드에서 직접 부르는 일은 거의 없다</code></pre>
 
@@ -251,6 +278,16 @@ public class Listing {
     접근 제어자인데, 이건 <code>java-15</code>에서 다룬다 — 지금은 <strong>"매개변수 없는 생성자를
     하나 더 만든다"</strong>는 처방만 기억해두면 충분하다.
   </p>
+
+  <div class="analogy">
+    <strong>"엔티티"라는 이름에 낚이지 말 것.</strong> Grape에서 쓰던 <code>Entity</code>는 API 응답
+    모양을 잡는 프레젠터 계층이었다(2026-07-03 학습). JPA의 <code>@Entity</code>는
+    <strong>완전히 다른 계층</strong>이다 — ActiveRecord 모델처럼 <strong>DB 테이블 하나를 객체
+    하나에 매핑</strong>하는 것뿐이고, API 응답 모양을 잡는 역할(Grape::Entity가 하던 일)은 자바에서
+    보통 <strong>별도의 DTO 클래스</strong>가 맡는다. 그래서 실무에서는 JPA 엔티티를 API 응답으로
+    그대로 내보내지 않는다 — 지연 로딩 프록시, 양방향 연관관계로 인한 무한 직렬화 루프, 방금 본
+    것처럼 영속성 컨텍스트가 추적하는 대상이라는 점 때문에 API 응답용 객체와는 애초에 목적이 다르다.
+  </div>
 
   <div class="quiz">
     <p class="quiz-q">퀴즈 1 — 생성자의 이름과 반환 타입 규칙은?</p>
@@ -319,9 +356,9 @@ public class Listing {
   </p>
 
   <div class="ask-teacher">
-    💬 생성자 오버로딩이 너무 많아지면 어떻게 정리하는지(빌더 패턴 예고), JPA가 왜 굳이
-    리플렉션으로 빈 객체부터 만드는지, 뿌 엔티티에 기본 생성자를 <code>protected</code>로
-    두는 이유가 궁금하면 물어보세요.
+    💬 생성자 오버로딩이 너무 많아지면 어떻게 정리하는지(빌더 패턴 예고), 리플렉션이 정확히
+    어떻게 <code>private</code> 필드까지 뚫고 값을 넣는지, 엔티티 → DTO 변환을 실제로 어디서
+    (컨트롤러? 서비스?) 하는 게 맞는지 궁금하면 물어보세요.
   </div>
 
   <div class="nav-links">

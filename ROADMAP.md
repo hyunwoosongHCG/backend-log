@@ -492,7 +492,7 @@
 - [x] `java-11` 기본형과 참조형 → [레슨](lessons/java-11-primitive-and-reference.html)
 - [x] `java-12` 객체 지향 프로그래밍 → [레슨](lessons/java-12-object-oriented-programming.html) · 캡슐화 · MusicPlayer 종합 예제 · this 예고
 - [x] `java-13` 생성자 → [레슨](lessons/java-13-constructors.html) · this 필수화 · 기본 생성자 조건부 소멸 · this() · JPA 빈 생성자 연결
-- [ ] `java-14` 패키지
+- [x] `java-14` 패키지 → [레슨](lessons/java-14-packages.html) · 이름공간 · a.b는 a와 무관 · FQCN · 디렉터리-이름 일치
 - [ ] `java-15` 접근 제어자
 - [ ] `java-16` 자바 메모리 구조와 static
 - [ ] `java-17` final
