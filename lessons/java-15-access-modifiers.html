@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>접근 제어자 — 자바</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <h1>접근 제어자</h1>
+  <div class="lesson-meta">
+    <span>자바 · 실전 자바 기본편</span>
+    <span>섹션 7</span>
+    <span>~20분</span>
+  </div>
+
+  <div class="mission-link">
+    🎯 <code>java-12</code>에서 "지금은 필드가 아직 <code>public</code>이라 캡슐화는 강제가 아니라
+    약속 수준"이라고 했다. 이번 레슨이 그 약속을 <strong>진짜 강제</strong>로 바꾸는 도구다.
+    <code>java-13</code>에서 미뤄둔 <code>protected Listing() {}</code>의 <code>protected</code>도
+    여기서 매듭짓는다.<br>
+    <small>강의를 수강하지 않고 작성한 레슨이다. 김영한 「실전 자바 - 기본편」 섹션 7의
+    <strong>전개와 예제는 수강생 정리 글 3편을 교차 확인</strong>해 따라갔고(하단 출처),
+    Ruby·TypeScript 대비와 뿌 연결은 직접 쓴 것이다.</small>
+  </div>
+
+  <h2>핵심 한 줄</h2>
+
+  <p>
+    <strong>접근 제어자(access modifier)는 "누가 이 필드·메서드를 볼 수 있는가"를 자바 컴파일러가
+    직접 검사하게 만드는 키워드</strong>다. <code>private</code> · (생략 시) <code>default</code> ·
+    <code>protected</code> · <code>public</code> 네 단계로, 범위가 좁을수록 제한이 강하다.
+  </p>
+
+  <h2>왜 필요한가 — 막을 수 없는 자유는 위험하다</h2>
+
+  <pre><code>public class Speaker {
+    int volume;
+
+    Speaker(int volume) {
+        this.volume = volume;
+    }
+
+    void volumeUp() {
+        if (volume >= 100) {
+            System.out.println("음량을 증가할 수 없습니다. 최대 음량입니다.");
+        } else {
+            volume += 10;
+            System.out.println("음량을 10 증가합니다.");
+        }
+    }
+}</code></pre>
+
+  <p>
+    <code>volumeUp()</code>은 100을 넘지 않게 막아준다. 그런데 <code>volume</code>이 아직
+    <code>public</code>이라, 이 안전장치를 통째로 무시하고 <code>speaker.volume = 200;</code>을
+    직접 쓸 수 있다 — 스피커가 고장 나는 값이다. <code>java-12</code>에서 배운 캡슐화("메서드로만
+    바꾸자")는 <strong>약속일 뿐 강제가 아니었다.</strong> 좋은 프로그램은 무한한 자유를 주는
+    프로그램이 아니라 <strong>적절한 제약을 주는 프로그램</strong>이다 — 그 제약을 문법으로
+    강제하는 것이 접근 제어자다.
+  </p>
+
+  <h2>네 가지 접근 제어자</h2>
+
+  <table style="width:100%;border-collapse:collapse;margin:1rem 0;font-size:0.9rem;">
+    <thead>
+      <tr style="background:var(--surface2,#1e1e2e);text-align:left;">
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">접근 제어자</th>
+        <th style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">접근 가능 범위</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"><code>private</code></td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">모든 외부 호출을 막는다 — 같은 클래스 안에서만</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"><code>default</code>(생략)</td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">같은 패키지 안에서는 허용</td>
+      </tr>
+      <tr>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);"><code>protected</code></td>
+        <td style="padding:0.5rem 0.75rem;border-bottom:1px solid var(--border,#313244);">같은 패키지 + <strong>패키지가 달라도 상속 관계면</strong> 허용</td>
+      </tr>
+      <tr style="background:var(--surface2,#1e1e2e);">
+        <td style="padding:0.5rem 0.75rem;"><code>public</code></td>
+        <td style="padding:0.5rem 0.75rem;">모든 외부 호출을 허용</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    제한이 강한 순서로 외우면 편하다: <strong><code>private</code> &gt; <code>default</code> &gt;
+    <code>protected</code> &gt; <code>public</code></strong>. <code>java-14</code>에서 배운
+    패키지가 여기서 다시 나온다 — <code>default</code>와 <code>protected</code>의 경계가 바로
+    "같은 패키지냐 아니냐"이기 때문이다.
+  </p>
+
+  <h2>Speaker를 실제로 막아보기</h2>
+
+  <pre><code>public class Speaker {
+    private int volume;    // 이제 클래스 밖에서 못 건드린다
+
+    Speaker(int volume) {
+        this.volume = volume;
+    }
+
+    void volumeUp() {
+        if (volume >= 100) {
+            System.out.println("음량을 증가할 수 없습니다. 최대 음량입니다.");
+        } else {
+            volume += 10;
+        }
+    }
+}
+
+Speaker speaker = new Speaker(50);
+speaker.volumeUp();       // OK — 메서드를 통해서만 접근
+speaker.volume = 200;     // ❌ 컴파일 에러 — private 필드는 밖에서 못 본다</code></pre>
+
+  <p>
+    <code>int volume;</code>이 <code>private int volume;</code>으로 바뀐 것뿐인데,
+    <code>speaker.volume = 200;</code>이 이제 <strong>런타임 버그가 아니라 컴파일 에러</strong>가
+    된다. <code>java-12</code>의 <code>MusicPlayer</code>도 지금까지는 필드가 다 열려 있었다 —
+    거기에 <code>private</code>만 붙이면 오늘 배운 게 바로 적용된다.
+  </p>
+
+  <div class="code-practice">
+    <p class="practice-prompt">
+      직접 타이핑해보기 — <code>Speaker</code> 클래스의 <code>volume</code> 필드를
+      <code>private</code>으로 선언하는 한 줄을 작성하세요.
+    </p>
+    <textarea class="practice-input" id="p1-input" spellcheck="false" rows="2"></textarea>
+    <div class="practice-actions">
+      <button onclick="checkPractice('p1')">확인</button>
+      <button class="practice-reveal" onclick="revealPractice('p1')">정답 보기</button>
+    </div>
+    <div class="practice-result" id="p1-result"></div>
+  </div>
+
+  <h2>값을 읽고 싶으면 — getter</h2>
+
+  <p>
+    막상 <code>private</code>으로 잠그면 <strong>클래스 밖에서 값을 읽을 방법도 없어진다.</strong>
+    <code>System.out.println(speaker.volume)</code>도 이제 컴파일 에러다. 그래서 "읽기 전용 문"을
+    메서드로 하나 열어준다 — 관례상 이름은 <code>get</code> + 필드명이다.
+  </p>
+
+  <pre><code>public class Speaker {
+    private int volume;
+
+    // ...
+
+    int getVolume() {
+        return volume;
+    }
+}
+
+System.out.println(speaker.getVolume());   // OK — 문을 통해서 읽는다</code></pre>
+
+  <p>
+    값을 바꾸는 문도 필요하면 <code>setVolume(int volume)</code>처럼 만들 수 있지만,
+    <strong>아무 검증 없이 그대로 대입만 하는 setter</strong>는 <code>public</code> 필드와
+    다를 게 없다는 점을 조심해야 한다. <code>volumeUp()</code>처럼 <strong>규칙이 들어간
+    메서드</strong>가 진짜 캡슐화이고, setter는 그 규칙 없이 값만 바꿔주는 가장 약한 형태다.
+  </p>
+
+  <div class="analogy">
+    Ruby의 <code>attr_accessor :volume</code>이 정확히 이 getter/setter 한 쌍을 자동으로
+    만들어준다 — 자바는 그걸 손으로 하나씩 쓴다는 차이뿐이다. TS 클래스의
+    <code>private</code>/<code>public</code>도 개념이 거의 그대로 겹친다.
+    <strong>주의할 건 Ruby의 <code>private</code>/<code>protected</code></strong>다 — 이름은
+    같지만 뜻이 다르다. Ruby의 <code>private</code>은 "리시버(<code>obj.method</code>의
+    <code>obj</code>)를 명시하지 않고 호출해야 한다"는 규칙이지, 자바처럼 "어디서 접근
+    가능한가"라는 범위 개념이 아니다. 같은 단어로 다른 개념을 가리키니, Ruby 감각을 그대로
+    자바에 옮기면 오히려 헷갈린다.
+  </div>
+
+  <div class="code-practice">
+    <p class="practice-prompt">
+      직접 타이핑해보기 — <code>private</code> 필드 <code>volume</code> 값을 반환하는
+      <code>getVolume()</code> 메서드를 작성하세요. 반환 타입은 <code>int</code>입니다.
+    </p>
+    <textarea class="practice-input" id="p2-input" spellcheck="false" rows="3"></textarea>
+    <div class="practice-actions">
+      <button onclick="checkPractice('p2')">확인</button>
+      <button class="practice-reveal" onclick="revealPractice('p2')">정답 보기</button>
+    </div>
+    <div class="practice-result" id="p2-result"></div>
+  </div>
+
+  <h2>뿌에서는 이렇게 보인다 — <code>protected</code>의 정체</h2>
+
+  <p>
+    <code>java-13</code>에서 미뤄둔 질문을 이제 풀 수 있다. JPA 엔티티는 왜 빈 생성자를
+    <code>public</code>도 <code>private</code>도 아닌 <strong><code>protected</code></strong>로
+    열어둘까.
+  </p>
+
+  <pre><code>@Entity
+public class Listing {
+    private Long id;
+    private String address;
+    private int price;
+
+    protected Listing() {}   // JPA 전용 빈 생성자
+
+    public Listing(String address, int price) {
+        this.address = address;
+        this.price = price;
+    }
+}</code></pre>
+
+  <ul style="margin: 0.5rem 0 1rem 1.5rem;">
+    <li><strong><code>public</code>이면 안 되는 이유</strong> — 아무 코드나 <code>new Listing()</code>으로
+    속이 텅 빈 엔티티를 만들 수 있게 된다. 의미 있는 생성자를 쓰도록 유도하고 싶은데 그 규칙이 무너진다.</li>
+    <li><strong><code>private</code>이면 안 되는 이유</strong> — Hibernate는 지연 로딩을 위해
+    <code>Listing</code>을 <strong>상속한 프록시 클래스</strong>를 내부적으로 만든다. 이 프록시는
+    <code>Listing</code>과 다른 패키지에 있을 수 있는데, <code>private</code>은 자식 클래스에도
+    안 보이므로 프록시가 부모 생성자를 호출할 방법이 없어진다.</li>
+    <li><strong><code>protected</code>가 맞는 이유</strong> — "같은 패키지 + 패키지가 달라도
+    상속 관계"라는 범위가 정확히 여기 들어맞는다. 아무 데서나는 못 만들지만, <strong>상속으로
+    이어진 Hibernate 프록시는 쓸 수 있다.</strong></li>
+  </ul>
+
+  <p>
+    <code>java-14</code>의 패키지, <code>java-13</code>의 생성자, 오늘의 접근 제어자 — 세
+    레슨이 여기서 한 줄로 합쳐진다.
+  </p>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 1 — 접근 제어자를 제한이 강한 순서대로 나열하면?</p>
+    <ul class="options" id="q1">
+      <li><button onclick="answer(this,'q1',false)"><code>public</code> &gt; <code>protected</code> &gt; <code>default</code> &gt; <code>private</code></button></li>
+      <li><button onclick="answer(this,'q1',true)"><strong><code>private</code> &gt; <code>default</code> &gt; <code>protected</code> &gt; <code>public</code></strong></button></li>
+      <li><button onclick="answer(this,'q1',false)"><code>default</code> &gt; <code>private</code> &gt; <code>public</code> &gt; <code>protected</code></button></li>
+      <li><button onclick="answer(this,'q1',false)">넷 다 제한 강도가 같고 이름만 다르다</button></li>
+    </ul>
+    <div class="quiz-result" id="q1-result"></div>
+  </div>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 2 — <code>volume</code>을 <code>private</code>으로 바꾼 뒤 <code>speaker.volume = 200;</code>을 클래스 밖에서 쓰면?</p>
+    <ul class="options" id="q2">
+      <li><button onclick="answer(this,'q2',false)">정상 동작하지만 값이 저장되지 않는다</button></li>
+      <li><button onclick="answer(this,'q2',false)">런타임에 NullPointerException이 발생한다</button></li>
+      <li><button onclick="answer(this,'q2',true)"><strong>컴파일 에러</strong> — private 필드는 클래스 밖에서 보이지도 않는다</button></li>
+      <li><button onclick="answer(this,'q2',false)">volumeUp()의 검증 로직을 그대로 거쳐서 100으로 막힌다</button></li>
+    </ul>
+    <div class="quiz-result" id="q2-result"></div>
+  </div>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 3 — 접근 제어자를 아예 안 쓰고 필드를 선언하면(<code>int volume;</code>) 범위는?</p>
+    <ul class="options" id="q3">
+      <li><button onclick="answer(this,'q3',false)"><code>private</code>과 똑같다 — 생략하면 가장 강하게 막힌다</button></li>
+      <li><button onclick="answer(this,'q3',true)"><strong><code>default</code></strong> — 같은 패키지 안에서는 접근할 수 있다</button></li>
+      <li><button onclick="answer(this,'q3',false)"><code>public</code>과 똑같다 — 생략하면 전부 열린다</button></li>
+      <li><button onclick="answer(this,'q3',false)">컴파일 에러 — 접근 제어자는 반드시 명시해야 한다</button></li>
+    </ul>
+    <div class="quiz-result" id="q3-result"></div>
+  </div>
+
+  <div class="quiz">
+    <p class="quiz-q">퀴즈 4 — JPA 엔티티의 빈 생성자가 <code>public</code>도 <code>private</code>도 아니라 <code>protected</code>인 이유는?</p>
+    <ul class="options" id="q4">
+      <li><button onclick="answer(this,'q4',false)"><code>protected</code>가 세 제어자 중 성능이 가장 빠르기 때문이다</button></li>
+      <li><button onclick="answer(this,'q4',true)"><strong>아무 데서나는 못 만들게 막으면서, 상속 관계인 Hibernate 프록시는 부모 생성자를 호출할 수 있어야 하기 때문이다</strong></button></li>
+      <li><button onclick="answer(this,'q4',false)">자바 문법상 빈 생성자는 반드시 <code>protected</code>여야 하기 때문이다</button></li>
+      <li><button onclick="answer(this,'q4',false)"><code>@Entity</code> 어노테이션이 자동으로 <code>protected</code>를 요구하도록 강제하기 때문이다</button></li>
+    </ul>
+    <div class="quiz-result" id="q4-result"></div>
+  </div>
+
+  <h2>한 줄로 남기면</h2>
+
+  <p>
+    <strong>접근 제어자는 캡슐화를 약속에서 강제로 바꾼다.</strong> <code>private</code>으로
+    막고 필요한 문만 메서드로 열어두는 것이 오늘 배운 전부지만, 그 문을 여는 방식(검증이 있는
+    메서드냐, 그냥 대입만 하는 setter냐)이 캡슐화의 질을 가른다. 그리고 <code>protected</code>처럼
+    "아무나는 안 되지만 특정 관계는 된다"는 <strong>중간 지점을 만드는 능력</strong>이,
+    뿌에서 JPA가 요구하는 정확한 그 타협을 가능하게 한다.
+  </p>
+
+  <p class="source">
+    커버리지 항목: <a href="../ROADMAP.md">ROADMAP 섹션 7-B</a> · <code>java-15</code>
+    (김영한 「실전 자바 - 기본편」 섹션 7 ·
+    <a href="https://www.inflearn.com/course/%EA%B9%80%EC%98%81%ED%95%9C%EC%9D%98-%EC%8B%A4%EC%A0%84-%EC%9E%90%EB%B0%94-%EA%B8%B0%EB%B3%B8%ED%8E%B8">강의 페이지</a>)<br>
+    강의 전개·예제 확인에 참고한 수강생 정리 글:
+    <a href="https://velog.io/@tomy8964/%ED%8C%A8%ED%82%A4%EC%A7%80-%EC%A0%91%EA%B7%BC-%EC%A0%9C%EC%96%B4%EC%9E%90">가오리의 개발 블로그</a> ·
+    <a href="https://velog.io/@swsvelog/JAVA-%EA%B9%80%EC%98%81%ED%95%9C%EC%9D%98-%EC%8B%A4%EC%A0%84-%EC%9E%90%EB%B0%94-%EA%B8%B0%EB%B3%B8-1">swsvelog</a> ·
+    <a href="https://velog.io/@simhyunmin/%EC%A0%91%EA%B7%BC-%EC%A0%9C%EC%96%B4%EC%9E%90">simhyunmin</a>
+    (세 글 모두 네 접근 제어자의 정의 문장이 동일해 상호 확인됨)<br>
+    Ruby·TypeScript 대비, JPA <code>protected</code> 생성자 연결은 직접 작성 (자바 언어 사양 근거)<br>
+    이어지는 곳: <code>java-16</code> 자바 메모리 구조와 <code>static</code>
+  </p>
+
+  <div class="ask-teacher">
+    💬 getter/setter를 전부 열어두면 캡슐화가 사실상 무의미해지는 건 아닌지, 불변 객체(setter를
+    아예 안 두는 설계)가 왜 더 안전한지, 뿌 엔티티 필드를 어디까지 <code>private</code>으로
+    막고 어디부터 메서드로 열지 궁금하면 물어보세요.
+  </div>
+
+  <div class="nav-links">
+    <a href="java-14-packages.html">← 섹션 6: 패키지</a>
+    <span>섹션 7: 접근 제어자</span>
+  </div>
+
+  <script src="../assets/code-practice.js"></script>
+  <script>
+    registerPractice('p1', {
+      accepted: ['private int volume;'],
+      explain: '정확합니다 — private을 붙이는 순간 volume은 Speaker 클래스 밖에서 보이지 않게 됩니다.',
+      hint: '접근 제어자 private, 타입 int, 필드명 volume, 세미콜론까지 한 줄입니다.',
+    });
+    registerPractice('p2', {
+      accepted: ['int getVolume() {\n    return volume;\n}'],
+      explain: '정확합니다 — private 필드를 읽기 전용으로 열어주는 가장 기본적인 getter입니다.',
+      hint: '메서드 시그니처는 int getVolume() 입니다. 본문은 return volume; 한 줄이면 됩니다.',
+    });
+  </script>
+  <script>
+    const explanations = {
+      q1: {
+        correct: "맞아요. private이 가장 좁고(같은 클래스만), default는 같은 패키지, protected는 같은 패키지+상속 관계, public이 가장 넓습니다(제한 없음). 이 순서를 외워두면 어떤 접근 제어자를 쓸지 고를 때 기준이 됩니다.",
+        wrong: "아니에요. 제한이 강한 순서는 private > default > protected > public 입니다. public이 가장 느슨하고(모든 곳에서 접근 가능), private이 가장 엄격합니다(같은 클래스 안에서만)."
+      },
+      q2: {
+        correct: "맞아요. private 필드는 클래스 밖에서는 존재 자체가 안 보이는 것과 같아서, speaker.volume이라는 표현 자체가 컴파일 에러입니다. 런타임까지 가지도 않고 컴파일 단계에서 막힙니다.",
+        wrong: "아니에요. private 필드에 클래스 밖에서 접근하는 코드는 컴파일 자체가 되지 않습니다. 런타임 예외도 아니고, volumeUp()의 검증 로직을 거치지도 않습니다 — 애초에 그 줄이 컴파일되지 않으므로 프로그램이 실행조차 안 됩니다."
+      },
+      q3: {
+        correct: "맞아요. 접근 제어자를 아예 안 쓰면 default(package-private)가 적용되어, 같은 패키지 안의 클래스에서는 접근할 수 있고 패키지 밖에서는 막힙니다. private처럼 완전히 막히는 것도, public처럼 전부 열리는 것도 아닙니다.",
+        wrong: "아니에요. 생략하면 private도 public도 아닌 default(package-private)가 적용됩니다. 같은 패키지 안에서는 접근할 수 있고 패키지 밖에서는 막히는, 그 중간 범위입니다. 접근 제어자 명시는 필수가 아닙니다."
+      },
+      q4: {
+        correct: "맞아요. public이면 아무 코드나 빈 엔티티를 만들 수 있어 규칙이 무너지고, private이면 상속 관계인 Hibernate의 프록시 클래스조차 부모 생성자를 호출할 수 없습니다. protected는 '같은 패키지 + 상속 관계'까지만 열어주므로 이 둘 사이의 정확한 타협점입니다.",
+        wrong: "아니에요. 접근 제어자는 성능과 무관하고, 자바 문법이 특정 상황에 protected를 강제하지도 않습니다. 이유는 순전히 범위 설계입니다 — 아무 데서나는 막되, 상속으로 이어진 Hibernate 프록시는 부모 생성자를 호출할 수 있어야 하기 때문에 protected가 정확히 들어맞습니다."
+      }
+    };
+
+    function answer(button, quizId, isCorrect) {
+      const quiz = document.getElementById(quizId);
+      if (isCorrect) {
+        quiz.querySelectorAll('button').forEach(b => b.disabled = true);
+      } else {
+        button.disabled = true;
+      }
+      button.classList.add(isCorrect ? 'correct' : 'wrong');
+
+      const result = document.getElementById(quizId + '-result');
+      const info = explanations[quizId];
+      result.textContent = isCorrect ? '✓ ' + info.correct : '✗ ' + info.wrong;
+      result.style.color = isCorrect ? 'var(--correct)' : 'var(--wrong)';
+    }
+  </script>
+</body>
+</html>
