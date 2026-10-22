@@ -1,7 +1,7 @@
 # 스크럼보드 스크럼·댓글 검색 재개발과 구 스크럼 검색 제외 (자동 종료된 PR #4766의 후속)
 
 > 날짜: 2026-10-22  
-> PR: ppback [#5671](https://github.com/hcgtheplus/ppback/pull/5671) (draft, 커밋 4개), ppfront [#11589](https://github.com/hcgtheplus/ppfront/pull/11589) (draft, 커밋 3개). 원 PR은 hcgtheplus/ppback#4766 (base 브랜치 삭제로 자동 종료)  
+> PR: ppback [#5671](https://github.com/hcgtheplus/ppback/pull/5671) (draft, 커밋 5개), ppfront [#11589](https://github.com/hcgtheplus/ppfront/pull/11589) (draft, 커밋 4개). 원 PR은 hcgtheplus/ppback#4766 (base 브랜치 삭제로 자동 종료)  
 > 소스: Performance Plus(실무) — Rails/Grape/Elasticsearch, React/TypeScript  
 > 내 역할: 구현(+조사·설계) — 백엔드와 프론트를 모두 맡음. 팀 규모는 기록하지 않았다
 
