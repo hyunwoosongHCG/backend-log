@@ -114,7 +114,7 @@
 - [ ] `&method` 심볼을 블록으로 넘기기
 - [x] `freeze`, `dup`, `clone` — ActiveRecord `#dup`은 id·타임스탬프만 비우고 **모든 컬럼을 복사하지만 연관은 복사하지 않는다**. `deep_clone(include:)`은 지정한 연관만 따라간다. 그래서 복제 경로가 많은 데이터에 새 정보를 붙일 땐 컬럼으로 두면 경로 수정 없이 따라가고, 별도 테이블·FK면 경로마다 id 재매핑이 필요하다. 옵션 키 오타(`includes:`)는 젬이 조용히 무시한다 → [배운 작업](work-log/2026-10-15-ppback-pr-5651-method-group-number.md)
 - [x] 동적 메서드 디스패치 (`send`, 메타프로그래밍) → [레슨](lessons/0037-dynamic-dispatch-send.html) | [배운 작업](work-log/2026-07-09-review-remind-notification-split.md)
-- [x] **중첩 모듈 안에서 같은 이름의 상수는 모델이 아니라 가장 가까운 모듈을 가리킨다** — `module Search` 안의 워커가 `BoardScrumItemResponse.joins`를 부르면 모델이 아니라 같은 이름의 검색 concern `Search::BoardScrumItemResponse`가 잡혀 `undefined method 'joins' for module`이 난다. 최상위를 `::BoardScrumItemResponse`로 명시해야 한다 → [배운 작업](work-log/2026-10-22-ppback-scrum-board-search-rebuild.md)
+- [x] **중첩 모듈 안에서 같은 이름의 상수는 모델이 아니라 가장 가까운 모듈을 가리킨다** — `module Search` 안의 워커가 `BoardScrumItemResponse.joins`를 부르면 모델이 아니라 같은 이름의 검색 concern `Search::BoardScrumItemResponse`가 잡혀 `undefined method 'joins' for module`이 난다. 최상위를 `::BoardScrumItemResponse`로 명시해야 한다 → [배운 작업](work-log/2026-10-22-ppback-scrum-board-search-rebuild.md) · 댓글을 더하면서 `Comment`도 `Search::Comment`와 겹쳐 `::Comment`로 명시했다
 - [ ] Gem이란? Bundler와 Gemfile
 
 ---
@@ -180,6 +180,7 @@
 - [ ] RSpec 기초 (`describe`, `it`, `expect`)
 - [ ] `let`과 `let!`의 차이
 - [x] `let_it_be`(test-prof)와 `let`/`let!`의 차이 — 같은 example group 안에서 객체를 재사용하므로, 저장 없는 인메모리 속성 변경 시 다른 예제로 오염될 수 있음 → [레슨](lessons/0048-let-it-be-shared-object-pollution.html) | [배운 작업](work-log/2026-07-24-key-result-auto-checkin-reflect-api-exposure-review.md) · **"저장 없는 변경만 조심하면 된다"는 판단 기준은 불완전하다** ([레슨 59](lessons/0059-let-it-be-stale-attribute-skips-update-sql.html)) — 매번 정식으로 `update!`를 불러도, 그 값이 앞선 예제 때문에 이미 인메모리와 같으면 Dirty Tracking이 "변경 없음"으로 보고 `partial_writes`가 그 컬럼을 UPDATE SQL에서 빼버려 트랜잭션 롤백으로 되돌아간 DB 값이 갱신되지 않는다. 공유 레코드를 다루기 전엔 `reload`로 진짜 현재 값부터 확보해야 한다 → [배운 작업](work-log/2026-08-28-key-result-auto-checkin-reflect-auto-close-lock-and-migration-reissue.md) · **속성이 아니라 연관 캐시(association cache)가 새는 변주** — `let_it_be` 로 공유한 객체의 `has_many` 연관이 앞 describe 에서 로드된 채 남아 다음 describe 의 판정에 섞였다. `--order defined` 와 random 에서 결과가 갈렸고, **한 번 초록색이 나온 것은 순서 운이었다**(describe 를 하나 추가하자 3건이 깨졌다). 원인은 스펙이 운영과 다른 방식으로 객체를 얻고 있던 것 — 운영에서는 부모 엔티티가 매번 새로 로드한다. 공유 객체를 판정 대상으로 넘길 땐 DB 에서 다시 읽고, 순서를 바꿔 여러 번 돌려봐야 한다 → [배운 작업](work-log/2026-09-11-ppback-pr-5606-job-template-response-reset.md) · **저장했다 롤백된 변경도 메모리에 남는다** — 한 예제가 `update!(is_private: true)`를 하고 DB가 롤백돼도 객체는 `true`를 기억해서, 다음 예제의 같은 `update!`가 "변경 없음"으로 UPDATE를 건너뛴다. 예제마다 `ScrumBoard.find`로 다시 읽으면 된다 → [배운 작업](work-log/2026-10-22-ppback-scrum-board-search-rebuild.md)
+- [x] **스텁의 호출 집계에 준비 단계의 콜백이 섞인다** — 워커 스펙에서 `comment.discard!`로 삭제 상태를 만들었더니 `Searchable` 콜백이 `UpdateWorker`를 한 번 더 큐잉해 `have_received`가 2회로 잡혔다. 콜백 없이 상태만 만들려면 `update_all`을 쓴다 → [배운 작업](work-log/2026-10-22-ppback-scrum-board-search-rebuild.md)
 - [ ] Factory Bot으로 테스트 데이터 만들기 — 미사용 팩토리는 `FactoryBot.lint`가 없으면 아무도 잡지 못하고, NOT NULL 컬럼을 안 채운 팩토리는 호출하면 실패하는 죽은 코드로 남는다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
 - [ ] Request spec vs Model spec
 - [x] **특성화 테스트(characterization test)가 리팩터링의 선행 조건** — 대상 코드의 현재 동작이 스펙으로 고정돼 있지 않으면, 리팩터링 후 무엇이 바뀌었는지 알 수 없다. 운영에 쓰이는데 스펙이 얇은 경로(소프트 리셋)는 구조를 바꾸기 전에 현재 동작을 먼저 스펙으로 박아야 한다 — 리팩터링을 하든 안 하든 값어치가 있는 단계라 계획의 0단계로 둔다 → [배운 작업](work-log/2026-09-11-ppback-pr-5606-job-template-response-reset.md)
@@ -253,8 +254,11 @@
 
 - [ ] Elasticsearch란? 인덱스·매핑·join field·routing이 검색 결과에 어떻게 쓰이나
 - [x] **검색 문서에 복제한 권한은 원본이 바뀔 때 stale 해진다** — 스크럼 답변 문서에 `allowed_user_ids`·`privacy`를 박아 두면, 보드를 비공개로 바꾼 뒤에도 문서는 옛 권한이다. 원본(보드)이 바뀌는 모든 경로(공개 범위, 멤버, 보관·삭제)에서 하위 문서를 다시 인덱싱해야 하는데, 이 레포의 연쇄 갱신 선례는 `Task`·`TaskList`뿐이었다. 멤버는 보드 행을 건드리지 않고 바뀌므로 모델 콜백만으로는 못 잡고 호출부가 직접 요청해야 한다 → [배운 작업](work-log/2026-10-22-ppback-scrum-board-search-rebuild.md)
-- [x] **`dynamic: strict` 매핑에 필드를 추가하면 인덱스를 다시 만들어야 하고, 순서는 "코드 배포 → 재생성"이다** — 재생성은 배포된 코드의 모델 매핑으로 인덱스를 만든다(`search:reindex_type`은 삭제 후 생성). 재생성 전에는 새 필드를 담은 문서의 인덱싱이 매핑 오류로 실패하고, 재생성 중에는 해당 타입 검색 결과가 비어 있다 → [배운 작업](work-log/2026-10-22-ppback-scrum-board-search-rebuild.md)
+- [x] **`dynamic: strict` 인덱스에 필드를 더하는 방법은 두 가지다 — 재생성과 `put_mapping`** — 재생성(`search:reindex_type`)은 인덱스를 지우고 배포된 코드의 모델 매핑으로 다시 만들어서 "코드 배포 → 재생성" 순서이고 실행 중에는 해당 타입 결과가 비며 그 전에는 새 필드를 담은 문서의 인덱싱이 매핑 오류로 실패한다. 필드만 더하는 거라면 `put_mapping`으로 인덱스를 두고 더할 수 있다고 알고 있고(ES 문서 기준, 이 환경에서 실행해 보지 못함) 배포 전에 콘솔에서 먼저 할 수도 있다. 이번에는 큰 Comment 인덱스는 `put_mapping`, 스크럼 답변 인덱스는 재생성을 택했다. 새 키를 해당 타입 문서에만 실으면 다른 타입의 인덱싱은 매핑 추가 전에도 영향이 없다 → [배운 작업](work-log/2026-10-22-ppback-scrum-board-search-rebuild.md)
 - [x] **재생성 rake의 가져오기는 부분 실패를 삼킨다** — `SetupWorker`의 가져오기가 `rescue StandardError`로 경고만 출력하고 끝나서, 중간에 예외가 나도 일부만 들어간 채 성공처럼 보인다. 실행 뒤에 DB 행 수와 ES 문서 수를 비교해야 안다 → [배운 작업](work-log/2026-10-22-ppback-scrum-board-search-rebuild.md)
+- [x] **불리언 필터 컬럼의 `nil`은 세 번째 상태라 조용히 검색에서 빠진다** — 공개는 `term: { search_privacy: false }`, 비공개는 `allowed_user_ids` 일치로 가르는 설계에서 값이 `nil`이면 어느 쪽에도 안 걸린다. `Search::Comment#search_privacy`의 `case`가 `BoardScrum`을 몰라 `nil`을 돌려준 것이 "스크럼은 나오는데 댓글은 안 나온다"의 원인이었다. 새 대상을 추가할 때는 `case`의 `else`(암묵적 `nil`)가 무엇이 되는지부터 본다 → [배운 작업](work-log/2026-10-22-ppback-scrum-board-search-rebuild.md)
+- [x] **한 서비스가 도메인별로 조건 목록을 따로 가지면 같은 변경이 도메인마다 다르게 보인다** — `SearchService`는 댓글 제외 대상이 performance는 `BoardScrum`, talenx는 `Scrum`이었다. 변경 전에 `이전 → 현재 → 이 PR`을 도메인별로 나눠 표로 확인하면 "한쪽 도메인에서만 보이던 것이 뒤집힌다"를 놓치지 않는다 → [배운 작업](work-log/2026-10-22-ppback-scrum-board-search-rebuild.md)
+- [x] **새 결과 타입은 받는 쪽(프론트)이 먼저 배포돼야 한다** — 프론트의 분기 체인은 모르는 타입에 빈 객체 `{}`를 돌려주고 이어서 `label.key`에서 오류가 날 것으로 보인다(코드를 읽고 추정했고 실행해서 확인하지는 않았다). 그래서 백엔드가 새 타입을 내리기 전에 프론트가 먼저 나가야 하고, 구 타입 분기를 지우는 것도 백엔드가 그 타입을 내리지 않게 된 뒤로 미룬다 → [배운 작업](work-log/2026-10-22-ppback-scrum-board-search-rebuild.md)
 
 ### 기타
 
