@@ -59,7 +59,7 @@
 - [x] JOIN이란? → [레슨](lessons/0005-sql-joins.html) | [배운 작업](work-log/2026-06-29-sentry-appraisees-query-bug.md)
 - [x] **`ORDER BY` 의 컬럼 이름은 SELECT 목록에서 먼저 해석된다** — 조인한 테이블들에 같은 컬럼명(`id`, `appraisal_id`)이 있어 모호한 `ORDER BY` 가 전체 컬럼(`table.*`)을 SELECT 할 때는 통과하지만, `pluck(:id)` 처럼 select list를 좁히는 순간 `Column 'appraisal_id' in order clause is ambiguous` 로 죽는다. 지금 동작한다고 안전한 게 아니라 나중에 `.select` 가 붙으면 깨지는 잠복 결함이므로, 정렬 상수의 컬럼은 테이블명으로 수식해 둔다 → [배운 작업](work-log/2026-09-03-ppback-pr-5585-appraisal-result-search-review.md)
 - [x] 성능 측정에는 여러 축이 있다 ([레슨 55](lessons/0055-regression-spec-discriminating-power.html)) — 한 축(배치 크기)을 재고 다 쟀다고 착각했고, 지적받은 축(워크스페이스 전체 대기 건수)에서는 이벤트당 쿼리가 O(N)이라 총비용이 제곱이었다. "무엇을 재지 않았는지"를 스스로 물어야 한다. 이벤트당 쿼리 수를 세면 O(N)인지 O(N²)인지 바로 갈린다 → [배운 작업](work-log/2026-08-12-ppback-pr-5532-outbox-worker-migration.md)
-- [x] 쿼리 프로파일링/N+1 실측 (`ActiveSupport::Notifications.subscribed(..., "sql.active_record")`) — N+1을 추측이 아니라 직접 재현해서 쿼리 개수를 세는 법. 같은 방법으로 "이미 로드된 Relation을 `Enumerable#select`(블록)로 필터링하면 쿼리가 안 나가지만, `scope`(`.where`)를 걸면 로드 여부와 무관하게 새 쿼리가 나간다"는 것도 실측으로 증명했다 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
+- [x] 쿼리 프로파일링/N+1 실측 (`ActiveSupport::Notifications.subscribed(..., "sql.active_record")`) — N+1을 추측이 아니라 직접 재현해서 쿼리 개수를 세는 법. 같은 방법으로 "이미 로드된 Relation을 `Enumerable#select`(블록)로 필터링하면 쿼리가 안 나가지만, `scope`(`.where`)를 걸면 로드 여부와 무관하게 새 쿼리가 나간다"는 것도 실측으로 증명했다 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md) · **판정을 다른 객체에 위임하면 `has_many :through`처럼 `inverse_of`가 부모를 채워 주지 않는 경로에서 N+1이 숨는다** — 판정이 쓰이는 모든 호출 경로의 쿼리 수를 세야 한다 → [배운 작업](work-log/2026-10-29-ppback-appraisal-conditional-element.md)
 - [x] 크로스 서비스 auto-increment 시퀀스 정합성 — 서로 다른 DB(서비스)에 같은 id로 레코드를 복제 삽입한 뒤 시퀀스(`setval`)를 강제로 맞출 때, 상대 DB의 현재 max_id를 확인하지 않고 계산하면 시퀀스가 기존 데이터보다 뒤로 밀려 다음 정상 삽입이 PK 충돌을 일으킬 수 있다 → [배운 작업](work-log/2026-07-30-ppback-pr-5504-comparison-review.md)
 
 ### 인증과 인가
@@ -101,7 +101,7 @@
 ### 객체지향
 
 - [x] 클래스(Class)와 객체(Object) → [정리](concepts/class-and-instance.md) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
-- [x] 인스턴스 메서드 vs 클래스 메서드 — 판정 규칙을 인스턴스 메서드에만 두면 아직 저장 안 된 요청 해시에는 쓸 수 없어서, 처음에는 값만 받는 클래스 메서드에 규칙을 모았다. 최종 구조는 그 클래스 메서드가 아니라 **문항을 가진 주인 모델이 같은 이름의 인스턴스 메서드(`conditional_element?`)를 구현하고 공통 모델이 위임**하는 것이다. 모델 인스턴스(`Element#conditional?`)와 저장 전 요청 해시(검증기가 양식에 직접 묻는다)가 같은 규칙을 쓰고, 공통 모델이 타입 분기를 모른다. 위임하면 부모를 읽는 쿼리가 숨으니 `includes`와 쿼리 수 spec이 필요하다 → [배운 작업](work-log/2026-10-29-ppback-appraisal-conditional-element.md)
+- [x] 인스턴스 메서드 vs 클래스 메서드 — 판정 규칙을 인스턴스 메서드에만 두면 저장 전 요청 해시에는 쓸 수 없어서, 처음에는 값만 받는 클래스 메서드에 규칙을 모았다. 이후 주인 모델 위임을 거쳐 최종적으로는 **판정은 자기 컬럼 값만 보는 인스턴스 메서드**로 두고, "어디서 조건부를 쓰는가" 같은 정책은 데이터를 쓰는 유일한 경로에서 지키는 구조가 남았다. 판정이 다른 객체를 읽지 않으니 N+1도 없다 → [배운 작업](work-log/2026-10-29-ppback-appraisal-conditional-element.md)
 - [x] 상속(Inheritance) → [정리](concepts/inheritance-and-override.md) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
 - [x] 모듈(Module)과 믹스인(Mixin) — `include`는 클래스 전체에, `extend`는 **객체 하나에만** 모듈을 섞는다. `template_pool.extend(ModifyNestedAttributes)`가 그 인스턴스의 nested attributes를 "요청에 없는 자식은 삭제"로 바꿔서, 같은 엔드포인트인데 유형마다 저장 의미가 달랐다 → [배운 작업](work-log/2026-10-29-ppback-appraisal-conditional-element.md)
 - [ ] `attr_accessor`, `attr_reader`, `attr_writer`
