@@ -101,7 +101,7 @@
 ### 객체지향
 
 - [x] 클래스(Class)와 객체(Object) → [정리](concepts/class-and-instance.md) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
-- [x] 인스턴스 메서드 vs 클래스 메서드 — 판정 규칙을 인스턴스 메서드에만 두면 아직 저장 안 된 요청 해시에는 쓸 수 없다. 값만 받는 클래스 메서드(`Element.conditional_values?`)에 규칙을 두고 인스턴스 메서드는 자기 컬럼을 넘겨 위임하면, 모델과 검증기가 한 규칙을 쓴다 → [배운 작업](work-log/2026-10-29-ppback-appraisal-conditional-element.md)
+- [x] 인스턴스 메서드 vs 클래스 메서드 — 판정 규칙을 인스턴스 메서드에만 두면 아직 저장 안 된 요청 해시에는 쓸 수 없어서, 처음에는 값만 받는 클래스 메서드에 규칙을 모았다. 최종 구조는 그 클래스 메서드가 아니라 **문항을 가진 주인 모델이 같은 이름의 인스턴스 메서드(`conditional_element?`)를 구현하고 공통 모델이 위임**하는 것이다. 모델 인스턴스(`Element#conditional?`)와 저장 전 요청 해시(검증기가 양식에 직접 묻는다)가 같은 규칙을 쓰고, 공통 모델이 타입 분기를 모른다. 위임하면 부모를 읽는 쿼리가 숨으니 `includes`와 쿼리 수 spec이 필요하다 → [배운 작업](work-log/2026-10-29-ppback-appraisal-conditional-element.md)
 - [x] 상속(Inheritance) → [정리](concepts/inheritance-and-override.md) | [배운 작업](work-log/2026-06-25-add-use-required-template.md)
 - [x] 모듈(Module)과 믹스인(Mixin) — `include`는 클래스 전체에, `extend`는 **객체 하나에만** 모듈을 섞는다. `template_pool.extend(ModifyNestedAttributes)`가 그 인스턴스의 nested attributes를 "요청에 없는 자식은 삭제"로 바꿔서, 같은 엔드포인트인데 유형마다 저장 의미가 달랐다 → [배운 작업](work-log/2026-10-29-ppback-appraisal-conditional-element.md)
 - [ ] `attr_accessor`, `attr_reader`, `attr_writer`
